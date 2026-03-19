@@ -1,0 +1,22 @@
+# Spanish translations
+es:
+  hello: "Hola mundo"
+  
+  errors:
+    signup:
+      blocked_domain: "El dominio del correo electrónico está bloqueado"
+      disposable_email: "No se permiten direcciones de correo electrónico desechables"
+      invalid_email: "Dirección de correo electrónico no válida"
+      email_already_exists: "El correo electrónico %{email} ya existe"
+      invalid_params: "Parámetros no válidos"
+      failed: "Registro fallido"
+      user_not_found: "Usuario no encontrado"
+    plan_upgrade_required:
+      failed: "Se requiere actualización del plan"
+  
+  devise_token_auth:
+    passwords:
+      missing_email: "El correo electrónico es obligatorio"
+      user_not_found: "Usuario con correo electrónico %{email} no encontrado"
+    registrations:
+      missing_confirm_success_url: "Falta la URL de confirmación de éxito"

@@ -1,0 +1,22 @@
+# Italian translations
+it:
+  hello: "Ciao mondo"
+  
+  errors:
+    signup:
+      blocked_domain: "Il dominio email è bloccato"
+      disposable_email: "Gli indirizzi email usa e getta non sono consentiti"
+      invalid_email: "Indirizzo email non valido"
+      email_already_exists: "L'email %{email} esiste già"
+      invalid_params: "Parametri non validi"
+      failed: "Registrazione fallita"
+      user_not_found: "Utente non trovato"
+    plan_upgrade_required:
+      failed: "Aggiornamento del piano richiesto"
+  
+  devise_token_auth:
+    passwords:
+      missing_email: "L'email è obbligatoria"
+      user_not_found: "Utente con email %{email} non trovato"
+    registrations:
+      missing_confirm_success_url: "URL di conferma successo mancante"

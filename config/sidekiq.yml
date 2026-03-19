@@ -1,0 +1,13 @@
+---
+:concurrency: <%= ENV.fetch('SIDEKIQ_CONCURRENCY', 10) %>
+:timeout: 25
+:verbose: false
+:queues:
+  - default
+  - mailers
+  - webhooks
+  - low_priority
+
+# Redis configuration
+:redis:
+  url: <%= ENV.fetch('REDIS_URL', 'redis://localhost:6379/1') %>

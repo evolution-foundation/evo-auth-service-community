@@ -1,0 +1,22 @@
+# Portuguese (Portugal) translations
+pt:
+  hello: "Olá mundo"
+  
+  errors:
+    signup:
+      blocked_domain: "O domínio do email está bloqueado"
+      disposable_email: "Endereços de email descartáveis não são permitidos"
+      invalid_email: "Endereço de email inválido"
+      email_already_exists: "O email %{email} já existe"
+      invalid_params: "Parâmetros inválidos"
+      failed: "Registo falhado"
+      user_not_found: "Utilizador não encontrado"
+    plan_upgrade_required:
+      failed: "Actualização do plano necessária"
+  
+  devise_token_auth:
+    passwords:
+      missing_email: "O email é obrigatório"
+      user_not_found: "Utilizador com email %{email} não encontrado"
+    registrations:
+      missing_confirm_success_url: "URL de confirmação de sucesso em falta"

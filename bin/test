@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+
+# Test runner script for EvoAuth Service
+# Usage:
+#   bin/test                    # Run all tests
+#   bin/test spec/models/       # Run model tests
+#   bin/test --coverage         # Run with coverage
+#   bin/test --watch            # Run in watch mode
+
+require 'optparse'
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: bin/test [options] [files]"
+
+  opts.on("-c", "--coverage", "Run with coverage report") do |c|
+    options[:coverage] = c
+  end
+
+  opts.on("-w", "--watch", "Run in watch mode") do |w|
+    options[:watch] = w
+  end
+
+  opts.on("-f", "--format FORMAT", "Output format (documentation, progress, json)") do |f|
+    options[:format] = f
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+# Set environment
+ENV['RAILS_ENV'] = 'test'
+
+# Build command
+cmd = ['bundle', 'exec', 'rspec']
+
+# Add coverage if requested
+if options[:coverage]
+  ENV['COVERAGE'] = 'true'
+  puts "📊 Running tests with coverage report..."
+end
+
+# Add format
+format = options[:format] || 'documentation'
+cmd += ['--format', format]
+
+# Add color
+cmd += ['--color']
+
+# Add files/directories
+if ARGV.any?
+  cmd += ARGV
+else
+  cmd += ['spec/']
+end
+
+# Watch mode
+if options[:watch]
+  puts "👀 Running tests in watch mode..."
+  exec('bundle', 'exec', 'guard')
+else
+  # Execute command
+  puts "🧪 Running tests..."
+  puts "Command: #{cmd.join(' ')}"
+  puts ""
+  
+  exec(*cmd)
+end

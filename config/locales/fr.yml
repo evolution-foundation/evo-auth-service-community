@@ -1,0 +1,22 @@
+# French translations
+fr:
+  hello: "Bonjour le monde"
+  
+  errors:
+    signup:
+      blocked_domain: "Le domaine de l'email est bloqué"
+      disposable_email: "Les adresses email jetables ne sont pas autorisées"
+      invalid_email: "Adresse email non valide"
+      email_already_exists: "L'email %{email} existe déjà"
+      invalid_params: "Paramètres non valides"
+      failed: "Inscription échouée"
+      user_not_found: "Utilisateur non trouvé"
+    plan_upgrade_required:
+      failed: "Mise à niveau du plan requise"
+  
+  devise_token_auth:
+    passwords:
+      missing_email: "L'email est obligatoire"
+      user_not_found: "Utilisateur avec l'email %{email} non trouvé"
+    registrations:
+      missing_confirm_success_url: "URL de confirmation de succès manquante"

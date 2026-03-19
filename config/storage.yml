@@ -1,0 +1,25 @@
+test:
+  service: Disk
+  root: <%= Rails.root.join("tmp/storage") %>
+
+local:
+  service: Disk
+  root: <%= Rails.root.join("storage") %>
+
+# Use bin/rails credentials:edit to set the AWS secrets (as aws:access_key_id|secret_access_key)
+amazon:
+  service: S3
+  access_key_id: <%= ENV.fetch('AWS_ACCESS_KEY_ID', '') %>
+  secret_access_key: <%= ENV.fetch('AWS_SECRET_ACCESS_KEY', '') %>
+  region: <%= ENV.fetch('AWS_REGION', '') %>
+  bucket: <%= ENV.fetch('S3_BUCKET_NAME', '') %>
+
+# S3 compatible service such as Backblaze B2, DigitalOcean Spaces, Minio, Cloudflare R2
+s3_compatible:
+  service: S3
+  access_key_id: <%= ENV.fetch('STORAGE_ACCESS_KEY_ID', '') %>
+  secret_access_key: <%= ENV.fetch('STORAGE_SECRET_ACCESS_KEY', '') %>
+  region: <%= ENV.fetch('STORAGE_REGION', 'auto') %>
+  bucket: <%= ENV.fetch('STORAGE_BUCKET_NAME', '') %>
+  endpoint: <%= ENV.fetch('STORAGE_ENDPOINT', '') %>
+  force_path_style: true

@@ -1,0 +1,53 @@
+{
+  "name": "evo-auth-service",
+  "version": "1.0.0",
+  "description": "EvoAuth Service - 100% Compatible Authentication Service for Evolution",
+  "main": "index.js",
+  "scripts": {
+    "dev": "overmind start -f ./Procfile.dev",
+    "start": "make start",
+    "web": "bundle exec puma -C config/puma.rb",
+    "worker": "bundle exec sidekiq -C config/sidekiq.yml",
+    "console": "rails console",
+    "db:setup": "rails db:create db:migrate db:seed",
+    "db:migrate": "rails db:migrate",
+    "db:seed": "rails db:seed",
+    "db:reset": "rails db:drop db:create db:migrate db:seed",
+    "test": "bundle exec rspec",
+    "lint": "bundle exec rubocop",
+    "lint:fix": "bundle exec rubocop -A",
+    "security": "bundle exec brakeman",
+    "install": "bundle install",
+    "setup": "bundle install && rails db:setup",
+    "health": "curl -s http://localhost:3001/health | jq .",
+    "logs": "tail -f log/development.log",
+    "email:test": "make test-email",
+    "email:bms": "make test-bms",
+    "email:resend": "make test-resend"
+  },
+  "keywords": [
+    "authentication",
+    "oauth2",
+    "mfa",
+    "rails",
+    "api",
+    "evolution",
+    "devise",
+    "jwt"
+  ],
+  "author": "Evolution Team",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "ruby": ">=3.4.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EvolutionAPI/evo-auth-service.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EvolutionAPI/evo-auth-service/issues"
+  },
+  "homepage": "https://github.com/EvolutionAPI/evo-auth-service#readme"
+}

@@ -1,0 +1,52 @@
+# Files in the config/locales directory are used for internationalization and
+# are automatically loaded by Rails. If you want to use locales other than
+# English, add the necessary files in this directory.
+#
+# To use the locales, use `I18n.t`:
+#
+#     I18n.t "hello"
+#
+# In views, this is aliased to just `t`:
+#
+#     <%= t("hello") %>
+#
+# To use a different locale, set it with `I18n.locale`:
+#
+#     I18n.locale = :es
+#
+# This would use the information in config/locales/es.yml.
+#
+# To learn more about the API, please read the Rails Internationalization guide
+# at https://guides.rubyonrails.org/i18n.html.
+#
+# Be aware that YAML interprets the following case-insensitive strings as
+# booleans: `true`, `false`, `on`, `off`, `yes`, `no`. Therefore, these strings
+# must be quoted to be interpreted as strings. For example:
+#
+#     en:
+#       "yes": yup
+#       enabled: "ON"
+
+en:
+  hello: "Hello world"
+  
+  errors:
+    signup:
+      blocked_domain: "Email domain is blocked"
+      disposable_email: "Disposable email addresses are not allowed"
+      invalid_email: "Invalid email address"
+      email_already_exists: "Email %{email} already exists"
+      invalid_params: "Invalid parameters"
+      failed: "Signup failed"
+      user_not_found: "User not found"
+    plan_upgrade_required:
+      failed: "Plan upgrade required"
+  
+  devise_token_auth:
+    passwords:
+      missing_email: "Email is required"
+      user_not_found: "User with email %{email} not found"
+    registrations:
+      missing_confirm_success_url: "Missing confirmation success URL"
+      redirect_url_not_allowed: "Redirect URL %{redirect_url} is not allowed"
+      email_already_exists: "Email already exists"
