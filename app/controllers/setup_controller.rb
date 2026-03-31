@@ -18,7 +18,7 @@ class SetupController < ActionController::Base
     end
 
     resp = {
-      status:      ctx.active? ? 'active' : 'inactive',
+      status: ctx.active? ? 'active' : 'inactive',
       instance_id: resolve_instance_id(ctx)
     }
 

@@ -30,20 +30,9 @@ module PermissionCheckable
       return false
     end
 
-    # Verifica diretamente no usuário ou via serviço de permissão conforme disponibilidade
     permission_key = "#{resource}.#{action}"
 
-    # Se estamos em um contexto de account, verificar via AccountUser
-    # Isso permite suporte a custom roles
-    # NOTA: Super admins já foram verificados acima, então não precisamos verificar novamente aqui
-    has_permission = if defined?(Current) && Current.respond_to?(:account) && Current.account.present?
-                       account_user = current_api_user.account_users.find_by(account: Current.account)
-                       if account_user
-                         account_user.has_permission?(permission_key)
-                       else
-                         false
-                       end
-                     elsif current_api_user.respond_to?(:has_permission?)
+    has_permission = if current_api_user.respond_to?(:has_permission?)
                        current_api_user.has_permission?(permission_key)
                      else
                        current_permission_service.can?(resource, action)

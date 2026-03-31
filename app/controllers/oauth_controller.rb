@@ -18,6 +18,14 @@ class OauthController < ApplicationController
     render plain: 'OAuth test page - Evo Auth Service'
   end
 
+  # Retorna a única account no formato esperado pelo frontend OAuth (OAuthAccount)
+  def accounts
+    account = RuntimeConfig.account
+    return render json: [] unless account
+
+    render json: [{ account_id: account['id'], account_name: account['name'] }]
+  end
+
   # RFC 7591 - Dynamic Client Registration
   def register
     begin

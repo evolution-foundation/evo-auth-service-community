@@ -16,20 +16,19 @@ class SetupBootstrapService
   end
 
   def call
-    seed_rbac
+    run_seeds
 
     result = ActiveRecord::Base.transaction do
       # Advisory lock prevents concurrent bootstrap attempts
       ActiveRecord::Base.connection.execute("SELECT pg_advisory_xact_lock(#{BOOTSTRAP_LOCK_KEY})")
       raise AlreadyBootstrappedError, 'Installation already completed' if User.count > 0
 
-      account   = create_account
+      ensure_account_config
       user      = create_user
-      link_user_to_account(user, account)
       assign_global_role(user)
-      oauth_app = create_oauth_app(account)
+      oauth_app = create_oauth_app
 
-      { account: account, user: user, oauth_app: oauth_app }
+      { user: user, oauth_app: oauth_app }
     end
 
     activate_licensing(result[:user])
@@ -40,21 +39,24 @@ class SetupBootstrapService
 
   private
 
-  def seed_rbac
-    load Rails.root.join('db', 'seeds', 'rbac.rb')
+  def run_seeds
+    load Rails.root.join('db', 'seeds.rb')
   end
 
-  def create_account
-    Account.create!(
-      name:                'Default',
-      domain:              'localhost',
-      support_email:       @email,
-      locale:              :en,
-      status:              :active,
-      settings:            {},
-      custom_attributes:   {},
-      internal_attributes: {}
-    )
+  def ensure_account_config
+    return if RuntimeConfig.account
+
+    RuntimeConfig.set('account', {
+      id:            SecureRandom.uuid,
+      name:          'Evolution Community',
+      domain:        'localhost',
+      support_email: @email,
+      locale:        'en',
+      status:        'active',
+      features:      {},
+      settings:      {},
+      custom_attributes: {}
+    })
   end
 
   def create_user
@@ -72,28 +74,16 @@ class SetupBootstrapService
     )
   end
 
-  def link_user_to_account(user, account)
-    role = Role.find_by!(key: 'account_owner')
-    AccountUser.create!(
-      account:  account,
-      user:     user,
-      role_id:  role.id,
-      availability: :online,
-      auto_offline: true
-    )
-  end
-
   def assign_global_role(user)
     role = Role.find_by!(key: 'account_owner')
     UserRole.assign_role_to_user(user, role) unless user.has_role?('account_owner')
   end
 
-  def create_oauth_app(account)
+  def create_oauth_app
     redirect_uri = ENV.fetch('OAUTH_REDIRECT_URI', 'http://localhost:5173/oauth/callback')
 
     OauthApplication.create!(
       name:         'Default OAuth App',
-      account:      account,
       uid:          SecureRandom.uuid,
       secret:       Doorkeeper::OAuth::Helpers::UniqueToken.generate,
       redirect_uri: redirect_uri,

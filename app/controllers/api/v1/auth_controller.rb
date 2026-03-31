@@ -82,10 +82,8 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   def me
-    # All users should only see accounts they are assigned to via AccountUser
-    accounts = current_user.accounts.map do |account|
-      AccountSerializer.with_role(account, user: current_user)
-    end
+    account = RuntimeConfig.account
+    accounts = account ? [account.merge('role' => current_user.role_data)] : []
 
     success_response(
       data: {
@@ -122,9 +120,12 @@ class Api::V1::AuthController < Api::BaseController
   def validate
     token_validator = TokenValidationService.new(request)
     result = token_validator.validate!
-    
+
+    account = RuntimeConfig.account
+    accounts = account ? [account.merge('role' => result[:user][:role])] : []
+
     success_response(
-      data: result,
+      data: result.merge(accounts: accounts),
       message: 'Token validated successfully'
     )
   rescue TokenValidationService::InvalidToken => e

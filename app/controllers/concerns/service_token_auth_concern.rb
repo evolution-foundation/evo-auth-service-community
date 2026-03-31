@@ -42,10 +42,6 @@ module ServiceTokenAuthConcern
   def set_service_authenticated_context
     Current.service_authenticated = true
     Current.authentication_method = 'service_token'
-
-    # Single-tenant: resolve account internally
-    account = Account.first
-    Current.account = account if account
   end
 
   def render_service_token_unauthorized(message = 'Unauthorized')

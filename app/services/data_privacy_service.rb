@@ -50,7 +50,7 @@ class DataPrivacyService
       user_profile: data[:profile],
       authentication_data: data[:authentication],
       consent_history: data[:consents],
-      account_associations: data[:accounts],
+      account_data: data[:account],
       oauth_applications: data[:oauth_apps],
       access_tokens: data[:tokens],
       generated_at: Time.current.iso8601,
@@ -149,7 +149,7 @@ class DataPrivacyService
     {
       profile: user_profile_data,
       authentication: authentication_data,
-      accounts: account_data,
+      account: account_data,
       oauth_applications: oauth_application_data,
       access_tokens: access_token_data,
       consents: consent_data,
@@ -163,24 +163,14 @@ class DataPrivacyService
       profile: portable_profile_data,
       authentication: portable_authentication_data,
       consents: consent_data,
-      accounts: portable_account_data,
+      account: portable_account_data,
       oauth_apps: portable_oauth_data,
       tokens: portable_token_data
     }
   end
 
   def user_profile_data
-    user.as_json(
-      only: [:name, :email, :display_name, :created_at, :updated_at, :confirmed_at],
-      include: {
-        account_users: {
-          only: [:role, :created_at],
-          include: {
-            account: { only: [:name, :created_at] }
-          }
-        }
-      }
-    )
+    user.as_json(only: [:name, :email, :display_name, :created_at, :updated_at, :confirmed_at])
   end
 
   def portable_profile_data
@@ -210,37 +200,21 @@ class DataPrivacyService
   end
 
   def account_data
-    user.accounts.as_json(
-      only: [:name, :created_at, :status, :locale]
-    )
+    account = RuntimeConfig.account
+    account ? account.slice('name', 'status', 'locale') : {}
   end
 
   def portable_account_data
-    user.accounts.as_json(
-      only: [:name, :created_at, :locale]
-    )
+    account = RuntimeConfig.account
+    account ? account.slice('name', 'locale') : {}
   end
 
   def oauth_application_data
-    # Check if accounts have oauth_applications association
-    if user.accounts.any? && user.accounts.first.respond_to?(:oauth_applications)
-      user.accounts.joins(:oauth_applications).as_json(
-        only: [:name, :redirect_uri, :scopes, :created_at]
-      )
-    else
-      []
-    end
+    OauthApplication.all.as_json(only: [:name, :redirect_uri, :scopes, :created_at])
   end
 
   def portable_oauth_data
-    # Only include non-sensitive OAuth data
-    if user.accounts.any? && user.accounts.first.respond_to?(:oauth_applications)
-      user.accounts.joins(:oauth_applications).as_json(
-        only: [:name, :scopes, :created_at]
-      )
-    else
-      []
-    end
+    OauthApplication.all.as_json(only: [:name, :scopes, :created_at])
   end
 
   def access_token_data
@@ -298,18 +272,9 @@ class DataPrivacyService
   end
 
   def delete_associated_records
-    # Delete OAuth applications (if association exists)
-    if user.accounts.any? && user.accounts.first.respond_to?(:oauth_applications)
-      user.accounts.each do |account|
-        account.oauth_applications.destroy_all if account.respond_to?(:oauth_applications)
-      end
-    end
-    
-    # Delete access tokens (if association exists)
-    if user.respond_to?(:access_tokens)
-      user.access_tokens.destroy_all
-    end
-    
+    # Delete user's access tokens
+    user.access_tokens.destroy_all if user.respond_to?(:access_tokens)
+
     # Delete consents
     DataPrivacyConsent.where(user: user).destroy_all
   end

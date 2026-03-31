@@ -4,11 +4,8 @@ class Api::V1::ProfilesController < Api::BaseController
   before_action :check_authorization
   
   def show
-    accounts = current_user.accounts.map do |account|
-      account_data(account).merge(
-        role: account_data(account)[:role]
-      )
-    end
+    account = account_data
+    accounts = account.present? ? [account.merge('role' => current_user.role_data)] : []
 
     success_response(
       data: {

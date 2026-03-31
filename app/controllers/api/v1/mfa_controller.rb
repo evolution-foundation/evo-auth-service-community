@@ -106,7 +106,7 @@ class Api::V1::MfaController < Api::BaseController
 
     data = {
       user: user_data(user),
-      accounts: user.accounts.map(&:webhook_data)
+      accounts: [RuntimeConfig.account].compact
     }
     if access_token
       data[:access_token] = access_token.token

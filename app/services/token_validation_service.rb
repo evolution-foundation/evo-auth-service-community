@@ -43,7 +43,6 @@ class TokenValidationService
 
     result = {
       user: user_data[:user],
-      accounts: user_data[:accounts],
       token: user_data[:token]
     }
 
@@ -158,11 +157,10 @@ class TokenValidationService
     raise InvalidToken, "Invalid bearer token" unless @token
     raise ExpiredToken, "Token has expired" if @token.expired?
 
-    user = User.includes(account_users: [ :role, :account_custom_role ]).find(@token.resource_owner_id)
+    user = User.find(@token.resource_owner_id)
 
     {
       user: UserSerializer.full(user),
-      accounts: serialize_accounts(user),
       token: TokenSerializer.oauth(@token, user)
     }
   end
@@ -171,110 +169,11 @@ class TokenValidationService
     @token = AccessToken.find_by(token: @used_token)
     raise InvalidToken, "Invalid access token" unless @token
 
-    user = resolve_user_from_access_token(@token)
-
-    # When api_access_token is linked to an Account, return only that account
-    # This allows the token to implicitly identify the account without requiring account-id header
-    accounts = if @token.owner_type == "Account"
-      # Token is linked to a specific account - return only that account
-      account = @token.owner
-      [ AccountSerializer.full(
-        account,
-        user: user,
-        include_settings: true,
-        include_attributes: true,
-        include_role: true
-      ) ]
-    else
-      # Token is linked to a User - return all user's accounts (legacy behavior)
-      serialize_accounts(user)
-    end
+    user = @token.issued_id.present? ? User.find(@token.issued_id) : @token.owner
 
     {
       user: UserSerializer.full(user),
-      accounts: accounts,
-      token: TokenSerializer.access_token(@token),
-      token_account_id: @token.owner_type == "Account" ? @token.owner_id : nil
+      token: TokenSerializer.access_token(@token)
     }
-  end
-
-  def resolve_user_from_access_token(access_token)
-    case access_token.owner_type
-    when "Account"
-      # Use issued_id to get the user who created the token for this account
-      if access_token.issued_id.present?
-        User.includes(account_users: [ :role, :account_custom_role ]).find(access_token.issued_id)
-      else
-        # Fallback for old tokens without issued_id
-        access_token.owner.users.includes(account_users: [ :role, :account_custom_role ]).first
-      end
-    else
-      access_token.owner
-    end
-  end
-
-  def serialize_accounts(user)
-    return [] unless user
-
-    total_start = Time.current
-    query_count = 0
-
-    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
-      query_count += 1
-    end
-
-    begin
-      load_start = Time.current
-      accounts = user.accounts.active.includes(
-        account_users: [
-          :role,
-          :account_custom_role
-        ]
-      )
-      accounts_count = accounts.count
-      load_time = (Time.current - load_start) * 1000
-      load_queries = query_count
-
-      Rails.logger.info "[TokenValidationService] serialize_accounts: Loaded #{accounts_count} accounts in #{load_time.round(2)}ms (#{load_queries} queries)"
-
-      serialized = accounts.map.with_index do |account, index|
-        account_start = Time.current
-        account_query_before = query_count
-        timings = {}
-
-        # Find preloaded account_user to avoid role_data query
-        account_user = user.account_users.find { |au| au.account_id == account.id }
-
-        result = AccountSerializer.full(
-          account,
-          user: user,
-          account_user: account_user,
-          settings: true,
-          custom_attributes: true,
-          include_role: true,
-          _timings: timings
-        )
-
-        account_queries = query_count - account_query_before
-        account_time = (Time.current - account_start) * 1000
-
-        Rails.logger.info "[TokenValidationService] serialize_accounts: Account[#{index + 1}/#{accounts_count}] #{account.id} - Total: #{account_time.round(2)}ms (#{account_queries} queries) | " \
-          "active_plan: #{(timings[:active_plan] || 0).round(2)}ms | " \
-          "features: #{(timings[:features] || 0).round(2)}ms | " \
-          "role_data: #{(timings[:role_data] || 0).round(2)}ms | " \
-          "plan_serializer: #{(timings[:plan_serializer] || 0).round(2)}ms | " \
-          "other: #{(timings[:other] || 0).round(2)}ms"
-
-        result
-      end
-
-      total_time = (Time.current - total_start) * 1000
-      avg_per_account = accounts_count > 0 ? (query_count.to_f / accounts_count).round(2) : 0
-      Rails.logger.info "[TokenValidationService] serialize_accounts: COMPLETE - #{accounts_count} accounts in #{total_time.round(2)}ms, #{query_count} total queries, #{avg_per_account} avg queries/account"
-
-      serialized
-    ensure
-      ActiveSupport::Notifications.unsubscribe(subscriber)
-    end
   end
 end

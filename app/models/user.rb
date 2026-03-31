@@ -57,6 +57,10 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
+  BASIC_READ_PERMISSIONS = %w[
+    accounts.read labels.read dashboard.read inboxes.read teams.read users.read
+  ].freeze
+
   devise :database_authenticatable,
          :registerable,
          :recoverable,
@@ -77,11 +81,8 @@ class User < ApplicationRecord
   validates :email, presence: true
   validate :password_complexity
 
-  has_many :account_users, dependent: :destroy
-  has_many :accounts, through: :account_users
   has_many :user_roles, dependent: :destroy
   has_many :roles, through: :user_roles
-  accepts_nested_attributes_for :account_users
 
   before_validation :set_password_and_uid, on: :create
 
@@ -95,8 +96,16 @@ class User < ApplicationRecord
   # @param resource [String] Recurso (ex: 'users', 'accounts')
   # @param action [String] Ação (ex: 'read', 'create', 'update', 'delete')
   def can?(resource, action)
-    permission_key = "#{resource}.#{action}"
-    has_permission?(permission_key)
+    has_permission?("#{resource}.#{action}")
+  end
+
+  def has_permission?(permission_key)
+    return false unless permission_key.present?
+    return true if BASIC_READ_PERMISSIONS.include?(permission_key)
+
+    user_roles.joins(role: :role_permissions_actions)
+              .where(role_permissions_actions: { permission_key: permission_key })
+              .exists?
   end
   
   # Verifica se o usuário tem uma role específica
@@ -118,29 +127,24 @@ class User < ApplicationRecord
   def permissions
     all_permissions
   end
-  
-  # Lista todas as permissões do usuário
-  def all_permissions(user_id = nil)
-    return [] unless persisted?
 
-    query = user_roles.joins(role: :role_permissions_actions)
-    query = query.where(user_id: user_id) if user_id.present?
-    query.pluck('role_permissions_actions.permission_key').uniq.sort
+  def all_permissions
+    return BASIC_READ_PERMISSIONS.dup unless persisted?
+
+    role_perms = user_roles.joins(role: :role_permissions_actions)
+                           .pluck('role_permissions_actions.permission_key')
+    (BASIC_READ_PERMISSIONS + role_perms).uniq.sort
   end
   
   # Lista permissões agrupadas por recurso
-  def permissions_by_resource(user_id = nil)
-    permissions_hash = {}
-    
-    all_permissions(user_id).each do |permission_key|
+  def permissions_by_resource
+    all_permissions.each_with_object({}) do |permission_key, hash|
       resource, action = permission_key.split('.', 2)
       next unless resource && action
-      
-      permissions_hash[resource] ||= []
-      permissions_hash[resource] << action
+
+      hash[resource] ||= []
+      hash[resource] << action
     end
-    
-    permissions_hash
   end
   
   # Retorna a role do usuário (busca na user_roles - nível de usuário)
@@ -199,23 +203,12 @@ class User < ApplicationRecord
     find_by(email: email&.downcase)
   end
 
-  # Active account user for current context
-  def active_account_user
-    account_users.order(active_at: :desc).first
-  end
-
-  def account_id
-    active_account_user&.account_id
-  end
-
   def auto_offline
     false
   end
 
   def send_devise_notification(notification, *)
-    mailer = devise_mailer
-    mailer = mailer.with(account: Current.account) if Current.account
-    mailer.send(notification, self, *).deliver_later
+    devise_mailer.send(notification, self, *).deliver_later
   end
 
   def serializable_hash(options = nil)
@@ -253,13 +246,9 @@ class User < ApplicationRecord
   end
 
   private
-  
+
   def set_password_and_uid
     self.uid = email
-  end
-
-  def current_account_user
-    account_users.find_by(account: Current.account) if Current.account
   end
 
   def generate_sso_link

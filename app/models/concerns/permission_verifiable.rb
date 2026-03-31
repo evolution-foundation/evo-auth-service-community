@@ -23,26 +23,18 @@ module PermissionVerifiable
   end
 
   # Lista todas as permissões do usuário no formato "resource.action"
-  # @param account_id [String, UUID] ID opcional da conta para filtrar permissões
   # @return [Array<String>] Lista de chaves de permissão
-  def all_permissions(account_id = nil)
-    # Construir query base
-    query = user_roles.joins(role: :role_permissions_actions)
-
-    # Filtrar por conta se especificada
-    query = query.where(account_id: account_id) if account_id.present?
-
-    # Obter todas as permission_keys
-    query.pluck('role_permissions_actions.permission_key').uniq.sort
+  def all_permissions
+    user_roles.joins(role: :role_permissions_actions)
+              .pluck('role_permissions_actions.permission_key').uniq.sort
   end
 
-  # Lista permissões agrupadas por recurso (para compatibilidade com código antigo)
-  # @param account_id [String, UUID] ID opcional da conta
+  # Lista permissões agrupadas por recurso
   # @return [Hash] Hash com recursos e suas ações permitidas
-  def permissions_by_resource(account_id = nil)
+  def permissions_by_resource
     permissions_by_resource = {}
-    
-    all_permissions(account_id).each do |permission_key|
+
+    all_permissions.each do |permission_key|
       resource, action = permission_key.split('.', 2)
       next unless resource && action
       
@@ -53,6 +45,5 @@ module PermissionVerifiable
     permissions_by_resource
   end
 
-  # Alias para compatibilidade com código antigo
   alias_method :all_permissions_by_resource, :permissions_by_resource
 end

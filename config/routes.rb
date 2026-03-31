@@ -21,9 +21,10 @@ Rails.application.routes.draw do
   end
 
   # OAuth Callback routes
-  get '/oauth/callback', to: 'oauth#callback'
-  get '/oauth/test', to: 'oauth#test'
-  get '/oauth/token_info', to: 'oauth#token_info'
+  get '/oauth/callback',  to: 'oauth#callback'
+  get '/oauth/test',      to: 'oauth#test'
+  get '/oauth/token_info',to: 'oauth#token_info'
+  get '/oauth/accounts',  to: 'oauth#accounts'
 
   # RFC 7591 - Dynamic Client Registration
   post '/oauth/register', to: 'oauth#register'
@@ -32,8 +33,7 @@ Rails.application.routes.draw do
   get '/oauth/flow-test', to: redirect('/oauth-test.html')
 
   # Dynamic OAuth API routes
-  get '/api/v1/dynamic_oauth/available_accounts', to: 'api/v1/accounts/dynamic_oauth#available_accounts'
-  post '/api/v1/dynamic_oauth/validate_client', to: 'api/v1/accounts/dynamic_oauth#validate_dynamic_client'
+  post '/api/v1/dynamic_oauth/validate_client', to: 'api/v1/dynamic_oauth#validate_dynamic_client'
 
   # AUTH STARTS
   mount_devise_token_auth_for 'User', at: 'auth', controllers: {
@@ -98,18 +98,6 @@ Rails.application.routes.draw do
         post :disable
       end
 
-      # User management
-      resources :users, only: [:index, :show, :create, :update, :destroy] do
-        collection do
-          get :permissions
-          post :check_permission
-        end
-        member do
-          patch :update_password
-          patch :update_mfa
-        end
-      end
-
       # Resource Actions Configuration
       resources :resource_actions, only: [:index, :show] do
         collection do
@@ -137,66 +125,11 @@ Rails.application.routes.draw do
       # Plans management (read-only for regular users)
       resources :plans, only: [:index, :show]
 
-      # Active plan endpoint (uses account-id header)
-      get 'active_plan', to: 'accounts#active_plan'
+      # Single account (singleton — dados do RuntimeConfig)
+      resource :account, only: [:show, :update], controller: 'account'
 
-      # Account management (CRM-style)
-      resources :accounts, only: [:show, :create, :update] do
-        member do
-          post :update_active_at
-          get :cache_keys
-          get :permissions
-          get :active_plan
-        end
-
-        scope module: :accounts do
-          resources :users, only: [:index, :create, :update, :destroy] do
-            collection do
-              post :bulk_create
-            end
-            member do
-              get :role
-              post :check_permission
-            end
-          end
-
-          # Custom Roles management per account
-          resources :custom_roles do
-            collection do
-              get :available_permissions
-            end
-            member do
-              # Resource-level permissions
-              post :add_permission
-              delete :remove_permission
-              put :update_permissions
-
-              # Instance-level permissions (scopes)
-              get :resource_scopes
-              post :add_resource_scope
-              delete :remove_resource_scope
-              put :update_resource_scopes
-            end
-          end
-
-          # OAuth applications per account
-          resources :oauth_applications, only: [:index, :show, :create, :update, :destroy] do
-            member do
-              post :regenerate_secret
-            end
-          end
-
-          # Access tokens per account
-          resources :access_tokens, only: [:index, :show, :create, :update, :destroy] do
-            member do
-              patch :update_token
-            end
-          end
-        end
-      end
-
-      # Account-scoped routes WITHOUT account_id in URL (padrão: account-id no header)
-      resources :users, only: [:index, :create, :update, :destroy], controller: 'accounts/users' do
+      # User management
+      resources :users, only: [:index, :create, :update, :destroy] do
         collection do
           post :bulk_create
         end
@@ -206,34 +139,7 @@ Rails.application.routes.draw do
         end
       end
 
-      resources :custom_roles, controller: 'accounts/custom_roles' do
-        collection do
-          get :available_permissions
-        end
-        member do
-          post :add_permission
-          delete :remove_permission
-          put :update_permissions
-          get :resource_scopes
-          post :add_resource_scope
-          delete :remove_resource_scope
-          put :update_resource_scopes
-        end
-      end
-
-      resources :oauth_applications, only: [:index, :show, :create, :update, :destroy], controller: 'accounts/oauth_applications' do
-        member do
-          post :regenerate_secret
-        end
-      end
-
-      resources :access_tokens, only: [:index, :show, :create, :update, :destroy], controller: 'accounts/access_tokens' do
-        member do
-          patch :update_token
-        end
-      end
-
-      # Global OAuth applications management
+      # OAuth applications management
       resources :oauth_applications, only: [:index, :show, :create, :update, :destroy] do
         member do
           post :regenerate_secret
@@ -244,7 +150,11 @@ Rails.application.routes.draw do
       end
 
       # Access tokens management
-      resources :access_tokens, only: [:index, :create, :destroy]
+      resources :access_tokens, only: [:index, :show, :create, :update, :destroy] do
+        member do
+          patch :update_token
+        end
+      end
 
       resources :roles do
         collection do

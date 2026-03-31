@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 9025_08_19_224903) do
+ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -30,87 +30,6 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224903) do
     t.index ["issued_id"], name: "index_access_tokens_on_issued_id"
     t.index ["owner_type", "owner_id"], name: "index_access_tokens_on_owner_type_and_owner_id"
     t.index ["token"], name: "index_access_tokens_on_token", unique: true
-    t.check_constraint "owner_type::text <> 'Account'::text OR owner_type::text = 'Account'::text AND issued_id IS NOT NULL", name: "check_issued_id_for_account"
-  end
-
-  create_table "account_custom_role_permissions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_custom_role_id", null: false
-    t.uuid "account_id", null: false
-    t.string "permission_key", limit: 100, null: false
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["account_custom_role_id", "permission_key"], name: "index_custom_role_perms_unique", unique: true
-    t.index ["account_custom_role_id"], name: "idx_on_account_custom_role_id_27889e4f8e"
-    t.index ["account_id"], name: "index_account_custom_role_permissions_on_account_id"
-    t.index ["permission_key"], name: "index_account_custom_role_permissions_on_permission_key"
-  end
-
-  create_table "account_custom_role_resource_scopes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_custom_role_id", null: false
-    t.uuid "account_id", null: false
-    t.string "resource_type", limit: 100, null: false
-    t.uuid "resource_id", null: false
-    t.jsonb "actions", default: [], null: false
-    t.uuid "created_by_id"
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["account_custom_role_id", "account_id", "resource_type", "resource_id"], name: "index_custom_role_scopes_unique", unique: true
-    t.index ["account_custom_role_id"], name: "idx_on_account_custom_role_id_c3b27b7cb5"
-    t.index ["account_id"], name: "index_account_custom_role_resource_scopes_on_account_id"
-    t.index ["actions"], name: "index_account_custom_role_resource_scopes_on_actions", using: :gin
-    t.index ["resource_type", "resource_id"], name: "index_custom_role_scopes_on_resource"
-  end
-
-  create_table "account_custom_roles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_id", null: false
-    t.string "key", limit: 100, null: false
-    t.string "name", limit: 255, null: false
-    t.text "description"
-    t.boolean "is_active", default: true, null: false
-    t.uuid "created_by_id"
-    t.uuid "updated_by_id"
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["account_id", "is_active"], name: "index_custom_roles_on_account_and_active"
-    t.index ["account_id", "key"], name: "index_custom_roles_on_account_and_key", unique: true
-    t.index ["account_id", "name"], name: "index_custom_roles_on_account_and_name", unique: true
-    t.index ["account_id"], name: "index_account_custom_roles_on_account_id"
-  end
-
-  create_table "account_users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_id", null: false
-    t.uuid "user_id", null: false
-    t.uuid "role_id"
-    t.uuid "inviter_id"
-    t.datetime "active_at"
-    t.integer "availability", default: 0, null: false
-    t.boolean "auto_offline", default: true, null: false
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.uuid "account_custom_role_id"
-    t.index ["account_custom_role_id"], name: "index_account_users_on_account_custom_role_id"
-    t.index ["account_id", "user_id"], name: "uniq_user_id_per_account_id", unique: true
-    t.index ["account_id"], name: "index_account_users_on_account_id"
-    t.index ["role_id"], name: "index_account_users_on_role_id"
-    t.index ["user_id"], name: "index_account_users_on_user_id"
-    t.check_constraint "NOT (role_id IS NOT NULL AND account_custom_role_id IS NOT NULL)", name: "check_not_both_roles"
-  end
-
-  create_table "accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "name", null: false
-    t.integer "locale", default: 0
-    t.string "domain", limit: 100
-    t.string "support_email", limit: 100
-    t.bigint "feature_flags", default: 0, null: false
-    t.integer "auto_resolve_duration"
-    t.jsonb "limits", default: {}
-    t.jsonb "custom_attributes", default: {}
-    t.jsonb "settings", default: {}
-    t.jsonb "internal_attributes", default: {}, null: false
-    t.integer "status", default: 0
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["status"], name: "index_accounts_on_status"
   end
 
   create_table "active_storage_attachments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -227,10 +146,8 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224903) do
     t.string "scopes", default: "", null: false
     t.boolean "confidential", default: true, null: false
     t.boolean "trusted", default: false, null: false
-    t.uuid "account_id"
     t.datetime "created_at", default: -> { "now()" }, null: false
     t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["account_id"], name: "index_oauth_applications_on_account_id"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
 
@@ -329,27 +246,12 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224903) do
   end
 
   add_foreign_key "access_tokens", "users", column: "issued_id"
-  add_foreign_key "account_custom_role_permissions", "account_custom_roles", on_delete: :cascade
-  add_foreign_key "account_custom_role_permissions", "accounts", on_delete: :cascade
-  add_foreign_key "account_custom_role_resource_scopes", "account_custom_roles", on_delete: :cascade
-  add_foreign_key "account_custom_role_resource_scopes", "accounts", on_delete: :cascade
-  add_foreign_key "account_custom_role_resource_scopes", "users", column: "created_by_id", on_delete: :nullify
-  add_foreign_key "account_custom_roles", "accounts", on_delete: :cascade
-  add_foreign_key "account_custom_roles", "users", column: "created_by_id", on_delete: :nullify
-  add_foreign_key "account_custom_roles", "users", column: "updated_by_id", on_delete: :nullify
-  add_foreign_key "account_users", "account_custom_roles", on_delete: :nullify
-  add_foreign_key "account_users", "accounts"
-  add_foreign_key "account_users", "roles"
-  add_foreign_key "account_users", "users"
-  add_foreign_key "account_users", "users", column: "inviter_id"
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "audit_logs", "accounts"
   add_foreign_key "audit_logs", "users"
   add_foreign_key "data_privacy_consents", "users"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
-  add_foreign_key "oauth_applications", "accounts"
   add_foreign_key "role_permissions_actions", "roles"
   add_foreign_key "user_roles", "roles"
   add_foreign_key "user_roles", "users"

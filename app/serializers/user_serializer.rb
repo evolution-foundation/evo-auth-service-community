@@ -29,7 +29,6 @@ module UserSerializer
     # Optional fields
     base_data[:last_sign_in_at] = user.last_sign_in_at if options[:include_sign_in]
     base_data[:sign_in_count] = user.sign_in_count if options[:include_sign_in]
-    base_data[:accounts_count] = user.accounts.count if options[:include_counts]
 
     base_data
   end
@@ -80,20 +79,11 @@ module UserSerializer
   end
 
   # User with role information
-  def with_role(user, account: nil)
+  def with_role(user)
     return nil unless user
 
     data = basic(user)
-    
-    if account
-      account_user = user.account_users.find_by(account: account)
-      data[:role] = account_user&.role_data
-      data[:availability] = account_user&.availability
-      data[:active_at] = account_user&.active_at
-    else
-      data[:role] = user.role_data
-    end
-
+    data[:role] = user.role_data
     data
   end
 
@@ -110,15 +100,10 @@ module UserSerializer
       role: user.role_data,
       confirmed: user.confirmed?,
       custom_attributes: user.custom_attributes,
-      accounts_count: user.accounts.count,
       created_at: user.created_at,
       updated_at: user.updated_at,
       last_sign_in_at: user.last_sign_in_at,
       sign_in_count: user.sign_in_count
     }
-  end
-
-  def user_with_account_data(user, account)
-    UserSerializer.with_role(user, account: account)
   end
 end

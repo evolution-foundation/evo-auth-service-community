@@ -356,9 +356,8 @@ module AuthHelper
   
   # Method to generate successful token validation response for regular user
   def render_user_validation_success
-    accounts = current_user.accounts.map do |account|
-      AccountSerializer.with_role(account, user: current_user)
-    end
+    account = RuntimeConfig.account
+    accounts = account ? [account.merge('role' => current_user.role_data)] : []
 
     success_response(
       data: {
@@ -392,9 +391,8 @@ module AuthHelper
 
   # Method to generate successful token validation response for AccessToken
   def render_access_token_validation_success
-    accounts = current_user.accounts.map do |account|
-      AccountSerializer.with_role(account, user: current_user)
-    end
+    account = RuntimeConfig.account
+    accounts = account ? [account.merge('role' => current_user.role_data)] : []
 
     success_response(
       data: {

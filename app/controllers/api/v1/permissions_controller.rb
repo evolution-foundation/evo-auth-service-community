@@ -2,33 +2,13 @@ class Api::V1::PermissionsController < Api::BaseController
   AUTHZ_CACHE_TTL = 60.seconds
 
   def index
-    account = Account.first
-
-    if account
-      account_user = current_user.account_users.find_by(account: account)
-
-      if account_user
-        permissions = account_user.permissions
-        success_response(
-          data: {
-            permissions: permissions,
-            role: account_user.role_data
-          },
-          message: 'Account permissions retrieved successfully'
-        )
-      else
-        error_response('NOT_FOUND', 'Account not found or user does not have access', status: :not_found)
-      end
-    else
-      permissions = current_user.permissions
-      success_response(
-        data: {
-          permissions: permissions,
-          role_data: current_user.role_data
-        },
-        message: 'User permissions retrieved successfully'
-      )
-    end
+    success_response(
+      data: {
+        permissions: current_user.permissions,
+        role_data: current_user.role_data
+      },
+      message: 'User permissions retrieved successfully'
+    )
   end
 
   def check
@@ -43,7 +23,7 @@ class Api::V1::PermissionsController < Api::BaseController
     if @access_token.present?
       # Fluxo com api_access_token
       has_permission = Rails.cache.fetch(
-        cache_key_for_permission(current_user.id, permission_key, cache_context, Current.account&.id),
+        cache_key_for_permission(current_user.id, permission_key, cache_context, nil),
         expires_in: AUTHZ_CACHE_TTL
       ) do
         check_access_token_permission(permission_key)
@@ -51,7 +31,7 @@ class Api::V1::PermissionsController < Api::BaseController
     elsif @doorkeeper_token.present?
       # Fluxo com bearer token
       has_permission = Rails.cache.fetch(
-        cache_key_for_permission(current_user.id, permission_key, cache_context, Current.account&.id),
+        cache_key_for_permission(current_user.id, permission_key, cache_context, nil),
         expires_in: AUTHZ_CACHE_TTL
       ) do
         @current_user.check_permission(permission_key)

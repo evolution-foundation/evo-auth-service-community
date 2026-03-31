@@ -39,12 +39,6 @@ module Serializers
           end
         end
 
-        # Add account_id and inviter_id if available (for DeviseTokenAuth compatibility)
-        if options[:include_account_context] && user.respond_to?(:active_account_user) && user.active_account_user
-          base_data[:account_id] = user.active_account_user.account_id
-          base_data[:inviter_id] = user.active_account_user.inviter_id
-        end
-
         base_data.merge!(
           display_name: user.display_name,
           available_name: user.available_name,
@@ -67,24 +61,6 @@ module Serializers
         # Optional fields
         base_data[:last_sign_in_at] = user.last_sign_in_at if options[:include_sign_in]
         base_data[:sign_in_count] = user.sign_in_count if options[:include_sign_in]
-        base_data[:accounts_count] = user.accounts.count if options[:include_counts]
-
-        # Include accounts array if requested (for DeviseTokenAuth compatibility)
-        if options[:include_accounts]
-          base_data[:accounts] = user.account_users.map do |account_user|
-            {
-              id: account_user.account_id,
-              name: account_user.account.name,
-              status: account_user.account.status,
-              active_at: account_user.active_at,
-              role: account_user.role_data,
-              permissions: account_user.permissions,
-              availability: account_user.availability,
-              availability_status: account_user.availability_status,
-              auto_offline: account_user.auto_offline
-            }
-          end
-        end
 
         base_data
       end
@@ -116,20 +92,11 @@ module Serializers
       end
 
       # User with role information
-      def with_role(user, account: nil)
+      def with_role(user)
         return nil unless user
 
         data = basic(user)
-        
-        if account
-          account_user = user.account_users.find_by(account: account)
-          data[:role] = account_user&.role_data
-          data[:availability] = account_user&.availability
-          data[:active_at] = account_user&.active_at
-        else
-          data[:role] = user.role_data
-        end
-
+        data[:role] = user.role_data
         data
       end
 
@@ -146,127 +113,11 @@ module Serializers
           role: user.role_data,
           confirmed: user.confirmed?,
           custom_attributes: user.custom_attributes,
-          accounts_count: user.accounts.count,
           created_at: user.created_at,
           updated_at: user.updated_at,
           last_sign_in_at: user.last_sign_in_at,
           sign_in_count: user.sign_in_count
         }
-      end
-    end
-  end
-
-  class AccountSerializer
-    class << self
-      # Full account serialization with all details
-      def full(account, options = {})
-        return nil unless account
-
-        data = {
-          id: account.id,
-          name: account.name,
-          domain: account.domain,
-          support_email: account.support_email,
-          locale: account.locale,
-          status: account.status,
-          created_at: account.created_at,
-          updated_at: account.updated_at
-        }
-
-        # Optional fields
-        data[:settings] = account.settings if options[:include_settings]
-        data[:custom_attributes] = account.custom_attributes if options[:include_attributes]
-
-        if options[:include_role]
-          data[:role] = account.role_data
-        end
-
-        if options[:include_counts]
-          data[:conversations_count] = account.try(:conversations_count) || 0
-          data[:inboxes_count] = account.try(:inboxes_count) || 0
-          data[:users_count] = account.try(:users_count) || 0
-          data[:contacts_count] = account.try(:contacts_count) || 0
-        end
-
-        data
-      end
-
-      # Basic account serialization
-      def basic(account)
-        return nil unless account
-
-        {
-          id: account.id,
-          name: account.name,
-          status: account.status
-        }
-      end
-
-      # Account with role for specific user
-      def with_role(account, user: nil)
-        return nil unless account
-
-        data = {
-          id: account.id,
-          name: account.name,
-          status: account.status,
-          domain: account.domain,
-          locale: account.locale
-        }
-
-        if user
-          account_user = user.account_users.find_by(account: account)
-          data[:role] = account_user&.role_data
-        end
-
-        data
-      end
-
-      # For super admin account management
-      def for_admin(account)
-        return nil unless account
-
-        {
-          id: account.id,
-          name: account.name,
-          domain: account.domain,
-          status: account.status,
-          locale: account.locale,
-          created_at: account.created_at,
-          updated_at: account.updated_at,
-          users_count: account.account_users.count,
-          settings: account.settings,
-          custom_attributes: account.custom_attributes,
-          role: account.role_data
-        }
-      end
-    end
-  end
-
-  class AccountUserSerializer
-    class << self
-      def full(account_user)
-        return nil unless account_user
-
-        {
-          id: account_user.id,
-          user_id: account_user.user_id,
-          account_id: account_user.account_id,
-          account_name: account_user.account.name,
-          role: account_user.role_data,
-          availability: account_user.availability,
-          active_at: account_user.active_at,
-          created_at: account_user.created_at,
-          updated_at: account_user.updated_at
-        }
-      end
-
-      def with_user(account_user)
-        return nil unless account_user
-
-        data = full(account_user)
-        data[:user] = UserSerializer.basic(account_user.user)
-        data
       end
     end
   end

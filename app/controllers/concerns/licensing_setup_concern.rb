@@ -14,7 +14,7 @@ module LicensingSetupConcern
       return
     end
 
-    return if user.accounts.empty?
+    return if RuntimeConfig.account.nil?
 
     return if Licensing::Activation.try_reactivate(store: store)
 

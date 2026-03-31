@@ -21,22 +21,6 @@ class InitSchema < ActiveRecord::Migration[7.1]
     add_index :access_tokens, [:owner_type, :owner_id], name: "index_access_tokens_on_owner_type_and_owner_id"
     add_index :access_tokens, :token, unique: true
 
-    # Accounts table (managed by auth service)
-    create_table :accounts, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
-      t.string :name, null: false
-      t.integer :locale, default: 0
-      t.string :domain, limit: 100
-      t.string :support_email, limit: 100
-      t.bigint :feature_flags, default: 0, null: false
-      t.integer :auto_resolve_duration
-      t.jsonb :limits, default: {}
-      t.jsonb :custom_attributes, default: {}
-      t.jsonb :settings, default: {}
-      t.jsonb :internal_attributes, default: {}, null: false
-      t.integer :status, default: 0
-      t.timestamps default: -> { 'NOW()' }, null: false
-    end
-    add_index :accounts, :status
 
     # Users table (managed by auth service)
     create_table :users, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
@@ -86,21 +70,6 @@ class InitSchema < ActiveRecord::Migration[7.1]
     add_index :users, :reset_password_token, unique: true
     add_index :users, [:uid, :provider], unique: true
 
-    # Account Users junction table (managed by auth service)
-    create_table :account_users, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
-      t.uuid :account_id, null: false
-      t.uuid :user_id, null: false
-      t.uuid :role_id, null: false
-      t.uuid :inviter_id
-      t.datetime :active_at
-      t.integer :availability, default: 0, null: false
-      t.boolean :auto_offline, default: true, null: false
-      t.timestamps default: -> { 'NOW()' }, null: false
-    end
-    add_index :account_users, :account_id
-    add_index :account_users, :user_id
-    add_index :account_users, [:account_id, :user_id], name: "uniq_user_id_per_account_id", unique: true
-    add_index :account_users, :role_id
 
     # Active Storage tables (managed by auth service)
     create_table :active_storage_attachments, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
@@ -140,11 +109,9 @@ class InitSchema < ActiveRecord::Migration[7.1]
       t.string :scopes, null: false, default: ''
       t.boolean :confidential, null: false, default: true
       t.boolean :trusted, default: false, null: false
-      t.uuid :account_id, null: true
       t.timestamps default: -> { 'NOW()' }, null: false
     end
     add_index :oauth_applications, :uid, unique: true
-    add_index :oauth_applications, :account_id
 
     # OAuth Access Grants (Doorkeeper)
     create_table :oauth_access_grants, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
@@ -267,7 +234,6 @@ class InitSchema < ActiveRecord::Migration[7.1]
     # Foreign Keys
     add_foreign_key :active_storage_attachments, :active_storage_blobs, column: :blob_id
     add_foreign_key :active_storage_variant_records, :active_storage_blobs, column: :blob_id
-    add_foreign_key :oauth_applications, :accounts, column: :account_id
     add_foreign_key :oauth_access_grants, :oauth_applications, column: :application_id
     add_foreign_key :oauth_access_tokens, :oauth_applications, column: :application_id
     add_foreign_key :role_permissions_actions, :roles, column: :role_id
@@ -275,12 +241,7 @@ class InitSchema < ActiveRecord::Migration[7.1]
     add_foreign_key :user_roles, :roles, column: :role_id
     add_foreign_key :user_roles, :users, column: :granted_by_id
     add_foreign_key :audit_logs, :users
-    add_foreign_key :audit_logs, :accounts
     add_foreign_key :data_privacy_consents, :users
-    add_foreign_key :account_users, :accounts
-    add_foreign_key :account_users, :users
-    add_foreign_key :account_users, :roles, column: :role_id
-    add_foreign_key :account_users, :users, column: :inviter_id
   end
 
   def down

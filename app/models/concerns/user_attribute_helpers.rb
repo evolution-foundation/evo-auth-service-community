@@ -6,37 +6,23 @@ module UserAttributeHelpers
   end
 
   def availability_status
-    current_account_user&.availability_status
+    availability
   end
 
   def auto_offline
-    current_account_user&.auto_offline
+    false
   end
 
   def inviter
-    current_account_user&.inviter
-  end
-
-  def current_account_user
-    # We want to avoid subsequent queries in case where the association is preloaded.
-    # using where here will trigger n+1 queries.
-    account_users.find { |ac_usr| ac_usr.account_id == Current.account.id } if Current.account
-  end
-
-  def account
-    current_account_user&.account
+    user_roles.joins(:role).first&.inviter
   end
 
   def administrator?
-    current_account_user&.administrator?
+    has_role?('administrator')
   end
 
   def agent?
-    current_account_user&.agent?
-  end
-
-  def role
-    current_account_user&.role
+    has_role?('agent')
   end
 
   # Used internally for Evolution in Evolution

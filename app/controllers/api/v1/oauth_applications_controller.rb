@@ -86,7 +86,7 @@ class Api::V1::OauthApplicationsController < Api::BaseController
   end
 
   def oauth_application_params
-    params.require(:oauth_application).permit(:name, :redirect_uri, :scopes, :confidential, :trusted, :account_id)
+    params.require(:oauth_application).permit(:name, :redirect_uri, :scopes, :confidential, :trusted)
   end
 
   def oauth_application_data(app)
@@ -99,7 +99,7 @@ class Api::V1::OauthApplicationsController < Api::BaseController
       scopes: app.scopes,
       confidential: app.confidential,
       trusted: app.trusted,
-      account_id: app.account_id,
+      rfc7591_registered: app.rfc7591_registered?,
       created_at: app.created_at,
       updated_at: app.updated_at
     }

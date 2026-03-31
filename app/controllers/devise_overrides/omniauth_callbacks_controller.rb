@@ -58,10 +58,8 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
   # end
 
   def create_account_for_user
-    # Create a default account for the new user
-    account = Account.create!(name: "#{@resource.name}'s Account", locale: 'en', support_email: @resource.email)
     admin_role = Role.find_by!(key: 'administrator')
-    AccountUser.create!(account: account, user: @resource, role: admin_role)
+    UserRole.assign_role_to_user(@resource, admin_role)
   end
 
   def default_devise_mapping
