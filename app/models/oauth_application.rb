@@ -20,7 +20,6 @@ class OauthApplication < Doorkeeper::Application
 
   scope :dynamic_apps, -> { where('name LIKE ?', 'Dynamic OAuth -%') }
   scope :static_apps,  -> { where.not('name LIKE ?', 'Dynamic OAuth -%') }
-  # RFC 7591 dynamically registered apps are identified by the "Dynamic OAuth -" name prefix
   scope :rfc7591_apps, -> { dynamic_apps }
 
   def display_secret
@@ -31,7 +30,6 @@ class OauthApplication < Doorkeeper::Application
     end
   end
 
-  # App registrada dinamicamente via RFC 7591 (POST /oauth/register)
   def dynamic_oauth_app?
     name&.start_with?('Dynamic OAuth -')
   end
@@ -40,13 +38,10 @@ class OauthApplication < Doorkeeper::Application
     !dynamic_oauth_app?
   end
 
-  # Verifica se a aplicação foi registrada via RFC 7591 (sem vínculo administrativo)
-  # No modelo single-account, a distinção é feita pelo prefixo do nome.
   def rfc7591_registered?
     dynamic_oauth_app?
   end
 
-  # No modelo single-account não há seleção de account durante autorização.
   def requires_account_selection?
     false
   end

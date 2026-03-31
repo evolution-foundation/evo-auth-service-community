@@ -125,7 +125,6 @@ Rails.application.routes.draw do
       # Plans management (read-only for regular users)
       resources :plans, only: [:index, :show]
 
-      # Single account (singleton — dados do RuntimeConfig)
       resource :account, only: [:show, :update], controller: 'account'
 
       # User management

@@ -10,7 +10,6 @@ puts "✅ Seeded RBAC system with roles, actions and permissions"
 puts "   - Roles: #{Role.count}"
 puts "   - Role Permission Actions: #{RolePermissionsAction.count}"
 
-# Seed single account config (immutable — generated once)
 puts "🏢 Seeding account config..."
 unless RuntimeConfig.account
   RuntimeConfig.set('account', {

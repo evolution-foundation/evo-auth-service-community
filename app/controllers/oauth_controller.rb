@@ -18,7 +18,6 @@ class OauthController < ApplicationController
     render plain: 'OAuth test page - Evo Auth Service'
   end
 
-  # Retorna a única account no formato esperado pelo frontend OAuth (OAuthAccount)
   def accounts
     account = RuntimeConfig.account
     return render json: [] unless account
