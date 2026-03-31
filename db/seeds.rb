@@ -1,5 +1,4 @@
 # This file seeds RBAC roles and permissions required by the application.
-# User, account, and OAuth app creation is handled by the Setup Wizard (POST /setup/bootstrap).
 
 puts "🌱 Seeding Evo Auth Service (Community)..."
 
