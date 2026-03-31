@@ -206,7 +206,6 @@ Feature.available_features
 
 EvoAuth Service is built with multi-tenancy in mind:
 
-- **Account Isolation**: All data is scoped by `account_id`
 - **Resource Separation**: Each account has isolated users, roles, and OAuth applications
 - **Feature Flags**: Features can be enabled/disabled per account
 - **Audit Trails**: All actions are logged with account context
