@@ -271,7 +271,8 @@ Rails.application.routes.draw do
   scope '/setup' do
     get '/status',   to: 'setup#status'
     get '/register', to: 'setup#register'
-    get '/activate', to: 'setup#activate'
+    get '/activate',  to: 'setup#activate'
+    post '/bootstrap', to: 'setup#bootstrap'
   end
 
   # Health check

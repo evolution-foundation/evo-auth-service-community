@@ -22,6 +22,12 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     # Public API endpoints
     resource '/public/api/*', headers: :any, methods: :any
 
+    # Setup/installation endpoints
+    resource '/setup/*',
+             headers: :any,
+             methods: [:get, :post, :options],
+             credentials: false
+
     # License management endpoints
     resource '/license/*',
              headers: :any,

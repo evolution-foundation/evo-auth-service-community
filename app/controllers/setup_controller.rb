@@ -5,6 +5,8 @@
 # reachable even when the license is inactive — necessary for the initial
 # registration flow.
 class SetupController < ActionController::Base
+  skip_forgery_protection
+
   # GET /setup/status
   # Returns current license state and masked api_key when active.
   def status
@@ -120,7 +122,39 @@ class SetupController < ActionController::Base
     end
   end
 
+  # POST /setup/bootstrap
+  # Creates the first admin user, account, RBAC roles, and OAuth app.
+  # Only works when the database has no users (fresh installation).
+  def bootstrap
+    bp = bootstrap_params
+
+    if bp[:password] != bp[:password_confirmation]
+      render json: { error: 'Password confirmation does not match' }, status: :unprocessable_entity
+      return
+    end
+
+    result = SetupBootstrapService.call(
+      first_name: bp[:first_name],
+      last_name:  bp[:last_name],
+      email:      bp[:email],
+      password:   bp[:password],
+      client_ip:  request.remote_ip
+    )
+
+    render json: { status: 'ok', message: 'Installation completed successfully' }, status: :created
+
+  rescue SetupBootstrapService::AlreadyBootstrappedError => e
+    render json: { error: e.message }, status: :conflict
+
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { error: e.message }, status: :unprocessable_entity
+  end
+
   private
+
+  def bootstrap_params
+    params.permit(:first_name, :last_name, :email, :password, :password_confirmation)
+  end
 
   def resolve_instance_id(ctx)
     ctx.instance_id.presence || Licensing::Store.new.load_or_create_instance_id
