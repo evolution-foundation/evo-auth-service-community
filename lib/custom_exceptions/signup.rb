@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module CustomExceptions::Account
+module CustomExceptions::Signup
   class InvalidEmail < CustomExceptions::Base
     def message
       if @data[:domain_blocked]

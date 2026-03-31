@@ -1,20 +1,3 @@
-# == Schema Information
-#
-# Table name: oauth_applications
-#
-#  id           :bigint           not null, primary key
-#  confidential :boolean          default(TRUE), not null
-#  name         :string           not null
-#  redirect_uri :text             not null
-#  scopes       :string           default(""), not null
-#  secret       :string           not null
-#  trusted      :boolean          default(FALSE), not null
-#  uid          :string           not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
-#  account_id   :bigint
-#
-
 class OauthApplication < Doorkeeper::Application
   validates :trusted, inclusion: { in: [true, false] }
 
@@ -42,7 +25,4 @@ class OauthApplication < Doorkeeper::Application
     dynamic_oauth_app?
   end
 
-  def requires_account_selection?
-    false
-  end
 end

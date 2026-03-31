@@ -23,7 +23,7 @@ class Api::V1::PermissionsController < Api::BaseController
     if @access_token.present?
       # Fluxo com api_access_token
       has_permission = Rails.cache.fetch(
-        cache_key_for_permission(current_user.id, permission_key, cache_context, nil),
+        cache_key_for_permission(current_user.id, permission_key, cache_context),
         expires_in: AUTHZ_CACHE_TTL
       ) do
         check_access_token_permission(permission_key)
@@ -31,7 +31,7 @@ class Api::V1::PermissionsController < Api::BaseController
     elsif @doorkeeper_token.present?
       # Fluxo com bearer token
       has_permission = Rails.cache.fetch(
-        cache_key_for_permission(current_user.id, permission_key, cache_context, nil),
+        cache_key_for_permission(current_user.id, permission_key, cache_context),
         expires_in: AUTHZ_CACHE_TTL
       ) do
         @current_user.check_permission(permission_key)
@@ -60,7 +60,7 @@ class Api::V1::PermissionsController < Api::BaseController
     true
   end
 
-  def cache_key_for_permission(user_id, permission_key, auth_type, account_id)
-    "authz:permissions_check:user=#{user_id}:account=#{account_id || 'none'}:auth=#{auth_type}:permission=#{permission_key}"
+  def cache_key_for_permission(user_id, permission_key, auth_type)
+    "authz:permissions_check:user=#{user_id}:auth=#{auth_type}:permission=#{permission_key}"
   end
 end

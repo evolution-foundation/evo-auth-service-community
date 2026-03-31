@@ -74,10 +74,6 @@ class User < ApplicationRecord
   # remove the column availability from users
   enum availability: { online: 0, offline: 1, busy: 2 }
 
-  # The validation below has been commented out as it does not
-  # work because :validatable in devise overrides this.
-  # validates_uniqueness_of :email, scope: :account_id
-
   validates :email, presence: true
   validate :password_complexity
 

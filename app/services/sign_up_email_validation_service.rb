@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-class Account::SignUpEmailValidationService
-  include CustomExceptions::Account
+class SignUpEmailValidationService
+  include CustomExceptions::Signup
   attr_reader :email
 
   def initialize(email)

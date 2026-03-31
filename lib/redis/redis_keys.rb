@@ -15,12 +15,9 @@ module Redis::RedisKeys
   USER_SSO_AUTH_TOKEN = 'USER_SSO_AUTH_TOKEN::%<user_id>d::%<token>s'.freeze
 
   ## Online Status Keys
-  # hash containing user_id key and status as value
-  ONLINE_STATUS = 'ONLINE_STATUS::%<account_id>d'.freeze
-  # sorted set storing online presense of account contacts
-  ONLINE_PRESENCE_CONTACTS = 'ONLINE_PRESENCE::%<account_id>d::CONTACTS'.freeze
-  # sorted set storing online presense of account users
-  ONLINE_PRESENCE_USERS = 'ONLINE_PRESENCE::%<account_id>d::USERS'.freeze
+  ONLINE_STATUS = 'ONLINE_STATUS'.freeze
+  ONLINE_PRESENCE_CONTACTS = 'ONLINE_PRESENCE::CONTACTS'.freeze
+  ONLINE_PRESENCE_USERS = 'ONLINE_PRESENCE::USERS'.freeze
 
   ## Authorization Status Keys
   # Used to track token expiry and such issues for facebook slack integrations etc

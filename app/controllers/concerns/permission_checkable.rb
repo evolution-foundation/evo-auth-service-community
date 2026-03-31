@@ -16,9 +16,8 @@ module PermissionCheckable
   #
   # @param resource [String] The resource to check
   # @param action [String] The action to check
-  # @param user_id [String, UUID] (Optional) User ID for specific permissions
   # @param message [String] (Optional) Custom error message
-  def authorize_resource!(resource, action, user_id = nil, message = nil)
+  def authorize_resource!(resource, action, message = nil)
     # Verifica se a rota está isenta de verificação de permissão
     return true if exempt_from_permission_check?
     return true if Current.service_authenticated == true

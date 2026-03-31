@@ -145,32 +145,6 @@ class InitSchema < ActiveRecord::Migration[7.1]
     add_index :oauth_access_tokens, :application_id
     add_index :oauth_access_tokens, :resource_owner_id
 
-    # Audit Logs
-    create_table :audit_logs, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
-      t.uuid :user_id, null: true
-      t.uuid :account_id, null: true
-      t.string :action, null: false
-      t.string :resource_type
-      t.uuid :resource_id
-      t.jsonb :details, default: {}
-      t.string :ip_address
-      t.text :user_agent
-      t.boolean :success, default: true, null: false
-      t.string :session_id
-      t.string :request_id
-      t.integer :severity, default: 0, null: false
-      t.timestamps default: -> { 'NOW()' }, null: false
-    end
-    add_index :audit_logs, :action
-    add_index :audit_logs, :created_at
-    add_index :audit_logs, [:user_id, :created_at]
-    add_index :audit_logs, [:account_id, :created_at]
-    add_index :audit_logs, [:resource_type, :resource_id]
-    add_index :audit_logs, :success
-    add_index :audit_logs, :severity
-    add_index :audit_logs, :ip_address
-    add_index :audit_logs, :details, using: :gin
-
     # Data Privacy Consents (GDPR/LGPD compliance)
     create_table :data_privacy_consents, id: :uuid, default: -> { "gen_random_uuid()" } do |t|
       t.uuid :user_id, null: false
@@ -240,7 +214,6 @@ class InitSchema < ActiveRecord::Migration[7.1]
     add_foreign_key :user_roles, :users, column: :user_id
     add_foreign_key :user_roles, :roles, column: :role_id
     add_foreign_key :user_roles, :users, column: :granted_by_id
-    add_foreign_key :audit_logs, :users
     add_foreign_key :data_privacy_consents, :users
   end
 

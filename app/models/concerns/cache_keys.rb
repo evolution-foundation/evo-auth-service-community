@@ -21,13 +21,13 @@ module CacheKeys
   end
 
   def update_cache_key(key)
-    update_cache_key_for_account(id, key)
+    update_cache_key_for_entity(id, key)
     dispatch_cache_update_event
   end
 
   def reset_cache_keys
     self.class.cacheable_models.each do |model|
-      update_cache_key_for_account(id, model.name.underscore)
+      update_cache_key_for_entity(id, model.name.underscore)
     end
 
     dispatch_cache_update_event
@@ -35,13 +35,13 @@ module CacheKeys
 
   private
 
-  def update_cache_key_for_account(account_id, key)
-    prefixed_cache_key = get_prefixed_cache_key(account_id, key)
+  def update_cache_key_for_entity(entity_id, key)
+    prefixed_cache_key = get_prefixed_cache_key(entity_id, key)
     timestamp = (Time.now.utc.to_f * 1000).to_i
     Redis::Alfred.setex(prefixed_cache_key, timestamp, CACHE_KEYS_EXPIRY)
   end
 
   def dispatch_cache_update_event
-    Rails.configuration.dispatcher.dispatch(ACCOUNT_CACHE_INVALIDATED, Time.zone.now, cache_keys: cache_keys, account: self)
+    Rails.configuration.dispatcher.dispatch(CACHE_INVALIDATED, Time.zone.now, cache_keys: cache_keys, entity: self)
   end
 end

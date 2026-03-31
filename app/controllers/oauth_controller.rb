@@ -22,7 +22,7 @@ class OauthController < ApplicationController
     account = RuntimeConfig.account
     return render json: [] unless account
 
-    render json: [{ account_id: account['id'], account_name: account['name'] }]
+    render json: [{ id: account['id'], name: account['name'] }]
   end
 
   # RFC 7591 - Dynamic Client Registration
@@ -132,7 +132,7 @@ class OauthController < ApplicationController
       op_tos_uri: "#{frontend_url}/terms",
       evolution_extensions: {
         dynamic_oauth_available: true,
-        dynamic_client_format: 'dynamic_account_{account_id}',
+        dynamic_client_format: 'dynamic_client_{client_id}',
         available_accounts_endpoint: "#{backend_url}/api/v1/dynamic_oauth/available_accounts",
         validate_client_endpoint: "#{backend_url}/api/v1/dynamic_oauth/validate_client",
         api_base_url: "#{backend_url}/api/v1",

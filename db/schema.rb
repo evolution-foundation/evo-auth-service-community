@@ -60,32 +60,6 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
-  create_table "audit_logs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "user_id"
-    t.uuid "account_id"
-    t.string "action", null: false
-    t.string "resource_type"
-    t.uuid "resource_id"
-    t.jsonb "details", default: {}
-    t.string "ip_address"
-    t.text "user_agent"
-    t.boolean "success", default: true, null: false
-    t.string "session_id"
-    t.string "request_id"
-    t.integer "severity", default: 0, null: false
-    t.datetime "created_at", default: -> { "now()" }, null: false
-    t.datetime "updated_at", default: -> { "now()" }, null: false
-    t.index ["account_id", "created_at"], name: "index_audit_logs_on_account_id_and_created_at"
-    t.index ["action"], name: "index_audit_logs_on_action"
-    t.index ["created_at"], name: "index_audit_logs_on_created_at"
-    t.index ["details"], name: "index_audit_logs_on_details", using: :gin
-    t.index ["ip_address"], name: "index_audit_logs_on_ip_address"
-    t.index ["resource_type", "resource_id"], name: "index_audit_logs_on_resource_type_and_resource_id"
-    t.index ["severity"], name: "index_audit_logs_on_severity"
-    t.index ["success"], name: "index_audit_logs_on_success"
-    t.index ["user_id", "created_at"], name: "index_audit_logs_on_user_id_and_created_at"
-  end
-
   create_table "data_privacy_consents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.string "consent_type", null: false
@@ -248,7 +222,6 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
   add_foreign_key "access_tokens", "users", column: "issued_id"
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "audit_logs", "users"
   add_foreign_key "data_privacy_consents", "users"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"

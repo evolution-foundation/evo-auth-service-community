@@ -6,7 +6,6 @@ module AuthenticationRoutesExemption
   
   # List of specific actions that should be exempt from permission checks
   EXEMPT_ACTIONS = {
-    'api/v1/accounts' => ['create'],
     'api/v1/auth' => ['login'],
   }.freeze
   
@@ -20,12 +19,12 @@ module AuthenticationRoutesExemption
   end
   
   # Wrapper for authorize_resource! that checks if the route is exempt
-  def authorize_resource_with_exemption!(resource, action, account_id = nil, message = nil)
+  def authorize_resource_with_exemption!(resource, action, message = nil)
     # If the route is exempt, return true without checking permission
     return true if exempt_from_permission_check?
-    
+
     # Otherwise, call the original method
-    authorize_resource!(resource, action, account_id, message)
+    authorize_resource!(resource, action, message)
   end
   
   # Wrapper for authorize_role! that checks if the route is exempt
