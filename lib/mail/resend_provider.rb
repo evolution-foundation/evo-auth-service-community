@@ -5,6 +5,13 @@ module Mail
     def initialize(_settings); end
 
     def deliver!(mail)
+      api_key = GlobalConfigService.load('RESEND_API_SECRET', nil) ||
+                GlobalConfigService.load('RESEND_API_KEY', nil)
+
+      raise DeliveryError, "Resend API key not configured" if api_key.blank?
+
+      Resend.api_key = api_key
+
       Resend::Emails.send(
         from: mail.header[:from].to_s,
         to: mail.header[:to].to_s,

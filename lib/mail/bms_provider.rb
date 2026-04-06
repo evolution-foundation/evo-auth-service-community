@@ -8,10 +8,11 @@ module Mail
     def initialize(_settings); end
 
     def deliver!(mail)
-      bms_api_key = GlobalConfigService.load('BMS_API_KEY', nil)
+      bms_api_key = GlobalConfigService.load('BMS_API_SECRET', nil) ||
+                    GlobalConfigService.load('BMS_API_KEY', nil)
 
       if bms_api_key.blank?
-        Rails.logger.info "📧 BMS PROVIDER: No BMS_API_KEY found, falling back to SMTP"
+        Rails.logger.info "📧 BMS PROVIDER: No BMS API key found, falling back to SMTP"
         return deliver_via_smtp!(mail)
       end
 
@@ -57,9 +58,34 @@ module Mail
     private
 
     def deliver_via_smtp!(mail)
-      smtp_settings = ActionMailer::Base.smtp_settings
+      smtp_settings = load_dynamic_smtp_settings
       smtp = Mail::SMTP.new(smtp_settings)
       smtp.deliver!(mail)
+    end
+
+    def load_dynamic_smtp_settings
+      settings = {
+        address: GlobalConfigService.load('SMTP_ADDRESS', 'localhost'),
+        port: GlobalConfigService.load('SMTP_PORT', 587).to_i
+      }
+
+      auth = GlobalConfigService.load('SMTP_AUTHENTICATION', nil)
+      settings[:authentication] = auth.to_sym if auth.present?
+
+      domain = GlobalConfigService.load('SMTP_DOMAIN', nil)
+      settings[:domain] = domain if domain.present?
+
+      settings[:user_name] = GlobalConfigService.load('SMTP_USERNAME', nil)
+      settings[:password] = GlobalConfigService.load('SMTP_PASSWORD_SECRET', nil) ||
+                            GlobalConfigService.load('SMTP_PASSWORD', nil)
+
+      starttls = GlobalConfigService.load('SMTP_ENABLE_STARTTLS_AUTO', 'true')
+      settings[:enable_starttls_auto] = ActiveModel::Type::Boolean.new.cast(starttls)
+
+      verify_mode = GlobalConfigService.load('SMTP_OPENSSL_VERIFY_MODE', nil)
+      settings[:openssl_verify_mode] = verify_mode if verify_mode.present?
+
+      settings
     end
 
     def send_via_bms_api(payload, bms_api_key)
