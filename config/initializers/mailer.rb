@@ -21,7 +21,9 @@ Rails.application.configure do
   config.action_mailer.perform_deliveries = true
   config.action_mailer.raise_delivery_errors = true
 
-  # Config related to smtp (kept as fallback settings)
+  # SMTP settings are now loaded dynamically from GlobalConfigService at
+  # delivery time (see ApplicationMailer).  The initializer still sets safe
+  # defaults so Action Mailer has *something* configured at boot.
   smtp_settings = {
     address: ENV.fetch('SMTP_ADDRESS', 'localhost'),
     port: ENV.fetch('SMTP_PORT', 587)

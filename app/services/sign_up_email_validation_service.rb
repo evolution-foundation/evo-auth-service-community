@@ -28,7 +28,7 @@ class SignUpEmailValidationService
   end
 
   def blocked_domains
-    domains = GlobalConfig.get_value('BLOCKED_EMAIL_DOMAINS')
+    domains = GlobalConfigService.load('BLOCKED_EMAIL_DOMAINS')
     return [] if domains.blank?
 
     domains.split("\n").map(&:strip)
