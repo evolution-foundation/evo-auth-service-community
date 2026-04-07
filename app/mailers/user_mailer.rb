@@ -5,7 +5,7 @@ class UserMailer < ApplicationMailer
     @user = user
     @code = code
 
-    sender = GlobalConfigService.load('MAILER_SENDER_EMAIL', ENV.fetch('MAILER_SENDER_EMAIL', 'noreply@evo-auth-service.com'))
+    sender = GlobalConfigService.load('MAILER_SENDER_EMAIL', 'noreply@evo-auth-service.com')
 
     mail(
       to: user.email,

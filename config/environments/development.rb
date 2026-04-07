@@ -72,6 +72,9 @@ Rails.application.configure do
   # Allow Docker internal host for inter-service communication
   config.hosts << "host.docker.internal"
   config.hosts << /.*\.docker\.internal/
+
+  # Allow Docker Compose service hostnames
+  config.hosts << "evo-auth"
   
   # Allow ngrok hosts for local development
   config.hosts << "evo-auth-davidson.ngrok.app"

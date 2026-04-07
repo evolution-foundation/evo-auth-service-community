@@ -27,7 +27,7 @@ module UserAttributeHelpers
 
   # Used internally for Evolution in Evolution
   def hmac_identifier
-    hmac_key = GlobalConfig.get('EVOLUTION_INBOX_HMAC_KEY')['EVOLUTION_INBOX_HMAC_KEY']
+    hmac_key = GlobalConfigService.load('EVOLUTION_INBOX_HMAC_KEY')
     return OpenSSL::HMAC.hexdigest('sha256', hmac_key, email) if hmac_key.present?
 
     ''

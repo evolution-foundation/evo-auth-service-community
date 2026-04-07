@@ -71,6 +71,9 @@ gem "ostruct"
 # Algorithm for hashing passwords
 gem 'argon2'
 
+# Symmetric encryption for shared config secrets
+gem 'fernet'
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
