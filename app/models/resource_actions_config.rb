@@ -677,6 +677,14 @@ class ResourceActionsConfig
       }
     },
 
+    installation_configs: {
+      name: 'Installation Configs',
+      description: 'System-level installation configuration management',
+      actions: {
+        manage: { name: 'Manage', description: 'Manage installation configuration settings' }
+      }
+    },
+
     }.freeze
 
   class << self
