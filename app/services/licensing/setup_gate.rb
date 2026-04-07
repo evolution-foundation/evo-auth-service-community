@@ -2,7 +2,7 @@
 
 module Licensing
   class SetupGate
-    BYPASS_PREFIXES = %w[/setup /rails /auth /api/v1/auth].freeze
+    BYPASS_PREFIXES = %w[/setup /rails /auth /api/v1/auth /health].freeze
 
     UNAVAILABLE_BODY = ['{"error":"service not activated","code":"SETUP_REQUIRED"}'].freeze
 

@@ -54,7 +54,7 @@ module Serializers
         )
 
         # Add hmac_identifier if EVOLUTION_INBOX_HMAC_KEY is present
-        if GlobalConfig.get('EVOLUTION_INBOX_HMAC_KEY').present? && user.respond_to?(:hmac_identifier)
+        if GlobalConfigService.load('EVOLUTION_INBOX_HMAC_KEY').present? && user.respond_to?(:hmac_identifier)
           base_data[:hmac_identifier] = user.hmac_identifier
         end
 
