@@ -22,15 +22,11 @@ Rails.application.routes.draw do
 
   # OAuth Callback routes
   get '/oauth/callback',  to: 'oauth#callback'
-  get '/oauth/test',      to: 'oauth#test'
   get '/oauth/token_info',to: 'oauth#token_info'
   get '/oauth/accounts',  to: 'oauth#accounts'
 
   # RFC 7591 - Dynamic Client Registration
   post '/oauth/register', to: 'oauth#register'
-
-  # OAuth Test Page
-  get '/oauth/flow-test', to: redirect('/oauth-test.html')
 
   # Dynamic OAuth API routes
   post '/api/v1/dynamic_oauth/validate_client', to: 'api/v1/dynamic_oauth#validate_dynamic_client'
@@ -43,11 +39,6 @@ Rails.application.routes.draw do
     omniauth_callbacks: 'devise_overrides/omniauth_callbacks',
     registrations: 'devise_overrides/registrations'
   }, via: [:get, :post]
-
-  # MFA verification route
-  devise_scope :user do
-    post 'mfa/verify', to: 'devise_overrides/sessions#verify_mfa'
-  end
 
   # API Routes
   namespace :api do

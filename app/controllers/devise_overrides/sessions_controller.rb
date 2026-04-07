@@ -45,63 +45,6 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
     end
   end
 
-  def verify_mfa
-    email = params[:email]
-    code = params[:code]
-    temp_token = params[:temp_token]
-
-    unless email.present? && code.present? && temp_token.present?
-      render json: { errors: ['Missing required parameters'] }, status: :bad_request
-      return
-    end
-
-    user = User.find_by(email: email)
-
-    unless user && user.two_factor_enabled?
-      render_create_error_bad_credentials
-      return
-    end
-
-    # Verify the temporary MFA token
-    unless verify_temp_mfa_token(temp_token, user)
-      render json: { errors: ['Invalid or expired session'] }, status: :unauthorized
-      return
-    end
-
-    # Check if user is locked due to too many failed attempts
-    if user.mfa_locked?
-      render json: { errors: ['Account temporarily locked due to too many failed attempts'] }, status: :locked
-      return
-    end
-
-    # Verify MFA code
-    success = case user.mfa_method.to_sym
-              when :totp
-                user.validate_otp(code)
-              when :email
-                user.validate_email_otp(code)
-              else
-                false
-              end
-
-    if success
-      user.reset_failed_mfa_attempts!
-      @resource = user
-      @token = @resource.create_token
-      @resource.save!
-      sign_in(:user, @resource, store: false, bypass: false)
-      yield @resource if block_given?
-      render_create_success
-    else
-      user.record_failed_mfa_attempt!
-      render json: {
-        errors: ['Invalid verification code'],
-        attempts_remaining: [0, 5 - user.failed_mfa_attempts].max
-      }, status: :unprocessable_entity
-    end
-  end
-
-
   def render_create_success
     attempt_setup(@resource)
 
@@ -147,17 +90,6 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
       exp: 10.minutes.from_now.to_i
     }
     JWT.encode(payload, Rails.application.secret_key_base)
-  end
-
-  def verify_temp_mfa_token(token, user)
-    return false unless token.present?
-
-    begin
-      decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
-      decoded['user_id'] == user.id && decoded['email'] == user.email
-    rescue JWT::DecodeError, JWT::ExpiredSignature
-      false
-    end
   end
 
   def login_page_url(error: nil)
