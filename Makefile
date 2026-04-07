@@ -160,7 +160,8 @@ db-reset: ## Resetar banco completo
 	@echo "$(YELLOW)🔄 Resetando banco de dados...$(NC)"
 	@echo "$(RED)⚠️  ATENÇÃO: Isso irá apagar todos os dados!$(NC)"
 	@read -p "Tem certeza? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
-	rails db:reset
+	rails db:environment:set RAILS_ENV=development 2>/dev/null; rails db:drop db:create db:migrate
+	@rm -f .runtime.dat .instance
 	@echo "$(GREEN)✅ Banco de dados resetado!$(NC)"
 
 db-rollback: ## Rollback last migration
