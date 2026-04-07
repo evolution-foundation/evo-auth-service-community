@@ -508,6 +508,15 @@ class ResourceActionsConfig
       }
     },
 
+    # Installation Configuration (Admin Panel)
+    installation_configs: {
+      name: 'Installation Configs',
+      description: 'System-wide configuration managed via admin panel',
+      actions: {
+        manage: { name: 'Manage', description: 'View and update installation configurations' }
+      }
+    },
+
     # Account Settings
     working_hours: {
       name: 'Working Hours',
