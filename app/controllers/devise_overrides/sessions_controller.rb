@@ -92,17 +92,6 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
     JWT.encode(payload, Rails.application.secret_key_base)
   end
 
-  def verify_temp_mfa_token(token, user)
-    return false unless token.present?
-
-    begin
-      decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
-      decoded['user_id'] == user.id && decoded['email'] == user.email
-    rescue JWT::DecodeError, JWT::ExpiredSignature
-      false
-    end
-  end
-
   def login_page_url(error: nil)
     frontend_url = ENV.fetch('FRONTEND_URL', nil)
 
