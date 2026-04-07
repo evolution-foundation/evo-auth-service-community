@@ -76,20 +76,6 @@ Rails.application.configure do
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  config.hosts << "api.evoai.app"
-  config.hosts << "api.staging.evoai.app"
-  config.hosts << /.*\.evoai\.app/     # Allow all evoai.app subdomains
-  config.hosts << "localhost"
-
-  # Allow hosts from CORS_ORIGINS (extract hostnames from URLs)
-  if ENV['CORS_ORIGINS'].present?
-    ENV['CORS_ORIGINS'].split(',').each do |origin|
-      host = URI.parse(origin.strip).host rescue nil
-      config.hosts << host if host.present?
-    end
-  end
-
-  # Skip DNS rebinding protection for the default health check endpoint.
-  config.host_authorization = { exclude: ->(request) { request.path == "/up" || request.path == "/health" || request.path == "/ready" || request.path == "/health/live" } }
+  # Allow all hosts (traffic is already filtered by the API gateway/nginx)
+  config.hosts.clear
 end
