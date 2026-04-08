@@ -26,9 +26,8 @@ class SetupBootstrapService
       ensure_account_config
       user      = create_user
       assign_global_role(user)
-      oauth_app = create_oauth_app
 
-      { user: user, oauth_app: oauth_app }
+      { user: user }
     end
 
     activate_licensing(result[:user])
