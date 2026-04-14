@@ -7,9 +7,16 @@ RSpec.describe InstallationConfig do
   let(:encryption_key) { Base64.urlsafe_encode64(SecureRandom.random_bytes(32)) }
 
   before do
+    described_class.reset_encryption_key_cache!
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with('ENCRYPTION_KEY').and_return(encryption_key)
     allow(ENV).to receive(:fetch).and_call_original
     allow(ENV).to receive(:fetch).with('ENCRYPTION_KEY').and_return(encryption_key)
     Rails.cache.clear
+  end
+
+  after do
+    described_class.reset_encryption_key_cache!
   end
 
   describe '#value' do

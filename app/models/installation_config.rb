@@ -10,6 +10,35 @@ class InstallationConfig < ActiveRecord::Base
   self.table_name = 'installation_configs'
 
   CACHE_TTL = 60.seconds
+  ENCRYPTION_KEY_DERIVATION_SALT = 'installation_config_encryption_v1'
+
+  # ---------------------------------------------------------------------------
+  # Encryption key resolution — must stay in sync with evo-ai-crm's
+  # InstallationConfig so that values written by CRM can be decrypted here.
+  # ---------------------------------------------------------------------------
+
+  def self.encryption_key
+    @encryption_key ||= resolve_encryption_key
+  end
+
+  def self.reset_encryption_key_cache!
+    @encryption_key = nil
+  end
+
+  def self.resolve_encryption_key
+    ENV['ENCRYPTION_KEY'].presence || derive_encryption_key_from_secret_key_base
+  end
+
+  def self.derive_encryption_key_from_secret_key_base
+    secret = ENV['SECRET_KEY_BASE'].presence ||
+             (defined?(Rails) && Rails.application&.secret_key_base.presence)
+    raise 'ENCRYPTION_KEY or SECRET_KEY_BASE must be set' if secret.blank?
+
+    key_material = ActiveSupport::KeyGenerator.new(secret).generate_key(
+      ENCRYPTION_KEY_DERIVATION_SALT, 32
+    )
+    Base64.urlsafe_encode64(key_material)
+  end
 
   # ---------------------------------------------------------------------------
   # Public read API
@@ -75,8 +104,7 @@ class InstallationConfig < ActiveRecord::Base
 
   def decrypt(token)
     require 'fernet'
-    key = ENV.fetch('ENCRYPTION_KEY') { raise 'ENCRYPTION_KEY required for decryption' }
-    verifier = Fernet.verifier(key, token, enforce_ttl: false)
+    verifier = Fernet.verifier(self.class.encryption_key, token, enforce_ttl: false)
     verifier.valid? ? verifier.message : token
   rescue StandardError => e
     Rails.logger.warn("InstallationConfig decrypt failed for #{name}: #{e.message}")
