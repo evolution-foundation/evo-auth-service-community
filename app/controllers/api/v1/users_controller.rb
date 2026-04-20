@@ -71,6 +71,7 @@ class Api::V1::UsersController < Api::BaseController
       builder = AgentBuilder.new(
         email: email,
         name: email.split('@').first,
+        role: (params[:role] || :agent).to_sym,
         inviter: current_user
       )
       begin
