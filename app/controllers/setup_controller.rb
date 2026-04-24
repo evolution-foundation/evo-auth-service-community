@@ -9,6 +9,9 @@ class SetupController < ActionController::Base
 
   # GET /setup/status
   # Returns current license state and masked api_key when active.
+  # Reports 'inactive' whenever no admin user exists so a DB wipe or
+  # partial-bootstrap install always lands the user on /setup, even if
+  # licensing state disagrees.
   def status
     ctx = Licensing::Runtime.context
 
@@ -17,12 +20,15 @@ class SetupController < ActionController::Base
       return
     end
 
+    bootstrapped = User.exists?
+    active = ctx.active? && bootstrapped
+
     resp = {
-      status: ctx.active? ? 'active' : 'inactive',
+      status: active ? 'active' : 'inactive',
       instance_id: resolve_instance_id(ctx)
     }
 
-    if ctx.active?
+    if active
       key = ctx.api_key
       resp[:api_key] = "#{key[0..7]}...#{key[-4..]}" if key.present?
     end
