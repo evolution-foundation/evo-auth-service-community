@@ -16,7 +16,7 @@ module Avatarable
     if avatar.service.class.name == 'ActiveStorage::Service::DiskService'
       Rails.application.routes.url_helpers.rails_service_blob_proxy_path(avatar.signed_id, avatar.filename)
     else
-      avatar.url
+      avatar.blob.url(expires_in: 1.week)
     end
   end
 

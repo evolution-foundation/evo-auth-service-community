@@ -50,7 +50,8 @@ module Serializers
           message_signature: user.message_signature,
           provider: user.provider,
           uid: user.uid,
-          avatar_url: user.respond_to?(:avatar_url) ? user.avatar_url : nil
+          avatar_url: user.respond_to?(:avatar_url) ? user.avatar_url : nil,
+          setup_survey_completed: user.setup_survey_completed?
         )
 
         # Add hmac_identifier if EVOLUTION_INBOX_HMAC_KEY is present
