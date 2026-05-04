@@ -8,9 +8,15 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
   # Parse and clean origins (remove whitespace and filter empty strings)
   cors_origins_raw = ENV.fetch('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:3001')
   cors_origins = cors_origins_raw.split(',').map(&:strip).reject(&:empty?)
-  
+
   # Log CORS origins for debugging
   Rails.logger.info "CORS Origins configured: #{cors_origins.inspect}"
+
+  # ActiveStorage blobs - allow all origins (public resources, served as images)
+  allow do
+    origins '*'
+    resource '/rails/active_storage/*', headers: :any, methods: [:get, :options, :head]
+  end
 
   allow do
     origins cors_origins

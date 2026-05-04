@@ -141,7 +141,7 @@ class SetupController < ActionController::Base
       client_ip:  request.remote_ip
     )
 
-    render json: { status: 'ok', message: 'Installation completed successfully' }, status: :created
+    render json: { status: 'ok', message: 'Installation completed successfully', survey_token: result[:survey_token] }, status: :created
 
   rescue SetupBootstrapService::AlreadyBootstrappedError => e
     render json: { error: e.message }, status: :conflict
@@ -150,10 +150,50 @@ class SetupController < ActionController::Base
     render json: { error: e.message }, status: :unprocessable_entity
   end
 
+  # POST /setup/survey
+  # Saves onboarding survey answers for the initial admin user.
+  # Authenticated via a one-time survey_token generated during bootstrap (TTL: 10 min).
+  # If the token has expired, the frontend falls back to the authenticated endpoint
+  # (POST /api/v1/setup_survey) after the user logs in.
+  def survey
+    token   = request.headers['X-Survey-Token'].to_s.strip
+    user_id = redis_client.get("survey_token:#{token}")
+
+    if user_id.blank?
+      render json: { error: 'Invalid or expired survey token' }, status: :unauthorized
+      return
+    end
+
+    user = User.find_by(id: user_id)
+    unless user
+      render json: { error: 'User not found' }, status: :not_found
+      return
+    end
+
+    survey = user.setup_survey_response || user.build_setup_survey_response
+    survey.assign_attributes(survey_params)
+
+    if survey.save
+      redis_client.del("survey_token:#{token}")
+      render json: { status: 'ok' }, status: :ok
+    else
+      render json: { error: survey.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+  end
+
   private
 
   def bootstrap_params
     params.permit(:first_name, :last_name, :email, :password, :password_confirmation)
+  end
+
+  def survey_params
+    params.permit(:team_size, :daily_volume, :main_channel, :main_channel_other,
+                  :uses_ai, :biggest_pain, :crm_experience, :main_goal)
+  end
+
+  def redis_client
+    Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/1'))
   end
 
   def resolve_instance_id(ctx)
