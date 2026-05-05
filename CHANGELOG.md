@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A migration cria o role, sincroniza permissões via `ResourceActionsConfig.all_permission_keys`, **revoga `installation_configs.manage` do `account_owner`**, promove o primeiro user (`User.order(:created_at).first`) e **revoga tokens ativos** desse user para forçar relogin (caso contrário o JWT antigo com `role: account_owner` continuaria válido até expirar).
   - `SetupBootstrapService#assign_global_role` atualizado para atribuir `super_admin` (com fallback defensivo para `account_owner`).
   - Idempotente e reversível (`down` restaura o estado anterior).
+- **Tabela `user_tours`** — persistência do estado de onboarding tour por usuário. Adicionada via migration com índices em `user_id` e `tour_key` para suportar a feature de Tour shipada no frontend (PR #23 daquele submódulo). (#00f5d75)
 
 ### Fixed
 
@@ -47,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RoleSerializer` não expunha `key` / `system`**: o frontend depende dessas chaves para o select de roles funcionar; adicionados em `full` e `basic`. (#9)
 - **Login sempre retornava 401 para usuários criados pela UI**: `UsersController#create` permitia `:password` em `new_user_params` mas não passava o valor para o `AgentBuilder.new(...)`. Como `AgentBuilder` cai no fallback `password.presence || "1!aA#{SecureRandom.alphanumeric(12)}"` quando `password` é `nil`, todo agente criado pela UI nascia com hash Argon2 aleatório que ninguém conhecia — login com a senha digitada nunca batia. Agora `password: new_user_params['password']` é encaminhado. `bulk_create` mantido inalterado (intencionalmente gera senha aleatória — fluxo de convite).
 - **Migration `20260423162525_add_message_template_permissions_to_account_owner` falhava em fresh install com `PG::UndefinedTable: roles`**: a migration `init_schema` (timestamp `9025...` por typo histórico) cria a tabela `roles`, mas roda DEPOIS dessa por causa do timestamp futuro. Adicionado guard `ActiveRecord::Base.connection.table_exists?(:roles)` no `up` e `down` — fresh installs pulam a migration silenciosamente (o seed/bootstrap cobre depois), instalações existentes continuam rodando como antes.
+- **`init_schema` (timestamp `9025...`) totalmente idempotente**: `make setup` em fresh install corria com race condition contra o `evo-bot-runtime` Go core, que tenta criar uma tabela `users` mínima ao subir. Quando o Go vencia a corrida, o `init_schema` falhava com `PG::DuplicateTable`. Migration reescrita com `if_not_exists: true` em todos os `create_table`, `add_index`, e helper `add_fk_if_missing` para foreign keys — agora o resultado final é determinístico independente de quem chega primeiro. (commit `ec736a9`)
 - **EVO-1002 follow-up**: registradas as permissões `update_message_template` e `delete_message_template` no seeder de RBAC. (#5)
 - **EVO-971**: gate de `/setup/status` agora considera tanto bootstrap quanto licensing — não só licensing. (#8)
 - **EVO-967**: agentes convidados são auto-confirmados; lookup de role passou a tolerar role inexistente sem 500. (#3)
