@@ -73,6 +73,15 @@ class PromoteFirstUserToSuperAdmin < ActiveRecord::Migration[7.1]
       first_user.user_roles.create!(role_id: super_admin.id)
     end
 
+    # Invalidate any active access tokens this user already has. The JWT
+    # payload encodes the role claim, so without this step the operator
+    # would keep navigating with their old account_owner JWT for as long
+    # as it stays valid (up to the token TTL) and the frontend menus
+    # would still gate everything by the stale role until they logged
+    # back in. Forcing a relogin makes the new super_admin role take
+    # effect immediately on the next request.
+    revoke_active_tokens_for(first_user)
+
     say "promoted user #{first_user.id} (#{first_user.email}) to super_admin", true
   end
 
@@ -155,5 +164,23 @@ class PromoteFirstUserToSuperAdmin < ActiveRecord::Migration[7.1]
                            .where(permission_key: 'installation_configs.manage')
                            .delete_all
     say "revoked installation_configs.manage from account_owner (#{removed} row(s))", true if removed.positive?
+  end
+
+  # Revoke active Doorkeeper tokens for the given user so the next request
+  # forces a relogin, refreshing the JWT role claim. Defensive: if Doorkeeper
+  # or the table is unavailable for some reason, log and move on without
+  # blocking the migration — the worst case is the operator using their old
+  # token until it expires naturally.
+  def revoke_active_tokens_for(user)
+    return unless ActiveRecord::Base.connection.table_exists?(:oauth_access_tokens)
+    return unless defined?(Doorkeeper::AccessToken)
+
+    active = Doorkeeper::AccessToken.where(resource_owner_id: user.id, revoked_at: nil)
+    count  = active.count
+    active.update_all(revoked_at: Time.current) if count.positive?
+
+    say "revoked #{count} active token(s) for user #{user.id} — relogin required", true
+  rescue StandardError => e
+    say "could not revoke active tokens (#{e.class}: #{e.message}) — operator may need to logout/login manually", true
   end
 end
