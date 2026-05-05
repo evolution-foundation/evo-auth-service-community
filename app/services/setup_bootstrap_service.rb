@@ -74,8 +74,12 @@ class SetupBootstrapService
   end
 
   def assign_global_role(user)
-    role = Role.find_by!(key: 'account_owner')
-    UserRole.assign_role_to_user(user, role) unless user.has_role?('account_owner')
+    # The bootstrap user is the installation owner — they get `super_admin`,
+    # the only role that holds installation_configs.manage and can render the
+    # /settings/admin panel. Subsequent users created through the UI keep
+    # being assigned `account_owner` (or `agent`) by AgentBuilder.
+    role = Role.find_by(key: 'super_admin') || Role.find_by!(key: 'account_owner')
+    UserRole.assign_role_to_user(user, role) unless user.has_role?(role.key)
   end
 
   def create_oauth_app

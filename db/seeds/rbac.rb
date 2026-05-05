@@ -76,7 +76,12 @@ account_owner_exclusive = [
   'permissions.update',
   'permissions.delete',
   'permissions.assign',
-  'permissions.bulk_operations'
+  'permissions.bulk_operations',
+  # Installation-level configuration (SMTP, Storage, Social Login, OpenAI,
+  # Channels, Inbound Email, Frontend Runtime). Reserved for the
+  # super_admin role — the bootstrap user gets it and it is the only role
+  # that may render the "Admin Settings" panel and call /api/v1/installation_configs/**.
+  'installation_configs.manage'
 ]
 
 account_owner_permissions = ResourceActionsConfig.all_permission_keys - account_owner_exclusive
@@ -152,5 +157,33 @@ agent_permissions.select { |key| ResourceActionsConfig.valid_permission?(key) }.
   agent.role_permissions_actions.create!(permission_key: permission_key)
 end
 puts "   📋 Assigned #{agent_permissions.select { |key| ResourceActionsConfig.valid_permission?(key) }.size} permissions to #{agent.name}"
+
+# Super Admin (installation-level operator)
+# In the Community edition there is exactly one user with this role: the
+# user created via the setup wizard (bootstrap). They keep everything an
+# Account Owner has, plus the installation-level configuration permissions
+# that no other role should ever hold (SMTP, Storage, Social Login, OpenAI,
+# Frontend Runtime, etc.).
+super_admin = Role.find_or_initialize_by(key: 'super_admin')
+if super_admin.new_record?
+  super_admin.name = 'Super Admin'
+  super_admin.description = 'Installation owner — full account access plus installation-level configuration'
+  super_admin.system = true
+  super_admin.type = 'user'
+  super_admin.save!
+  puts "   ✅ Created role: #{super_admin.name}"
+else
+  puts "   ♻️ Role already exists: #{super_admin.name}"
+end
+
+super_admin_permissions = ResourceActionsConfig.all_permission_keys.select do |key|
+  ResourceActionsConfig.valid_permission?(key)
+end
+
+super_admin.role_permissions_actions.destroy_all
+super_admin_permissions.each do |permission_key|
+  super_admin.role_permissions_actions.create!(permission_key: permission_key)
+end
+puts "   📋 Assigned #{super_admin_permissions.size} permissions to #{super_admin.name}"
 
 puts "✅ RBAC seeds created successfully!"
