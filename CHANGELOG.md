@@ -31,6 +31,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - N/A
 
+## [v1.0.0-rc2] - 2026-05-05
+
+### Fixed
+
+- **POST `/api/v1/users` retornava 500 quando payload omitia `role`**: agora cai no padrão `agent` em vez de procurar `Role.find_by!(key: nil)` e levantar `RecordNotFound`. (#9)
+- **`RoleSerializer` não expunha `key` / `system`**: o frontend depende dessas chaves para o select de roles funcionar; adicionados em `full` e `basic`. (#9)
+- **EVO-1002 follow-up**: registradas as permissões `update_message_template` e `delete_message_template` no seeder de RBAC. (#5)
+- **EVO-971**: gate de `/setup/status` agora considera tanto bootstrap quanto licensing — não só licensing. (#8)
+- **EVO-967**: agentes convidados são auto-confirmados; lookup de role passou a tolerar role inexistente sem 500. (#3)
+
+### Changed
+
+- Workflow de CI publica também as imagens `develop` para staging. (#4)
+
+## [v1.0.0-rc1] - 2026-04-24
+
+### Added
+
+- Primeiro release candidate público do `evo-auth-service-community` no contexto da família CRM Community.
+
+### Changed
+
+- Tag bootstrap a partir do código `2.0.0` original (`evo-auth-service`).
+
 ## [2.0.0] - 2025-01-20
 
 ### 🚀 Added
