@@ -20,6 +20,11 @@ class Api::V1::UsersController < Api::BaseController
     builder = AgentBuilder.new(
       email: new_user_params['email'],
       name: new_user_params['name'],
+      # The form sends the user's chosen password and the controller permits it
+      # in `new_user_params`. Forward it so AgentBuilder uses it instead of
+      # silently generating a random one — otherwise the user is created with
+      # a password they don't know and login always returns 401.
+      password: new_user_params['password'],
       role: new_user_params['role'].presence || 'agent',
       availability: new_user_params['availability'],
       inviter: current_user
