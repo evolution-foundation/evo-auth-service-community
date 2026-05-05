@@ -327,6 +327,7 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.string "pubsub_token"
     t.text "bsuid"
     t.text "whatsapp_username"
+    t.index ["contact_id"], name: "idx_contact_inboxes_contact_id", where: "(contact_id IS NOT NULL)"
     t.index ["contact_id"], name: "index_contact_inboxes_on_contact_id"
     t.index ["inbox_id", "bsuid"], name: "index_contact_inboxes_on_inbox_id_and_bsuid", unique: true, where: "(bsuid IS NOT NULL)"
     t.index ["inbox_id", "source_id"], name: "index_contact_inboxes_on_inbox_id_and_source_id", unique: true
@@ -357,9 +358,11 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.string "industry"
     t.index ["blocked"], name: "index_contacts_on_blocked"
     t.index ["email"], name: "uniq_email_per_account_contact", unique: true
+    t.index ["id"], name: "idx_contacts_with_identity", where: "(((email)::text <> ''::text) OR ((phone_number)::text <> ''::text) OR ((identifier)::text <> ''::text))"
     t.index ["identifier"], name: "uniq_identifier_per_account_contact", unique: true
     t.index ["last_activity_at"], name: "index_contacts_on_last_activity_at", order: "DESC NULLS LAST"
     t.index ["name", "email", "phone_number", "identifier"], name: "index_contacts_on_name_email_phone_number_identifier", opclass: :gin_trgm_ops, using: :gin
+    t.index ["name", "type", "id"], name: "idx_contacts_name_type_resolved", where: "(((email)::text <> ''::text) OR ((phone_number)::text <> ''::text) OR ((identifier)::text <> ''::text))"
     t.index ["phone_number"], name: "index_contacts_on_phone_number"
     t.index ["tax_id"], name: "index_contacts_on_tax_id", unique: true, where: "(tax_id IS NOT NULL)"
     t.index ["type"], name: "index_contacts_on_type"
@@ -1051,7 +1054,6 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.integer "position", default: 0, null: false
     t.integer "depth", default: 0, null: false
     t.index ["assigned_to_id", "status", "due_date"], name: "index_pipeline_tasks_on_assigned_to_id_and_status_and_due_date"
-    t.index ["assigned_to_id"], name: "index_pipeline_tasks_on_assigned_to_id"
     t.index ["created_by_id"], name: "index_pipeline_tasks_on_created_by_id"
     t.index ["due_date"], name: "index_pipeline_tasks_on_due_date"
     t.index ["parent_task_id", "position"], name: "index_pipeline_tasks_on_parent_task_id_and_position"
@@ -1322,6 +1324,17 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.datetime "update_time", precision: nil, null: false
   end
 
+  create_table "user_tours", force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "tour_key", null: false
+    t.string "status", default: "completed", null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "tour_key"], name: "index_user_tours_on_user_id_and_tour_key", unique: true
+    t.index ["user_id"], name: "index_user_tours_on_user_id"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "provider", default: "email", null: false
     t.string "uid", default: "", null: false
@@ -1411,7 +1424,6 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
   add_foreign_key "evo_core_folder_shares", "evo_core_folders", column: "folder_id", name: "evo_core_folder_shares_folder_id_fkey", on_delete: :cascade
   add_foreign_key "facebook_comment_moderations", "conversations"
   add_foreign_key "facebook_comment_moderations", "messages"
-  add_foreign_key "facebook_comment_moderations", "users", column: "moderated_by_id"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "pipeline_items", "contacts"
@@ -1421,19 +1433,13 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
   add_foreign_key "pipeline_service_definitions", "pipelines"
   add_foreign_key "pipeline_tasks", "pipeline_items"
   add_foreign_key "pipeline_tasks", "pipeline_tasks", column: "parent_task_id"
-  add_foreign_key "pipeline_tasks", "users", column: "assigned_to_id"
-  add_foreign_key "pipeline_tasks", "users", column: "created_by_id"
   add_foreign_key "plan_features", "features", name: "plan_features_feature_id_fkey"
   add_foreign_key "plan_features", "plans", name: "plan_features_plan_id_fkey"
   add_foreign_key "role_permissions_actions", "roles"
   add_foreign_key "scheduled_action_execution_logs", "scheduled_actions"
   add_foreign_key "scheduled_action_notifications", "scheduled_actions", on_delete: :cascade
-  add_foreign_key "scheduled_action_notifications", "users", on_delete: :cascade
-  add_foreign_key "scheduled_action_templates", "users", column: "created_by", on_delete: :cascade
   add_foreign_key "scheduled_actions", "contacts", on_delete: :cascade
   add_foreign_key "scheduled_actions", "conversations", on_delete: :cascade
-  add_foreign_key "scheduled_actions", "users", column: "created_by", on_delete: :cascade
-  add_foreign_key "scheduled_actions", "users", column: "notify_user_id", on_delete: :nullify
   add_foreign_key "stage_movements", "pipeline_items"
   add_foreign_key "stage_movements", "pipeline_stages", column: "from_stage_id"
   add_foreign_key "stage_movements", "pipeline_stages", column: "to_stage_id"
