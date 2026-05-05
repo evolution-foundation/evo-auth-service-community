@@ -20,7 +20,7 @@ class Api::V1::UsersController < Api::BaseController
     builder = AgentBuilder.new(
       email: new_user_params['email'],
       name: new_user_params['name'],
-      role: new_user_params['role'],
+      role: new_user_params['role'].presence || 'agent',
       availability: new_user_params['availability'],
       inviter: current_user
     )
