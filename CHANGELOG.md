@@ -40,8 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A migration cria o role, sincroniza permissões via `ResourceActionsConfig.all_permission_keys`, **revoga `installation_configs.manage` do `account_owner`**, promove o primeiro user (`User.order(:created_at).first`) e **revoga tokens ativos** desse user para forçar relogin (caso contrário o JWT antigo com `role: account_owner` continuaria válido até expirar).
   - `SetupBootstrapService#assign_global_role` atualizado para atribuir `super_admin` (com fallback defensivo para `account_owner`).
   - Idempotente e reversível (`down` restaura o estado anterior).
-- **Tabela `user_tours`** — persistência do estado de onboarding tour por usuário. Adicionada via migration com índices em `user_id` e `tour_key` para suportar a feature de Tour shipada no frontend (PR #23 daquele submódulo). (#00f5d75)
-
 ### Fixed
 
 - **POST `/api/v1/users` retornava 500 quando payload omitia `role`**: agora cai no padrão `agent` em vez de procurar `Role.find_by!(key: nil)` e levantar `RecordNotFound`. (#9)
