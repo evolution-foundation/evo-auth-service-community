@@ -17,8 +17,12 @@ class AddMessageTemplatePermissionsToAccountOwner < ActiveRecord::Migration[7.1]
   ].freeze
 
   def up
+    # Fresh installs hit this migration before init_schema (timestamp 9025…)
+    # has run, so `roles` may not exist yet — seed will cover it later.
+    return unless ActiveRecord::Base.connection.table_exists?(:roles)
+
     role = Role.find_by(key: 'account_owner')
-    return unless role # fresh install — seed will cover it
+    return unless role # bootstrapped install without account_owner role — seed will cover it
 
     PERMISSIONS.each do |permission_key|
       next if role.role_permissions_actions.exists?(permission_key: permission_key)
@@ -28,6 +32,8 @@ class AddMessageTemplatePermissionsToAccountOwner < ActiveRecord::Migration[7.1]
   end
 
   def down
+    return unless ActiveRecord::Base.connection.table_exists?(:roles)
+
     role = Role.find_by(key: 'account_owner')
     return unless role
 
