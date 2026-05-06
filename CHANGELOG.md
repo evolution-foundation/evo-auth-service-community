@@ -31,6 +31,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - N/A
 
+## [v1.0.0-rc2] - 2026-05-05
+
+### Added
+
+- **Novo role `super_admin`** — installation-level operator. Detém todas as permissões do `account_owner` mais `installation_configs.manage` (a única permissão que dá acesso ao painel `/settings/admin`: SMTP, Storage, Social Login, OpenAI, Channels, Inbound Email, Frontend Runtime). Atribuído automaticamente ao usuário criado via setup wizard (bootstrap). Outros usuários criados depois pela UI continuam recebendo `account_owner` (sem acesso ao painel admin).
+  - Implementação distribuída entre `db/seeds/rbac.rb` (fresh installs) e migration `20260505155854_promote_first_user_to_super_admin.rb` (PROD existente — única forma de chegar lá automaticamente, já que `db:seed` não roda em deploys).
+  - A migration cria o role, sincroniza permissões via `ResourceActionsConfig.all_permission_keys`, **revoga `installation_configs.manage` do `account_owner`**, promove o primeiro user (`User.order(:created_at).first`) e **revoga tokens ativos** desse user para forçar relogin (caso contrário o JWT antigo com `role: account_owner` continuaria válido até expirar).
+  - `SetupBootstrapService#assign_global_role` atualizado para atribuir `super_admin` (com fallback defensivo para `account_owner`).
+  - Idempotente e reversível (`down` restaura o estado anterior).
+### Fixed
+
+- **POST `/api/v1/users` retornava 500 quando payload omitia `role`**: agora cai no padrão `agent` em vez de procurar `Role.find_by!(key: nil)` e levantar `RecordNotFound`. (#9)
+- **`RoleSerializer` não expunha `key` / `system`**: o frontend depende dessas chaves para o select de roles funcionar; adicionados em `full` e `basic`. (#9)
+- **Login sempre retornava 401 para usuários criados pela UI**: `UsersController#create` permitia `:password` em `new_user_params` mas não passava o valor para o `AgentBuilder.new(...)`. Como `AgentBuilder` cai no fallback `password.presence || "1!aA#{SecureRandom.alphanumeric(12)}"` quando `password` é `nil`, todo agente criado pela UI nascia com hash Argon2 aleatório que ninguém conhecia — login com a senha digitada nunca batia. Agora `password: new_user_params['password']` é encaminhado. `bulk_create` mantido inalterado (intencionalmente gera senha aleatória — fluxo de convite).
+- **Migration `20260423162525_add_message_template_permissions_to_account_owner` falhava em fresh install com `PG::UndefinedTable: roles`**: a migration `init_schema` (timestamp `9025...` por typo histórico) cria a tabela `roles`, mas roda DEPOIS dessa por causa do timestamp futuro. Adicionado guard `ActiveRecord::Base.connection.table_exists?(:roles)` no `up` e `down` — fresh installs pulam a migration silenciosamente (o seed/bootstrap cobre depois), instalações existentes continuam rodando como antes.
+- **`init_schema` (timestamp `9025...`) totalmente idempotente**: `make setup` em fresh install corria com race condition contra o `evo-bot-runtime` Go core, que tenta criar uma tabela `users` mínima ao subir. Quando o Go vencia a corrida, o `init_schema` falhava com `PG::DuplicateTable`. Migration reescrita com `if_not_exists: true` em todos os `create_table`, `add_index`, e helper `add_fk_if_missing` para foreign keys — agora o resultado final é determinístico independente de quem chega primeiro. (commit `ec736a9`)
+- **EVO-1002 follow-up**: registradas as permissões `update_message_template` e `delete_message_template` no seeder de RBAC. (#5)
+- **EVO-971**: gate de `/setup/status` agora considera tanto bootstrap quanto licensing — não só licensing. (#8)
+- **EVO-967**: agentes convidados são auto-confirmados; lookup de role passou a tolerar role inexistente sem 500. (#3)
+
+### Changed
+
+- Workflow de CI publica também as imagens `develop` para staging. (#4)
+- `installation_configs.manage` movida da lista de permissões padrão do `account_owner` para a lista `account_owner_exclusive` no `db/seeds/rbac.rb`. **Breaking change controlado**: account_owners criados depois deste release não veem mais o menu "Admin Settings" (comportamento esperado no Community single-tenant — só o bootstrap user / `super_admin` deve ter acesso). A migration de upgrade preserva acesso para o operador original.
+
+## [v1.0.0-rc1] - 2026-04-24
+
+### Added
+
+- Primeiro release candidate público do `evo-auth-service-community` no contexto da família CRM Community.
+
+### Changed
+
+- Tag bootstrap a partir do código `2.0.0` original (`evo-auth-service`).
+
 ## [2.0.0] - 2025-01-20
 
 ### 🚀 Added

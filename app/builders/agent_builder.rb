@@ -19,11 +19,14 @@ class AgentBuilder
     return user if user
 
     generated_password = password.presence || "1!aA#{SecureRandom.alphanumeric(12)}"
-    User.create!(email: email, name: name, password: generated_password)
+    user = User.new(email: email, name: name, password: generated_password)
+    user.skip_confirmation!
+    user.save!
+    user
   end
 
   def assign_role
-    system_role = Role.find_by!(key: role)
+    system_role = Role.find_by(key: role) || Role.find_by!(key: :agent)
 
     existing = @user.user_roles.joins(:role).where(roles: { system: false })
     existing.destroy_all if existing.exists?

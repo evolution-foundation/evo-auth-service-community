@@ -310,7 +310,9 @@ class ResourceActionsConfig
         whatsapp_templates: { name: 'WhatsApp Templates', description: 'Manage WhatsApp templates for inbox' },
         update_whatsapp_template: { name: 'Update WhatsApp Template', description: 'Update WhatsApp template' },
         delete_whatsapp_template: { name: 'Delete WhatsApp Template', description: 'Delete WhatsApp template' },
-        message_templates: { name: 'Message Templates', description: 'Manage message templates for inbox' }
+        message_templates: { name: 'Message Templates', description: 'Manage message templates for inbox' },
+        update_message_template: { name: 'Update Message Template', description: 'Update message template' },
+        delete_message_template: { name: 'Delete Message Template', description: 'Delete message template' }
       }
     },
 

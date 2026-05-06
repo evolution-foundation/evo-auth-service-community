@@ -8,8 +8,10 @@ module RoleSerializer
 
     {
       id: role.id,
+      key: role.key,
       name: role.name,
       description: role.description,
+      system: role.system,
       permissions: role.permissions_by_resource,
       created_at: role.created_at,
       updated_at: role.updated_at
@@ -21,8 +23,10 @@ module RoleSerializer
 
     {
       id: role.id,
+      key: role.key,
       name: role.name,
-      description: role.description
+      description: role.description,
+      system: role.system
     }
   end
 end
