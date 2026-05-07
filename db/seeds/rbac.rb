@@ -131,6 +131,7 @@ agent_permissions = [
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
   'oauth_pipelines.read', 'oauth_pipelines.create', 'oauth_pipelines.update', 'oauth_pipelines.delete',
   'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
+  'pipelines.read', 'pipelines.update',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
   'agents.read', 'agents.create', 'agents.update', 'agents.delete',
   'oauth_agents.read', 'oauth_agents.create', 'oauth_agents.update', 'oauth_agents.delete',
