@@ -4,15 +4,15 @@ class Api::V1::MfaController < Api::BaseController
 
   def setup_totp
     current_user.generate_otp_secret!
-    current_user.generate_otp_backup_codes!
+    plaintext_codes = current_user.generate_otp_backup_codes!
 
     success_response(
       data: {
         secret: current_user.otp_secret,
         qr_code_url: current_user.generate_qr_code,
-        backup_codes: current_user.otp_backup_codes
+        backup_codes: plaintext_codes
       },
-      message: 'TOTP setup completed successfully'
+      message: I18n.t('mfa.totp_setup_success')
     )
   end
 
@@ -57,25 +57,24 @@ class Api::V1::MfaController < Api::BaseController
 
   def backup_codes
     success_response(
-      data: { backup_codes: current_user.otp_backup_codes },
-      message: 'Backup codes retrieved successfully'
+      data: { backup_codes: [] },
+      message: I18n.t('mfa.backup_codes_retrieved')
     )
   end
 
   def regenerate_backup_codes
-    current_user.generate_backup_codes
-    current_user.save!
+    plaintext_codes = current_user.generate_otp_backup_codes!
 
     success_response(
-      data: { backup_codes: current_user.otp_backup_codes },
-      message: 'Backup codes regenerated successfully'
+      data: { backup_codes: plaintext_codes },
+      message: I18n.t('mfa.backup_codes_regenerated')
     )
   end
 
   def disable
     current_user.disable_two_factor!
 
-    success_response(data: {}, message: 'MFA disabled successfully')
+    success_response(data: {}, message: I18n.t('mfa.disabled_success'))
   end
 
   private

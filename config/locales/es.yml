@@ -14,6 +14,12 @@ es:
     plan_upgrade_required:
       failed: "Se requiere actualización del plan"
   
+  mfa:
+    totp_setup_success: "Configuración TOTP completada con éxito"
+    backup_codes_retrieved: "Códigos de respaldo obtenidos con éxito"
+    backup_codes_regenerated: "Códigos de respaldo regenerados con éxito"
+    disabled_success: "MFA desactivado con éxito"
+
   devise_token_auth:
     passwords:
       missing_email: "El correo electrónico es obligatorio"

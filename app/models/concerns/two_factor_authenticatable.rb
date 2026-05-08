@@ -70,25 +70,23 @@ module TwoFactorAuthenticatable
 
   # Backup Codes Methods
   def generate_otp_backup_codes!
-    codes = Array.new(10) { SecureRandom.alphanumeric(8).upcase }
-    # Use direct SQL update to bypass model callbacks
-    User.where(id: id).update_all(otp_backup_codes: codes)
-    self.otp_backup_codes = codes # Update the instance
-    codes
+    plaintext_codes = Array.new(10) { SecureRandom.alphanumeric(8).upcase }
+    hashed_codes = plaintext_codes.map { |c| BCrypt::Password.create(c) }
+    User.where(id: id).update_all(otp_backup_codes: hashed_codes)
+    self.otp_backup_codes = hashed_codes
+    plaintext_codes
   end
 
   def check_backup_code(code)
     return false unless otp_backup_codes.present?
 
-    code = code.upcase.strip
-    if otp_backup_codes.include?(code)
-      # Remove used backup code
-      otp_backup_codes.delete(code)
-      save!
-      true
-    else
-      false
-    end
+    normalized = code.upcase.strip
+    matched_hash = otp_backup_codes.find { |h| BCrypt::Password.new(h) == normalized }
+    return false unless matched_hash
+
+    otp_backup_codes.delete(matched_hash)
+    save!
+    true
   end
 
   # Email OTP Methods
