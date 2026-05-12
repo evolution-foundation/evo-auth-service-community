@@ -264,20 +264,9 @@ class User < ApplicationRecord
   def password_complexity
     return if password.blank?
 
-    unless password.match?(/[a-z]/)
-      errors.add(:password, 'must include at least one lowercase letter')
-    end
-
-    unless password.match?(/[A-Z]/)
-      errors.add(:password, 'must include at least one uppercase letter')
-    end
-
-    unless password.match?(/\d/)
-      errors.add(:password, 'must include at least one number')
-    end
-
-    unless password.match?(PASSWORD_SPECIAL_CHAR_REGEX)
-      errors.add(:password, 'must include at least one special character')
-    end
+    errors.add(:password, :missing_lowercase, message: 'must include at least one lowercase letter') unless password.match?(/[a-z]/)
+    errors.add(:password, :missing_uppercase, message: 'must include at least one uppercase letter') unless password.match?(/[A-Z]/)
+    errors.add(:password, :missing_number, message: 'must include at least one number') unless password.match?(/\d/)
+    errors.add(:password, :missing_special_char, message: 'must include at least one special character') unless password.match?(PASSWORD_SPECIAL_CHAR_REGEX)
   end
 end
