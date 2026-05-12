@@ -57,7 +57,7 @@ class Api::V1::MfaController < Api::BaseController
 
   def backup_codes
     success_response(
-      data: { backup_codes: [] },
+      data: { remaining_codes_count: current_user.otp_backup_codes.length },
       message: I18n.t('mfa.backup_codes_retrieved')
     )
   end
