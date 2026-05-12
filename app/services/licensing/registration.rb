@@ -31,6 +31,18 @@ module Licensing
       }.compact)
     end
 
+    # auto_register hits the licensing server with only the operator email.
+    # The customer must already exist server-side (one prior manual registration).
+    # Used by Activation.initialize_runtime when EVOLUTION_OPERATOR_EMAIL is set.
+    def self.auto_register(email:, tier:, instance_id:, version:)
+      _snzd('/v1/register/auto', {
+        email:       email,
+        tier:        tier,
+        instance_id: instance_id,
+        version:     version
+      })
+    end
+
     def self.geo_lookup(ip)
       return {} if ip.blank?
 
