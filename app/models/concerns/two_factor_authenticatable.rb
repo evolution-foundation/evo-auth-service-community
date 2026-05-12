@@ -1,6 +1,8 @@
 module TwoFactorAuthenticatable
   extend ActiveSupport::Concern
 
+  MFA_BCRYPT_COST = BCrypt::Engine::DEFAULT_COST
+
   included do
     # MFA methods enum - avoiding 'none' as it conflicts with ActiveRecord
     enum mfa_method: {
@@ -50,6 +52,7 @@ module TwoFactorAuthenticatable
 
   def validate_otp(code)
     return false unless otp_secret.present?
+    return false if mfa_locked?
 
     totp = ROTP::TOTP.new(otp_secret)
     timestamp = totp.verify(code, drift_behind: 30, drift_ahead: 30)
@@ -70,25 +73,30 @@ module TwoFactorAuthenticatable
 
   # Backup Codes Methods
   def generate_otp_backup_codes!
-    codes = Array.new(10) { SecureRandom.alphanumeric(8).upcase }
+    plaintext_codes = Array.new(10) { SecureRandom.alphanumeric(8).upcase }
+    hashed_codes = plaintext_codes.map { |c| BCrypt::Password.create(c, cost: MFA_BCRYPT_COST) }
     # Use direct SQL update to bypass model callbacks
-    User.where(id: id).update_all(otp_backup_codes: codes)
-    self.otp_backup_codes = codes # Update the instance
-    codes
+    User.where(id: id).update_all(otp_backup_codes: hashed_codes)
+    self.otp_backup_codes = hashed_codes
+    plaintext_codes
   end
 
   def check_backup_code(code)
     return false unless otp_backup_codes.present?
 
-    code = code.upcase.strip
-    if otp_backup_codes.include?(code)
-      # Remove used backup code
-      otp_backup_codes.delete(code)
-      save!
-      true
-    else
-      false
+    normalized = code.upcase.strip
+    matched_hash = nil
+
+    otp_backup_codes.each do |h|
+      next unless h.start_with?('$2a$', '$2b$', '$2y$')
+      matched_hash = h if BCrypt::Password.new(h) == normalized
     end
+
+    return false unless matched_hash
+
+    remaining = otp_backup_codes - [matched_hash]
+    update!(otp_backup_codes: remaining)
+    true
   end
 
   # Email OTP Methods
@@ -150,7 +158,6 @@ module TwoFactorAuthenticatable
     case method.to_sym
     when :totp
       generate_otp_secret! unless otp_secret.present?
-      generate_otp_backup_codes! if otp_backup_codes.blank?
     when :email
       # No special setup needed for email
     else

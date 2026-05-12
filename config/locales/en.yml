@@ -42,6 +42,12 @@ en:
     plan_upgrade_required:
       failed: "Plan upgrade required"
   
+  mfa:
+    totp_setup_success: "TOTP setup completed successfully"
+    backup_codes_retrieved: "Backup codes retrieved successfully"
+    backup_codes_regenerated: "Backup codes regenerated successfully"
+    disabled_success: "MFA disabled successfully"
+
   devise_token_auth:
     passwords:
       missing_email: "Email is required"
