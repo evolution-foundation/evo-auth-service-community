@@ -86,6 +86,18 @@ class Api::V1::RolesController < Api::V1::BaseController
       )
     end
 
+    if account_owner_only?
+      caller_permissions = Set.new(current_api_user.all_permissions)
+      unauthorized_keys = valid_keys.reject { |k| caller_permissions.include?(k) }
+      if unauthorized_keys.any?
+        return error_response(
+          'FORBIDDEN',
+          "Cannot grant permissions you do not hold: #{unauthorized_keys.join(', ')}",
+          status: :forbidden
+        )
+      end
+    end
+
     ActiveRecord::Base.transaction do
       @role.role_permissions_actions.destroy_all
       valid_keys.each { |key| @role.role_permissions_actions.create!(permission_key: key) }
@@ -144,7 +156,7 @@ class Api::V1::RolesController < Api::V1::BaseController
     return unless account_owner_only?
     return if @role.type == 'account'
 
-    render json: { error: 'Cannot access or modify user-type roles' }, status: :forbidden
+    error_response('FORBIDDEN', 'Cannot access or modify user-type roles', status: :forbidden)
   end
 
   def check_authorization
