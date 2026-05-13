@@ -19,7 +19,7 @@ module RoleHelper
       type: role.type,
       permissions_by_resource: permissions_by_resource,
       permissions_count: total_actions,
-      users_count: role.users.count,
+      users_count: role.users.size,
       created_at: role.created_at,
       updated_at: role.updated_at
     }
