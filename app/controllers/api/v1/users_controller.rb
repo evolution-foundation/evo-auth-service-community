@@ -36,6 +36,13 @@ class Api::V1::UsersController < Api::BaseController
       message: 'User created successfully',
       status: :created
     )
+  rescue ActiveRecord::RecordInvalid => e
+    error_response(
+      'VALIDATION_ERROR',
+      e.record.errors.full_messages.join(', '),
+      status: :unprocessable_entity,
+      details: e.record.errors.messages
+    )
   end
 
   def update
