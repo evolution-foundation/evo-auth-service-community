@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- N/A
+- `spec/db/seeds/rbac_spec.rb` — regression guard for the agent role permission set (EVO-1060). Catches accidental additions of destructive permissions (e.g. `pipelines.update` granting access to archive/set_as_default).
 
 ### Changed
 
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- N/A
+- **Agent role: pipelines.read granted, pipelines.update NOT granted** (EVO-1060). Fresh installs now expose the `/pipelines` page (and the sidebar entry) to agents. Drag-and-drop between stages was already authorised by `pipelines.read` alone — `pipelines.update` had been added under a wrong assumption and would have silently unlocked destructive endpoints (`archive`, `set_as_default`, rename of shared pipelines, `PipelineServiceDefinitions` CRUD). Existing agent users pick up the change automatically on the next seed run because the seed does `destroy_all` then re-creates from the array.
 
 ### Security
 
