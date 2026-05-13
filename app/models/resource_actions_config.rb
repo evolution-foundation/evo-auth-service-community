@@ -361,6 +361,27 @@ class ResourceActionsConfig
       }
     },
 
+    products: {
+      name: 'Products',
+      description: 'Product catalog for AI agent recommendations and pipeline sales',
+      actions: {
+        read: { name: 'View', description: 'View products and variants' },
+        create: { name: 'Create', description: 'Create new products' },
+        update: { name: 'Update', description: 'Update product information and variants' },
+        delete: { name: 'Delete', description: 'Delete products from the catalog' }
+      }
+    },
+
+    templates: {
+      name: 'Templates',
+      description: 'Workspace configuration bundles for export and import',
+      actions: {
+        read: { name: 'View', description: 'View templates settings page' },
+        export: { name: 'Export', description: 'Export workspace configuration as a template bundle' },
+        import: { name: 'Import', description: 'Import a template bundle into the workspace' }
+      }
+    },
+
     webhooks: {
       name: 'Webhooks',
       description: 'Webhook integration management for external systems',
