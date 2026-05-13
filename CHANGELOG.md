@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `spec/db/seeds/rbac_spec.rb` — regression guard for the agent role permission set (EVO-1060). Catches accidental additions of destructive permissions (e.g. `pipelines.update` granting access to archive/set_as_default).
+- `spec/db/seeds/rbac_spec.rb` — regression guard for the agent role permission set (EVO-1060). Catches accidental additions of destructive permissions (e.g. `pipelines.update` granting access to archive/set_as_default). Also pins the `account_owner` / `super_admin` boundary so the installation-level config panel cannot leak outside `super_admin`.
 
 ### Changed
 
-- N/A
+- Migration `20260513170000_add_pipelines_read_to_agent_role.rb` backfills `pipelines.read` on the `agent` role for already-bootstrapped installations (EVO-1060). Production deploys run `db:migrate` and not `db:seed`, so changes to `db/seeds/rbac.rb` that affect an existing role must ship alongside an idempotent migration — same convention established by `20260505155854_promote_first_user_to_super_admin.rb`. Idempotent and reversible.
 
 ### Deprecated
 
