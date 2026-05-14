@@ -57,7 +57,11 @@ class ResourceActionsConfig
       description: 'Role and permission management',
       actions: {
         read: { name: 'View', description: 'View roles and permissions' },
-        bulk_assign: { name: 'Bulk Assign', description: 'Bulk assign roles to multiple users' }
+        create: { name: 'Create', description: 'Create custom roles' },
+        update: { name: 'Update', description: 'Update role details and permissions' },
+        delete: { name: 'Delete', description: 'Delete custom roles' },
+        bulk_assign: { name: 'Bulk Assign', description: 'Bulk assign roles to multiple users' },
+        bulk_update_permissions: { name: 'Update Permissions', description: 'Update role permission tree' }
       }
     },
 
