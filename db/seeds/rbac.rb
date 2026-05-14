@@ -150,7 +150,10 @@ agent_permissions = [
   'inboxes.read',
   'channels.read',
   'integrations.read',
-  'working_hours.read', 'working_hours.create', 'working_hours.update', 'working_hours.delete'
+  'working_hours.read', 'working_hours.create', 'working_hours.update', 'working_hours.delete',
+  'segments.read',
+  'journeys.read',
+  'campaigns.read'
 ]
 
 agent.role_permissions_actions.destroy_all

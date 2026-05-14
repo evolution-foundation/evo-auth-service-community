@@ -709,11 +709,48 @@ class ResourceActionsConfig
       }
     },
 
-    installation_configs: {
-      name: 'Installation Configs',
-      description: 'System-level installation configuration management',
+    # === EVO FLOW SERVICE (segments / journeys / campaigns) ===
+    segments: {
+      name: 'Segments',
+      description: 'Dynamic contact audience definitions based on condition filters',
       actions: {
-        manage: { name: 'Manage', description: 'Manage installation configuration settings' }
+        read: { name: 'View', description: 'View segments and their definitions' },
+        create: { name: 'Create', description: 'Create new segments' },
+        update: { name: 'Update', description: 'Update segment definitions and settings' },
+        delete: { name: 'Delete', description: 'Delete segments' },
+        recompute: { name: 'Recompute', description: 'Recompute segment membership' }
+      }
+    },
+
+    journeys: {
+      name: 'Journeys',
+      description: 'Multi-step visual automations (trigger plus conditional actions)',
+      actions: {
+        read: { name: 'View', description: 'View journeys and flow editor' },
+        create: { name: 'Create', description: 'Create new journeys' },
+        update: { name: 'Update', description: 'Update journey flow and settings' },
+        delete: { name: 'Delete', description: 'Delete journeys' },
+        toggle_active: { name: 'Toggle Active', description: 'Activate or deactivate a journey' },
+        duplicate: { name: 'Duplicate', description: 'Duplicate a journey' },
+        manage_sessions: { name: 'Manage Sessions', description: 'View and manage journey execution sessions' }
+      }
+    },
+
+    campaigns: {
+      name: 'Campaigns',
+      description: 'Bulk message campaigns consuming segments as audience',
+      actions: {
+        read: { name: 'View', description: 'View campaigns and their stats' },
+        create: { name: 'Create', description: 'Create new campaigns' },
+        update: { name: 'Update', description: 'Update campaign settings and content' },
+        delete: { name: 'Delete', description: 'Delete campaigns' },
+        schedule: { name: 'Schedule', description: 'Schedule campaigns for later execution' },
+        execute: { name: 'Execute', description: 'Execute campaigns immediately' },
+        pause: { name: 'Pause', description: 'Pause running campaigns' },
+        resume: { name: 'Resume', description: 'Resume paused campaigns' },
+        stop: { name: 'Stop', description: 'Stop running campaigns' },
+        duplicate: { name: 'Duplicate', description: 'Duplicate a campaign' },
+        bulk_action: { name: 'Bulk Action', description: 'Perform bulk actions on campaigns' }
       }
     },
 
