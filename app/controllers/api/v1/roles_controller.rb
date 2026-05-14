@@ -24,12 +24,17 @@ class Api::V1::RolesController < Api::V1::BaseController
 
   def create
     key = role_params[:name].to_s.downcase.gsub(/\s+/, '_').gsub(/[^a-z0-9_]/, '')
+
+    if key.blank?
+      return error_response('VALIDATION_ERROR', 'Role name must contain at least one letter or number', status: :unprocessable_entity)
+    end
+
     role = Role.new(
       key: key,
       name: role_params[:name],
       description: role_params[:description],
       system: false,
-      type: account_owner_only? ? 'account' : (role_params[:type].presence || 'account')
+      type: current_api_user.has_role?('super_admin') ? (role_params[:type].presence || 'account') : 'account'
     )
 
     unless role.save
@@ -44,8 +49,8 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def update
-    if @role.system? && role_params.key?(:key)
-      return error_response('FORBIDDEN', 'Cannot modify key of a system role', status: :forbidden)
+    if @role.system? && (role_params.key?(:key) || role_params.key?(:name))
+      return error_response('FORBIDDEN', 'Cannot modify key or name of a system role', status: :forbidden)
     end
 
     unless @role.update(role_params.except(:key, :type))
@@ -86,7 +91,7 @@ class Api::V1::RolesController < Api::V1::BaseController
       )
     end
 
-    if account_owner_only?
+    unless current_api_user.has_role?('super_admin')
       caller_permissions = Set.new(current_api_user.all_permissions)
       unauthorized_keys = valid_keys.reject { |k| caller_permissions.include?(k) }
       if unauthorized_keys.any?
@@ -153,7 +158,7 @@ class Api::V1::RolesController < Api::V1::BaseController
 
   def enforce_role_scope!
     return unless @role
-    return unless account_owner_only?
+    return if current_api_user.has_role?('super_admin')
     return if @role.type == 'account'
 
     error_response('FORBIDDEN', 'Cannot access or modify user-type roles', status: :forbidden)
