@@ -66,7 +66,7 @@ class Role < ApplicationRecord
   end
   
   def prevent_system_role_key_modification
-    if system? && saved_change_to_attribute?(:key)
+    if system? && will_save_change_to_attribute?(:key)
       errors.add(:key, "cannot be modified for system roles")
       throw :abort
     end

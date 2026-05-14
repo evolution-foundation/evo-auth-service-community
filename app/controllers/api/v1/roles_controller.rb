@@ -34,7 +34,7 @@ class Api::V1::RolesController < Api::V1::BaseController
       name: role_params[:name],
       description: role_params[:description],
       system: false,
-      type: current_api_user.has_role?('super_admin') ? (role_params[:type].presence || 'account') : 'account'
+      type: 'account'
     )
 
     unless role.save
@@ -53,7 +53,7 @@ class Api::V1::RolesController < Api::V1::BaseController
       return error_response('FORBIDDEN', 'Cannot modify key or name of a system role', status: :forbidden)
     end
 
-    unless @role.update(role_params.except(:key, :type))
+    unless @role.update(role_params)
       return render_unprocessable_entity(@role.errors)
     end
 
@@ -92,12 +92,19 @@ class Api::V1::RolesController < Api::V1::BaseController
     end
 
     unless current_api_user.has_role?('super_admin')
-      caller_permissions = Set.new(current_api_user.all_permissions)
-      unauthorized_keys = valid_keys.reject { |k| caller_permissions.include?(k) }
-      if unauthorized_keys.any?
+      caller_perms = Set.new(current_api_user.all_permissions)
+      target_set   = valid_keys.to_set
+      current_set  = @role.permission_keys.to_set
+
+      granted = target_set - current_set
+      revoked = current_set - target_set
+      diffs   = granted | revoked
+
+      unauthorized = diffs.reject { |k| caller_perms.include?(k) }
+      if unauthorized.any?
         return error_response(
           'FORBIDDEN',
-          "Cannot grant permissions you do not hold: #{unauthorized_keys.join(', ')}",
+          "Cannot grant or revoke permissions you do not hold: #{unauthorized.join(', ')}",
           status: :forbidden
         )
       end
@@ -116,7 +123,7 @@ class Api::V1::RolesController < Api::V1::BaseController
 
   # Get available roles for account users (agent and account_owner)
   def account_user_roles
-    roles = Role.account_type.where(key: ['agent', 'account_owner']).map do |role|
+    roles = Role.where(key: ['agent', 'account_owner']).map do |role|
       RoleSerializer.basic(role)
     end
 
@@ -139,7 +146,7 @@ class Api::V1::RolesController < Api::V1::BaseController
   private
 
   def role_params
-    params.permit(:name, :description, :key, :type)
+    params.permit(:name, :description)
   end
 
   def load_role
