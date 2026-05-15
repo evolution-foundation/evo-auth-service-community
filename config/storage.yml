@@ -17,9 +17,9 @@ amazon:
 # S3 compatible service such as Backblaze B2, DigitalOcean Spaces, Minio, Cloudflare R2
 s3_compatible:
   service: S3
-  access_key_id: <%= ENV.fetch('STORAGE_ACCESS_KEY_ID', '') %>
-  secret_access_key: <%= ENV.fetch('STORAGE_SECRET_ACCESS_KEY', '') %>
-  region: <%= ENV.fetch('STORAGE_REGION', 'auto') %>
-  bucket: <%= ENV.fetch('STORAGE_BUCKET_NAME', '') %>
-  endpoint: <%= ENV.fetch('STORAGE_ENDPOINT', '') %>
+  access_key_id: <%= GlobalConfigService.load('STORAGE_ACCESS_KEY_ID', ENV.fetch('STORAGE_ACCESS_KEY_ID', '')) rescue ENV.fetch('STORAGE_ACCESS_KEY_ID', '') %>
+  secret_access_key: <%= GlobalConfigService.load('STORAGE_ACCESS_SECRET', ENV.fetch('STORAGE_SECRET_ACCESS_KEY', '')) rescue ENV.fetch('STORAGE_SECRET_ACCESS_KEY', '') %>
+  region: <%= GlobalConfigService.load('STORAGE_REGION', ENV.fetch('STORAGE_REGION', 'auto')) rescue ENV.fetch('STORAGE_REGION', 'auto') %>
+  bucket: <%= GlobalConfigService.load('STORAGE_BUCKET_NAME', ENV.fetch('STORAGE_BUCKET_NAME', '')) rescue ENV.fetch('STORAGE_BUCKET_NAME', '') %>
+  endpoint: <%= GlobalConfigService.load('STORAGE_ENDPOINT', ENV.fetch('STORAGE_ENDPOINT', '')) rescue ENV.fetch('STORAGE_ENDPOINT', '') %>
   force_path_style: true
