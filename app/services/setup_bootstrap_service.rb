@@ -27,7 +27,8 @@ class SetupBootstrapService
       user      = create_user
       assign_global_role(user)
 
-      { user: user }
+      survey_token = generate_survey_token(user)
+      { user: user, survey_token: survey_token }
     end
 
     activate_licensing(result[:user])
@@ -94,6 +95,19 @@ class SetupBootstrapService
       confidential: false,
       trusted:      true
     )
+  end
+
+  def generate_survey_token(user)
+    token = SecureRandom.hex(32)
+    redis_client.set("survey_token:#{token}", user.id, ex: 600) # 10 minutes TTL
+    token
+  rescue StandardError => e
+    Rails.logger.warn "[SetupBootstrap] Failed to generate survey token: #{e.message}"
+    nil
+  end
+
+  def redis_client
+    Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/1'))
   end
 
   def activate_licensing(user)

@@ -37,7 +37,7 @@ Rails.application.configure do
   config.action_mailer.perform_caching = false
 
   # Set localhost to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+  config.action_mailer.default_url_options = { host: "localhost", port: 3001 }
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
@@ -73,8 +73,11 @@ Rails.application.configure do
   config.hosts << "host.docker.internal"
   config.hosts << /.*\.docker\.internal/
 
-  # Allow Docker Compose service hostnames
+  # Allow internal Docker service hostnames (used for inter-service calls)
   config.hosts << "evo-auth"
+  config.hosts << "evo-crm"
+  config.hosts << "evo-core"
+  config.hosts << "evo-processor"
   
   # Allow ngrok hosts for local development
   config.hosts << "evo-auth-davidson.ngrok.app"

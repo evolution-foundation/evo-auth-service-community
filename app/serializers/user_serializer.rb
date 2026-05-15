@@ -14,6 +14,7 @@ module UserSerializer
       type: user.type,
       role: user.role_data,
       pubsub_token: user.pubsub_token,
+      avatar_url: user.avatar_url,
       created_at: user.created_at,
       updated_at: user.updated_at,
       ui_settings: user.ui_settings || {},
@@ -23,7 +24,8 @@ module UserSerializer
       availability: user.availability,
       confirmed: user.confirmed?,
       confirmed_at: user.confirmed_at,
-      custom_attributes: user.custom_attributes || {}
+      custom_attributes: user.custom_attributes || {},
+      setup_survey_completed: user.setup_survey_completed?
     }
 
     # Optional fields

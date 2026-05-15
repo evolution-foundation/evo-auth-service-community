@@ -77,6 +77,12 @@ class User < ApplicationRecord
 
   has_many :user_roles, dependent: :destroy
   has_many :roles, through: :user_roles
+  has_many :user_tours, dependent: :destroy
+  has_one :setup_survey_response, dependent: :destroy
+
+  def setup_survey_completed?
+    setup_survey_response.present?
+  end
 
   before_validation :set_password_and_uid, on: :create
 
