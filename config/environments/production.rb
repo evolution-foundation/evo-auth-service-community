@@ -1,4 +1,5 @@
 require "active_support/core_ext/integer/time"
+require_relative "../../lib/global_config_service"
 
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
@@ -19,8 +20,8 @@ Rails.application.configure do
   # config.asset_host = "http://assets.example.com"
 
   # Store uploaded files (see config/storage.yml for options).
-  # Use ACTIVE_STORAGE_SERVICE env var to select: local, amazon, s3_compatible
-  config.active_storage.service = ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local').to_sym
+  # Use ACTIVE_STORAGE_SERVICE env var or admin UI to select: local, amazon, s3_compatible
+  config.active_storage.service = (GlobalConfigService.load('ACTIVE_STORAGE_SERVICE', ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')) rescue ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')).to_sym
 
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true
