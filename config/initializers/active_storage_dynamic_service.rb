@@ -3,10 +3,12 @@
 # Overrides ActiveStorage::Blob.service so the storage provider chosen in Admin
 # Settings → Storage is honoured at request time, not only at boot.
 #
-# GlobalConfigService.load caches the value for 60 s (via Rails.cache), so this
-# is cheap on every call.  When the admin saves a new provider via the UI,
-# GlobalConfig.set writes to the DB and the cache expires naturally within the
-# TTL, after which all processes (web + Sidekiq) pick up the new value.
+# GlobalConfigService.load reads ACTIVE_STORAGE_SERVICE from InstallationConfig
+# (Rails.cache, 60 s TTL).  The CRM writes the value when the admin saves; this
+# process converges passively within 60 s as the TTL expires.
+#
+# Caveat: S3 credentials are still read at boot from config/storage.yml ERB —
+# changing them in the UI requires a service restart.
 Rails.application.config.after_initialize do
   ActiveStorage::Blob.class_eval do
     class << self
@@ -18,8 +20,13 @@ Rails.application.config.after_initialize do
           ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')
         ).presence || 'local'
         key = service_name.to_sym
-        (respond_to?(:services) && services[key]) || _static_service
-      rescue StandardError
+        resolved = respond_to?(:services) && services[key]
+        unless resolved
+          Rails.logger.warn("[ActiveStorage] service '#{service_name}' not registered (built at boot); falling back to boot-time default")
+        end
+        resolved || _static_service
+      rescue StandardError => e
+        Rails.logger.warn("[ActiveStorage] failed to resolve dynamic service: #{e.message}; falling back to boot-time default")
         _static_service
       end
     end
