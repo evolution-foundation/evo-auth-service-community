@@ -9,27 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `spec/db/seeds/rbac_spec.rb` — regression guard for the agent role permission set (EVO-1060). Catches accidental additions of destructive permissions (e.g. `pipelines.update` granting access to archive/set_as_default). Also pins the `account_owner` / `super_admin` boundary so the installation-level config panel cannot leak outside `super_admin`.
-
-### Changed
-
-- Migration `20260513170000_add_pipelines_read_to_agent_role.rb` backfills `pipelines.read` on the `agent` role for already-bootstrapped installations (EVO-1060). Production deploys run `db:migrate` and not `db:seed`, so changes to `db/seeds/rbac.rb` that affect an existing role must ship alongside an idempotent migration — same convention established by `20260505155854_promote_first_user_to_super_admin.rb`. Idempotent and reversible.
-
-### Deprecated
-
 - N/A
 
-### Removed
+### Changed
 
 - N/A
 
 ### Fixed
 
-- **Agent role: pipelines.read granted, pipelines.update NOT granted** (EVO-1060). Fresh installs now expose the `/pipelines` page (and the sidebar entry) to agents. Drag-and-drop between stages was already authorised by `pipelines.read` alone — `pipelines.update` had been added under a wrong assumption and would have silently unlocked destructive endpoints (`archive`, `set_as_default`, rename of shared pipelines, `PipelineServiceDefinitions` CRUD). Existing agent users pick up the change automatically on the next seed run because the seed does `destroy_all` then re-creates from the array.
+- N/A
+
+## [v1.0.0-rc3] - 2026-05-17
+
+Release de estabilização — concentra correções de bugs em 2FA backup codes (500 + hash plaintext), boundary `account_owner` / `super_admin` em endpoints de roles (privilege escalation via delegation), aplicação runtime de configs SMTP/BMS/Resend, validação estruturada de senha na criação de usuário, e RBAC do role `agent` (drop de `pipelines.update`, backfill de `pipelines.read`). Também consolida a fundação do open-core via `EXTENSION_POINTS.md` + módulos de extensão estritos (`LoginGate`, `TokenClaims`), adiciona CRUD completo de roles com escopo `account_owner` e introduz permissões para `products.*` e `template_bundles`.
+
+### Added
+
+- **EVO-1381 — Módulos de extension point com LoginGate e TokenClaims** (#31) — implementação estrita dos pontos de extensão para Enterprise: `LoginGate` (hook chamado antes da emissão do token, permite negar login com motivo), `TokenClaims` (hook que adiciona claims customizadas ao JWT). Ambos com contratos estritos via duck-typing + erro explícito se a implementação Enterprise devolver shape inválido.
+- **EVO-1375 — `EXTENSION_POINTS.md`** (#29) — documento declarando os pontos de extensão do auth-service. Contrato versionado.
+- **EVO-1061 — CRUD completo de roles com escopo `account_owner`** — endpoints `index`/`show`/`create`/`update`/`destroy` para roles customizadas, todos limitados ao escopo da conta do `account_owner` requisitante. Inclui delegation de permissões com guard de privilege escalation.
+- **EVO-1116 — Recurso `template_bundles` no RBAC** — permissões `template_bundles.read` / `manage` adicionadas via migration backfill, suporte ao recurso de export/import de templates do CRM.
+- **`products.*` permissions** — recurso adicionado ao RBAC com backfill para roles existentes (`account_owner` recebe `manage`, `agent` recebe `read`).
+- **`spec/db/seeds/rbac_spec.rb`** — regression guard para o permission set do role `agent` (EVO-1060). Detecta adições acidentais de permissões destrutivas (ex.: `pipelines.update` daria acesso a `archive` / `set_as_default`). Também pinneia o boundary `account_owner` / `super_admin` para garantir que o painel de installation-level config não vaze fora do `super_admin`.
+- **`spec/controllers/roles_controller_spec.rb`** — boundary regression guards entre `account_owner` e `super_admin` (EVO-1060), garantindo que nenhum dos roles consegue escapar do seu escopo.
+
+### Changed
+
+- **EVO-1049 — Configurações SMTP/BMS/Resend aplicadas em runtime** (#24) — antes essas configurações eram lidas apenas no boot do container, exigindo restart para refletir mudanças feitas via UI. Agora são re-resolvidas a cada operação, permitindo ao operador alterar SMTP/BMS/Resend sem downtime.
+- **Migration `20260513170000_add_pipelines_read_to_agent_role.rb`** — backfills `pipelines.read` no role `agent` para instalações já bootstrapped (EVO-1060). PROD roda `db:migrate` e não `db:seed`, então mudanças em `db/seeds/rbac.rb` que afetam role existente precisam vir junto com migration idempotente — mesma convenção do `20260505155854_promote_first_user_to_super_admin.rb`. Idempotente e reversível.
+- **Docs** padronizados para Evolution Foundation 2026 (README, LICENSE, NOTICE, TRADEMARKS).
+- **Docs (org)** — URLs do GitHub atualizadas de `EvolutionAPI` para `evolution-foundation`.
+
+### Fixed
+
+- **2FA backup codes — 500 + plaintext** (EVO-991) — o endpoint de listagem de backup codes retornava 500 (NoMethodError em campo nulo) e os codes eram armazenados em plaintext no DB. Corrigido com BCrypt hash + handling de campo nulo + review feedback de round 3 aplicado.
+- **EVO-1063 — Password validation 422 estruturada** — antes a falha de validação de senha na criação de usuário retornava 422 sem campo machine-readable; frontend não conseguia mapear o erro para o campo correto. Agora a resposta inclui códigos estruturados (`password.too_short`, `password.missing_uppercase`, etc.) consumidos pelo checklist inline do frontend (EVO-1063).
+- **Migration `add_message_template_permissions_to_account_owner`** — em fresh install falhava com `PG::UndefinedTable: roles` em determinada ordem de timestamp; agora cai silenciosamente quando a tabela ainda não existe (guard `table_exists?(:roles)`).
+- **EVO-1060 — Agent role: `pipelines.read` granted, `pipelines.update` NOT granted** — fresh installs agora expõem a página `/pipelines` (e a entrada do sidebar) para agents. Drag-and-drop entre stages já era autorizado por `pipelines.read` sozinho — `pipelines.update` havia sido adicionado sob assumption errada e teria silenciosamente desbloqueado endpoints destrutivos (`archive`, `set_as_default`, rename de pipelines compartilhados, `PipelineServiceDefinitions` CRUD). Usuários `agent` existentes recebem a mudança automaticamente no próximo seed run (seed faz `destroy_all` e re-cria do array).
 
 ### Security
 
-- N/A
+- **EVO-1061 — Privilege escalation via delegation no `roles_controller`** — o endpoint de update de roles permitia a um `account_owner` delegar permissões que ele próprio não detinha (caminho de privilege escalation por proxy). Fechado com check explícito: o usuário só pode delegar permissões que ele mesmo possui. Inclui spec de regressão.
+- **EVO-1061 — Review blockers H1/M1-M3** — findings high/medium do round 2 do code review aplicados (escopo de account, validação de payload, error responses sem leakage).
+- **2FA backup codes** — codes agora são hashed com BCrypt antes de gravar; antes ficavam em plaintext no banco (qualquer leitura do DB expunha o segundo fator do usuário).
 
 ## [v1.0.0-rc2] - 2026-05-05
 
