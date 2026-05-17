@@ -2,7 +2,9 @@
 
 class CreateSetupSurveyResponses < ActiveRecord::Migration[7.1]
   def change
-    create_table :setup_survey_responses, id: :uuid do |t|
+    # Idempotent: safe to re-run if any previous attempt partially created
+    # the table (e.g., on a schema drift between staging/prod).
+    create_table :setup_survey_responses, id: :uuid, if_not_exists: true do |t|
       t.references :user, null: false, foreign_key: true, type: :uuid, index: { unique: true }
       t.string :team_size
       t.string :daily_volume
