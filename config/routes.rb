@@ -155,6 +155,10 @@ Rails.application.routes.draw do
       resources :roles do
         collection do
           get :full
+          get :account_user_roles
+        end
+        member do
+          put :bulk_update_permissions
         end
       end
 

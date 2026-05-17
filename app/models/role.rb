@@ -56,7 +56,7 @@ class Role < ApplicationRecord
   # Verifica se a role pode ser excluída
   def can_be_deleted?
     # Não pode excluir se é role do sistema ou tem usuários associados
-    !system && user_roles.count == 0
+    !system && user_roles.size == 0
   end
   
   private
@@ -66,7 +66,7 @@ class Role < ApplicationRecord
   end
   
   def prevent_system_role_key_modification
-    if system? && saved_change_to_attribute?(:key)
+    if system? && will_save_change_to_attribute?(:key)
       errors.add(:key, "cannot be modified for system roles")
       throw :abort
     end
@@ -126,27 +126,15 @@ class Role < ApplicationRecord
   # Lista todas as permissões da role no formato 'recurso.ação'
   # @return [Array<String>] Lista de permissões
   def permission_keys
-    role_permissions_actions.pluck(:permission_key)
+    role_permissions_actions.map(&:permission_key)
   end
 
   # Get permissions organized by resource
   def permissions_by_resource
-    permissions = role_permissions_actions.pluck(:permission_key)
-    
+    permissions = role_permissions_actions.map(&:permission_key)
+
     permissions.group_by { |permission| permission.split('.').first }
               .transform_values { |perms| perms.map { |perm| perm.split('.').last } }
   end
 
-  private
-  
-  def prevent_system_role_deletion
-    throw :abort if system?
-  end
-  
-  def prevent_system_role_key_modification
-    if system? && saved_change_to_attribute?(:key)
-      errors.add(:key, "cannot be modified for system roles")
-      throw :abort
-    end
-  end
 end

@@ -34,6 +34,13 @@ namespace :rbac do
     puts "Total: #{ResourceActionsConfig.all_permission_keys.size} permissions"
   end
 
+  desc 'Re-seed account_owner permissions idempotently (run after deploying EVO-1061)'
+  task reseed_account_owner: :environment do
+    puts "🔄 Re-seeding account_owner permissions..."
+    load Rails.root.join('db', 'seeds', 'rbac.rb')
+    puts "✅ Done."
+  end
+
   desc 'Validate configuration integrity'
   task validate: :environment do
     puts "🔍 Validating ResourceActionsConfig integrity..."

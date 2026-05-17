@@ -9,7 +9,8 @@
 class InstallationConfig < ActiveRecord::Base
   self.table_name = 'installation_configs'
 
-  CACHE_TTL = 60.seconds
+  # Kept short to minimise the stale-read window after CRM writes new config (EVO-1049).
+  CACHE_TTL = 5.seconds
   ENCRYPTION_KEY_DERIVATION_SALT = 'installation_config_encryption_v1'
 
   # ---------------------------------------------------------------------------

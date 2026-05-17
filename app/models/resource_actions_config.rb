@@ -57,7 +57,11 @@ class ResourceActionsConfig
       description: 'Role and permission management',
       actions: {
         read: { name: 'View', description: 'View roles and permissions' },
-        bulk_assign: { name: 'Bulk Assign', description: 'Bulk assign roles to multiple users' }
+        create: { name: 'Create', description: 'Create custom roles' },
+        update: { name: 'Update', description: 'Update role details and permissions' },
+        delete: { name: 'Delete', description: 'Delete custom roles' },
+        bulk_assign: { name: 'Bulk Assign', description: 'Bulk assign roles to multiple users' },
+        bulk_update_permissions: { name: 'Update Permissions', description: 'Update role permission tree' }
       }
     },
 
@@ -358,6 +362,27 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new canned responses' },
         update: { name: 'Update', description: 'Update canned response content' },
         delete: { name: 'Delete', description: 'Delete canned responses' }
+      }
+    },
+
+    products: {
+      name: 'Products',
+      description: 'Product catalog for AI agent recommendations and pipeline sales',
+      actions: {
+        read: { name: 'View', description: 'View products and variants' },
+        create: { name: 'Create', description: 'Create new products' },
+        update: { name: 'Update', description: 'Update product information and variants' },
+        delete: { name: 'Delete', description: 'Delete products from the catalog' }
+      }
+    },
+
+    templates: {
+      name: 'Templates',
+      description: 'Workspace configuration bundles for export and import',
+      actions: {
+        read: { name: 'View', description: 'View templates settings page' },
+        export: { name: 'Export', description: 'Export workspace configuration as a template bundle' },
+        import: { name: 'Import', description: 'Import a template bundle into the workspace' }
       }
     },
 

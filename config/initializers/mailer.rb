@@ -50,12 +50,33 @@ Rails.application.configure do
   config.action_mailer.delivery_method = :letter_opener if Rails.env.development? && ENV['LETTER_OPENER']
 end
 
-# Force BMS as delivery method AFTER all configuration is loaded
-# This runs after environment configs, so it won't be overridden
 Rails.application.config.after_initialize do
   unless Rails.env.test?
-    ActionMailer::Base.delivery_method = :bms
-    Rails.logger.info "📧 EvoAuth MAILER: Delivery method set to :bms (with SMTP fallback)"
-    Rails.logger.info "📧 EvoAuth MAILER: Verify => #{ActionMailer::Base.delivery_method}"
+    begin
+      mailer_type = GlobalConfigService.load('MAILER_TYPE', 'smtp')
+
+      case mailer_type
+      when 'bms'
+        bms_api_key = GlobalConfigService.load('BMS_API_SECRET', nil)
+        if bms_api_key.present?
+          ActionMailer::Base.delivery_method = :bms
+          Rails.logger.info "📧 EvoAuth MAILER: BMS configured as delivery method"
+        else
+          Rails.logger.warn "📧 EvoAuth MAILER: MAILER_TYPE=bms but BMS_API_SECRET not set, falling back to SMTP"
+        end
+      when 'resend'
+        resend_api_key = GlobalConfigService.load('RESEND_API_SECRET', ENV.fetch('RESEND_API_KEY', nil))
+        if resend_api_key.present?
+          ActionMailer::Base.delivery_method = :resend
+          Rails.logger.info "📧 EvoAuth MAILER: Resend configured as delivery method"
+        else
+          Rails.logger.warn "📧 EvoAuth MAILER: MAILER_TYPE=resend but RESEND_API_SECRET not set, falling back to SMTP"
+        end
+      else
+        Rails.logger.info "📧 EvoAuth MAILER: Using SMTP delivery method"
+      end
+    rescue => e
+      Rails.logger.warn "📧 EvoAuth MAILER: Error loading provider config: #{e.message}, using SMTP"
+    end
   end
 end
