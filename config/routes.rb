@@ -118,6 +118,12 @@ Rails.application.routes.draw do
 
       resource :account, only: [:show, :update], controller: 'account'
 
+      # User Tours - tracks which guided tours each user has completed
+      resources :user_tours, only: [:index, :create, :destroy]
+
+      # Onboarding survey (authenticated — used when survey_token expired)
+      resource :setup_survey, only: [:show, :create], controller: 'setup_survey'
+
       # User management
       resources :users, only: [:index, :create, :update, :destroy] do
         collection do
@@ -173,10 +179,11 @@ Rails.application.routes.draw do
 
   # License management routes
   scope '/setup' do
-    get '/status',   to: 'setup#status'
-    get '/register', to: 'setup#register'
+    get '/status',    to: 'setup#status'
+    get '/register',  to: 'setup#register'
     get '/activate',  to: 'setup#activate'
     post '/bootstrap', to: 'setup#bootstrap'
+    post '/survey',   to: 'setup#survey'
   end
 
   # Health check
