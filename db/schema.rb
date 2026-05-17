@@ -20,7 +20,7 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
 
   # Custom types defined in this database.
   # Note that some types may not work with other database engines. Be careful if changing database.
-  create_enum "contact_type_enum", ["person", "company"]
+  create_enum "contact_type_enum", ["person", "company", "group"]
 
   create_table "access_tokens", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "name", limit: 255, null: false
@@ -529,6 +529,31 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.index ["granted_at"], name: "index_data_privacy_consents_on_granted_at"
     t.index ["user_id", "consent_type"], name: "index_data_privacy_consents_on_user_id_and_consent_type", unique: true
     t.index ["user_id"], name: "index_data_privacy_consents_on_user_id"
+  end
+
+  create_table "events", primary_key: ["id", "app_name", "user_id", "session_id"], force: :cascade do |t|
+    t.string "id", limit: 128, null: false
+    t.string "app_name", limit: 128, null: false
+    t.string "user_id", limit: 128, null: false
+    t.string "session_id", limit: 128, null: false
+    t.string "invocation_id", limit: 256, null: false
+    t.string "author", limit: 256, null: false
+    t.binary "actions", null: false
+    t.text "long_running_tool_ids_json"
+    t.string "branch", limit: 256
+    t.datetime "timestamp", precision: nil, null: false
+    t.jsonb "content"
+    t.jsonb "grounding_metadata"
+    t.jsonb "custom_metadata"
+    t.jsonb "usage_metadata"
+    t.jsonb "citation_metadata"
+    t.boolean "partial"
+    t.boolean "turn_complete"
+    t.string "error_code", limit: 256
+    t.string "error_message", limit: 1024
+    t.boolean "interrupted"
+    t.jsonb "input_transcription"
+    t.jsonb "output_transcription"
   end
 
   create_table "evo_agent_processor_execution_metrics", id: :uuid, default: nil, force: :cascade do |t|
@@ -1297,6 +1322,15 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.index ["status"], name: "index_scheduled_actions_on_status"
   end
 
+  create_table "sessions", primary_key: ["app_name", "user_id", "id"], force: :cascade do |t|
+    t.string "app_name", limit: 128, null: false
+    t.string "user_id", limit: 128, null: false
+    t.string "id", limit: 128, null: false
+    t.jsonb "state", null: false
+    t.datetime "create_time", precision: nil, null: false
+    t.datetime "update_time", precision: nil, null: false
+  end
+
   create_table "stage_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "pipeline_item_id", null: false
     t.uuid "from_stage_id"
@@ -1372,6 +1406,13 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
     t.index ["role_id"], name: "index_user_roles_on_role_id"
     t.index ["user_id", "role_id"], name: "index_user_roles_unique", unique: true
     t.index ["user_id"], name: "index_user_roles_on_user_id"
+  end
+
+  create_table "user_states", primary_key: ["app_name", "user_id"], force: :cascade do |t|
+    t.string "app_name", limit: 128, null: false
+    t.string "user_id", limit: 128, null: false
+    t.jsonb "state", null: false
+    t.datetime "update_time", precision: nil, null: false
   end
 
   create_table "user_tours", force: :cascade do |t|
@@ -1467,6 +1508,7 @@ ActiveRecord::Schema[7.1].define(version: 9025_08_19_224901) do
   add_foreign_key "contact_companies", "contacts"
   add_foreign_key "contact_companies", "contacts", column: "company_id"
   add_foreign_key "data_privacy_consents", "users"
+  add_foreign_key "events", "sessions", column: ["app_name", "user_id", "session_id"], primary_key: ["app_name", "user_id", "id"], name: "events_app_name_user_id_session_id_fkey", on_delete: :cascade
   add_foreign_key "evo_agent_processor_execution_metrics", "evo_core_agents", column: "agent_id", name: "evo_agent_processor_execution_metrics_agent_id_fkey", on_delete: :cascade
   add_foreign_key "evo_ai_agent_processor_execution_metrics", "evo_core_agents", column: "agent_id", name: "evo_ai_agent_processor_execution_metrics_agent_id_fkey", on_delete: :cascade
   add_foreign_key "evo_core_agent_integrations", "evo_core_agents", column: "agent_id", name: "evo_core_agent_integrations_agent_id_fkey", on_delete: :cascade
