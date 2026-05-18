@@ -1,21 +1,25 @@
 # frozen_string_literal: true
 
 class InitSchema < ActiveRecord::Migration[7.1]
-  # Idempotent on purpose. The original `init_schema` filename starts with
-  # the timestamp `90250819224900` (year 9025 — historical typo). Renaming
-  # is unsafe because production installations already have that exact
-  # version recorded in `schema_migrations`; renaming would make Rails
-  # think a brand-new "init_schema" is pending and try to run it again.
+  # Idempotent on purpose. The filename timestamp was previously
+  # `90250819224900` (year 9025 — historical typo) which sorted *after*
+  # every real 2026-* migration, so on a fresh install Rails ran the 2026
+  # migrations first and `create_user_tours` blew up with
+  # `relation "users" does not exist`. The timestamp has been corrected to
+  # `20250819224900` so init runs first.
   #
-  # Instead, we make the migration robust to two scenarios:
+  # The migration stays robust to three scenarios:
   #
-  # 1. Fresh install where another service (eg. evo-core, Go) created its
+  # 1. Fresh install — runs first (after the timestamp fix) and creates
+  #    every table the auth service owns.
+  # 2. Fresh install where another service (eg. evo-core, Go) created its
   #    own copy of the `users` table directly via auto-migration before
   #    Rails got here. We don't want to crash with `PG::DuplicateTable`.
-  # 2. Long-lived installs where the original migration already ran. We
-  #    don't want to re-run it; Rails skips on `schema_migrations`, but
-  #    if some operator wiped the row manually, the guarded statements
-  #    won't blow up.
+  # 3. Long-lived installs that already recorded the old `90250819224900`
+  #    version. After the rename, Rails sees the new `20250819224900` as
+  #    pending and re-runs it. Every DDL below is guarded with
+  #    `if_not_exists: true` so the rerun is a no-op against an already
+  #    initialised schema.
   #
   # Every `create_table`, `add_index` and `add_foreign_key` is therefore
   # wrapped in an existence check.
