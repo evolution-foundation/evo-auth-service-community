@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_05_13_170000) do
+ActiveRecord::Schema[7.1].define(version: 2026_05_18_133933) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -169,6 +169,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_05_13_170000) do
     t.string "main_goal"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "onboarding_pushed_at"
     t.index ["user_id"], name: "index_setup_survey_responses_on_user_id", unique: true
   end
 

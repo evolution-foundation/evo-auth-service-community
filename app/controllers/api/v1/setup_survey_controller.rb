@@ -17,6 +17,7 @@ class Api::V1::SetupSurveyController < Api::BaseController
     survey.assign_attributes(survey_params)
 
     if survey.save
+      Licensing::PushOnboardingSurveyJob.perform_later(survey.id)
       success_response(data: { completed: true }, message: 'Survey saved successfully')
     else
       render_unprocessable_entity(survey.errors)

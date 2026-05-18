@@ -14,6 +14,7 @@
 #  biggest_pain      :string
 #  crm_experience    :string
 #  main_goal         :string
+#  onboarding_pushed_at :datetime
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #

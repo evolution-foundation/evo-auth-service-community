@@ -121,6 +121,8 @@ class SetupController < ActionController::Base
 
       Licensing::HeartbeatJob.set(wait: Licensing::Heartbeat::INTERVAL).perform_later
 
+      enqueue_pending_onboarding_pushes
+
       render json: { status: 'active', message: 'Setup activated successfully!' }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e
       render json: { error: 'Failed to contact licensing server', details: e.message },
@@ -181,6 +183,7 @@ class SetupController < ActionController::Base
 
     if survey.save
       redis_client.del("survey_token:#{token}")
+      Licensing::PushOnboardingSurveyJob.perform_later(survey.id)
       render json: { status: 'ok' }, status: :ok
     else
       render json: { error: survey.errors.full_messages.to_sentence }, status: :unprocessable_entity
@@ -188,6 +191,15 @@ class SetupController < ActionController::Base
   end
 
   private
+
+  # Scans for setup_survey_responses that have not yet been pushed to the
+  # licensing server and enqueues a job for each. Called right after activation
+  # so a survey saved before the license became active still gets through.
+  def enqueue_pending_onboarding_pushes
+    SetupSurveyResponse.where(onboarding_pushed_at: nil).find_each do |survey|
+      Licensing::PushOnboardingSurveyJob.perform_later(survey.id)
+    end
+  end
 
   def bootstrap_params
     params.permit(:first_name, :last_name, :email, :password, :password_confirmation)
