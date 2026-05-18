@@ -20,15 +20,27 @@ class SetupController < ActionController::Base
       return
     end
 
+    # `status` drives the frontend's Setup wizard routing: it must reflect
+    # whether the *instance is bootstrapped*, not whether the licensing
+    # handshake succeeded. A licensing outage cannot trap users on /setup.
+    # The separate `licensed` field exposes the license state for any UI
+    # that wants to surface it.
+    #
+    # Workers can activate the license in a different process (SetupJob);
+    # rehydrate from runtime_configs so the web process sees the new state
+    # without needing a restart.
+    Licensing::Runtime.rehydrate_if_inactive
+
     bootstrapped = User.exists?
-    active = ctx.active? && bootstrapped
+    licensed     = ctx.active?
 
     resp = {
-      status: active ? 'active' : 'inactive',
+      status:      bootstrapped ? 'active' : 'inactive',
+      licensed:    licensed,
       instance_id: resolve_instance_id(ctx)
     }
 
-    if active
+    if licensed
       key = ctx.api_key
       resp[:api_key] = "#{key[0..7]}...#{key[-4..]}" if key.present?
     end
@@ -71,8 +83,10 @@ class SetupController < ActionController::Base
 
       render json: { status: 'pending', register_url: result['register_url'] }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e
-      render json: { error: 'Failed to contact licensing server', details: e.message },
-             status: :bad_gateway
+      # Fail open: a licensing outage must never block the installation.
+      # The frontend can prossegue e o heartbeat tenta reativar depois.
+      Rails.logger.warn "[Setup] Registration unreachable: #{e.message}"
+      render json: { status: 'degraded', message: 'Licensing server temporarily unreachable — continuing without activation' }
     end
   end
 
@@ -125,8 +139,10 @@ class SetupController < ActionController::Base
 
       render json: { status: 'active', message: 'Setup activated successfully!' }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e
-      render json: { error: 'Failed to contact licensing server', details: e.message },
-             status: :bad_gateway
+      # Fail open: licensing outage must not trap the user on the activation step.
+      # The heartbeat retry path will reactivate once the server is reachable.
+      Rails.logger.warn "[Setup] Activation unreachable: #{e.message}"
+      render json: { status: 'degraded', message: 'Licensing server temporarily unreachable — continuing without activation' }
     end
   end
 

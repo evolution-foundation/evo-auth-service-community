@@ -18,12 +18,13 @@ module LicensingSetupConcern
 
     return if Licensing::Activation.try_reactivate(store: store)
 
-    Licensing::Setup.perform(
-      email:       user.email,
-      name:        user.name.presence || user.email,
-      instance_id: store.load_or_create_instance_id,
-      version:     Licensing::Activation::VERSION,
-      client_ip:   request.remote_ip
+    # Fully asynchronous — login must never wait on the licensing server.
+    # SetupJob retries internally and the heartbeat path will pick up later
+    # if it cannot reach the server.
+    Licensing::SetupJob.perform_later(
+      email:     user.email,
+      name:      user.name.presence || user.email,
+      client_ip: request.remote_ip
     )
   rescue StandardError => e
     Rails.logger.warn "[LicensingSetup] Setup attempt failed: #{e.message}"

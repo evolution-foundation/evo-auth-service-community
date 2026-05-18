@@ -111,17 +111,15 @@ class SetupBootstrapService
   end
 
   def activate_licensing(user)
-    store       = Licensing::Store.new
-    instance_id = store.load_or_create_instance_id
-
-    Licensing::Setup.perform(
-      email:       user.email,
-      name:        user.name,
-      instance_id: instance_id,
-      version:     Licensing::Activation::VERSION,
-      client_ip:   @client_ip
+    # Best-effort, fully asynchronous: the bootstrap response must never hang
+    # waiting for the licensing server. The job retries internally and falls
+    # back to the heartbeat-driven reactivation if it cannot reach the server.
+    Licensing::SetupJob.perform_later(
+      email:     user.email,
+      name:      user.name,
+      client_ip: @client_ip
     )
   rescue StandardError => e
-    Rails.logger.warn "[SetupBootstrap] Licensing activation failed (will retry on first login): #{e.message}"
+    Rails.logger.warn "[SetupBootstrap] Failed to enqueue licensing setup: #{e.message}"
   end
 end
