@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+if [ "${DISABLE_HEALTHCHECK:-false}" = "true" ]; then
+  exit 0
+fi
+
+if [ "${SERVICE_ROLE:-web}" = "sidekiq" ]; then
+  for cmdline in /proc/[0-9]*/cmdline; do
+    tr '\0' ' ' < "$cmdline" 2>/dev/null | grep "[s]idekiq" >/dev/null && exit 0
+  done
+
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:${PORT:-3001}/health" >/dev/null || exit 1
