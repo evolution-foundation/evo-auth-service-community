@@ -21,7 +21,12 @@ Rails.application.configure do
 
   # Store uploaded files (see config/storage.yml for options).
   # Use ACTIVE_STORAGE_SERVICE env var or admin UI to select: local, amazon, s3_compatible
-  config.active_storage.service = (GlobalConfigService.load('ACTIVE_STORAGE_SERVICE', ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')) rescue ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')).to_sym
+  config.active_storage.service = begin
+    GlobalConfigService.load('ACTIVE_STORAGE_SERVICE', ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local'))
+  rescue StandardError => e
+    warn "[ActiveStorage] GlobalConfigService unavailable at boot (#{e.message}); falling back to ENV"
+    ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')
+  end.to_sym
 
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true

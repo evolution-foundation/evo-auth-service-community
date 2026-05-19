@@ -15,6 +15,7 @@ amazon:
   bucket: <%= ENV.fetch('S3_BUCKET_NAME', '') %>
 
 # S3 compatible service such as Backblaze B2, DigitalOcean Spaces, Minio, Cloudflare R2
+# Note: DB key is STORAGE_ACCESS_SECRET (internal _SECRET convention); ENV key is STORAGE_SECRET_ACCESS_KEY (legacy name). Intentional — not a typo.
 s3_compatible:
   service: S3
   access_key_id: <%= GlobalConfigService.load('STORAGE_ACCESS_KEY_ID', ENV.fetch('STORAGE_ACCESS_KEY_ID', '')) rescue ENV.fetch('STORAGE_ACCESS_KEY_ID', '') %>

@@ -10,6 +10,8 @@
 # Caveat: S3 credentials are still read at boot from config/storage.yml ERB —
 # changing them in the UI requires a service restart.
 Rails.application.config.after_initialize do
+  next if ActiveStorage::Blob.respond_to?(:_static_service)
+
   ActiveStorage::Blob.class_eval do
     class << self
       alias_method :_static_service, :service
