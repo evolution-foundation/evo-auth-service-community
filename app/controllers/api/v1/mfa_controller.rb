@@ -97,6 +97,7 @@ class Api::V1::MfaController < Api::BaseController
       otp_required_for_login: true,
       mfa_confirmed_at: Time.current
     )
+    TokenValidationService.invalidate_cache_for_user(user)
   end
 
   def render_successful_verification(user, issue_token:)

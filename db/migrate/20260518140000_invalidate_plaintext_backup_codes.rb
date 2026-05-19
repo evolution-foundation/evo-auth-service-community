@@ -7,6 +7,10 @@ class InvalidatePlaintextBackupCodes < ActiveRecord::Migration[7.2]
     # leaving them locked out if they lose their TOTP device.
     # Zeroing the array + clearing mfa_confirmed_at forces them to regenerate
     # on their next MFA setup visit.
+    #
+    # DEPLOY NOTE: this UPDATE acquires row-level locks on all affected rows for
+    # the duration of the transaction. On large deployments run during low-traffic
+    # hours to avoid blocking concurrent login attempts.
     say_with_time 'Invalidating plaintext backup codes (EVO-1104)' do
       # otp_backup_codes is a native PostgreSQL text[] column, so we use
       # unnest() to iterate elements — not jsonb functions.

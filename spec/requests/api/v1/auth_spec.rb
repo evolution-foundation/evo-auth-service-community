@@ -39,6 +39,11 @@ RSpec.describe 'POST /api/v1/auth/login — mfa_setup_incomplete bypass (EVO-110
       instance_double(Licensing::RuntimeContext, active?: true, track_message: nil)
     )
     allow(RuntimeConfig).to receive(:account).and_return(nil)
+
+    store_double = instance_double(Licensing::Store,
+      load_or_create_instance_id: nil,
+      load_runtime_data: nil)
+    allow(Licensing::Store).to receive(:new).and_return(store_double)
   end
 
   let(:login_headers) { { 'Host' => 'localhost' } }
