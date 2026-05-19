@@ -19,6 +19,7 @@ module UserSerializer
       updated_at: user.updated_at,
       ui_settings: user.ui_settings || {},
       mfa_enabled: user.mfa_enabled?,
+      mfa_setup_incomplete: user.mfa_setup_incomplete?,
       display_name: user.display_name,
       available_name: user.available_name,
       availability: user.availability,

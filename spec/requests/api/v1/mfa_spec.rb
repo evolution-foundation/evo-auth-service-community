@@ -20,7 +20,7 @@ RSpec.describe 'MFA backup codes endpoints', type: :request do
   end
 
   let(:access_token) { AccessToken.create!(owner: user, name: 'mfa-spec-token', scopes: 'default') }
-  let(:auth_headers) { { 'api_access_token' => access_token.token } }
+  let(:auth_headers) { { 'api_access_token' => access_token.token, 'Host' => 'localhost' } }
 
   before do
     allow(Licensing::Runtime).to receive(:context).and_return(
@@ -49,7 +49,7 @@ RSpec.describe 'MFA backup codes endpoints', type: :request do
     it 'stores codes hashed in the DB' do
       post '/api/v1/mfa/regenerate_backup_codes', headers: auth_headers
       user.reload
-      expect(user.otp_backup_codes).to all(start_with('$2a$'))
+      expect(user.otp_backup_codes).to all(match(/\A\$2[aby]\$/))
     end
 
     it 'invalidates previous codes when called twice' do
@@ -115,6 +115,21 @@ RSpec.describe 'MFA backup codes endpoints', type: :request do
     it 'rejects an unknown code with 422' do
       post '/api/v1/mfa/verify_totp', params: { code: 'XXXXXXXX' }, headers: auth_headers
       expect(response).to have_http_status(:unprocessable_entity)
+    end
+  end
+
+  describe 'POST /api/v1/mfa/verify_totp?setup=true — token cache invalidation (EVO-1104)' do
+    before do
+      User.where(id: user.id).update_all(otp_secret: ROTP::Base32.random)
+      user.reload
+    end
+
+    it 'invalidates the TokenValidationService cache after MFA setup completes' do
+      totp_code = ROTP::TOTP.new(user.otp_secret).now
+
+      expect(TokenValidationService).to receive(:invalidate_cache_for_user).with(user)
+
+      post '/api/v1/mfa/verify_totp', params: { code: totp_code, setup: true }, headers: auth_headers
     end
   end
 end

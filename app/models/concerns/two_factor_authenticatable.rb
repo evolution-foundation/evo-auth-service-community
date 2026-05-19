@@ -88,6 +88,7 @@ module TwoFactorAuthenticatable
     matched_hash = nil
 
     otp_backup_codes.each do |h|
+      # Guard against pre-EVO-991 plaintext entries stored before BCrypt hashing was introduced.
       next unless h.start_with?('$2a$', '$2b$', '$2y$')
       matched_hash = h if BCrypt::Password.new(h) == normalized
     end
@@ -213,6 +214,10 @@ module TwoFactorAuthenticatable
   # Compatibility methods for auth service
   def mfa_enabled?
     two_factor_enabled? && mfa_confirmed_at.present?
+  end
+
+  def mfa_setup_incomplete?
+    otp_required_for_login? && mfa_confirmed_at.blank?
   end
 
   def totp_enabled?
