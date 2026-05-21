@@ -249,7 +249,20 @@ class InitSchema < ActiveRecord::Migration[7.1]
   def add_fk_if_missing(from_table, to_table, column)
     return if foreign_key_exists?(from_table, to_table, column: column)
 
+    if column_type_incompatible?(from_table, column, to_table)
+      say "Skipping FK #{from_table}.#{column} → #{to_table}.id: type mismatch, integrity must be enforced at application level"
+      return
+    end
+
     add_foreign_key from_table, to_table, column: column
+  end
+
+  def column_type_incompatible?(from_table, column, to_table)
+    from_col = connection.columns(from_table).find { |c| c.name == column.to_s }
+    to_pk    = connection.columns(to_table).find   { |c| c.name == "id" }
+    return false unless from_col && to_pk
+
+    from_col.type != to_pk.type
   end
 
   def down
