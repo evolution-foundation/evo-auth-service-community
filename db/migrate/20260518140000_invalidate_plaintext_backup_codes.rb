@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class InvalidatePlaintextBackupCodes < ActiveRecord::Migration[7.2]
+class InvalidatePlaintextBackupCodes < ActiveRecord::Migration[7.1]
   def up
     # Users who set up TOTP before EVO-991 (PR #16) have plaintext backup codes.
     # Those codes are silently ignored by check_backup_code's BCrypt filter,
