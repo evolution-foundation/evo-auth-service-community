@@ -56,7 +56,7 @@ RSpec.describe EvoExtensionPoints do
 
   describe 'per-EP VERSION constants' do
     it 'exposes a VERSION on every sub-module and no aggregate constant' do
-      expect(described_class::AuthBridge::VERSION).to eq('1.0.0')
+      expect(described_class::AuthBridge::VERSION).to eq('1.1.0')
       expect(described_class::TokenClaims::VERSION).to eq('1.0.0')
       expect(described_class::LoginGate::VERSION).to eq('1.0.0')
       expect(described_class.const_defined?(:EXTENSION_POINTS_VERSION)).to be(false)
@@ -120,6 +120,42 @@ RSpec.describe EvoExtensionPoints do
       EvoExtensionPoints.replace(:auth_bridge_sign_out) { |user| seen << user }
       described_class.sign_out(:user_42)
       expect(seen).to eq([:user_42])
+    end
+
+    # ------- v1.1.0 additions -------
+
+    it 'find_user_by_email returns nil when no override is registered and no row matches' do
+      expect(described_class.find_user_by_email('missing@example.test')).to be_nil
+    end
+
+    it 'honors a replace override on find_user_by_email' do
+      sentinel = Object.new
+      EvoExtensionPoints.replace(:auth_bridge_find_user_by_email) { |_email| sentinel }
+      expect(described_class.find_user_by_email('any@example.test')).to equal(sentinel)
+    end
+
+    it 'sign_in_request forwards to the Warden proxy on the request env (default impl)' do
+      user = Object.new
+      warden = double('warden')
+      expect(warden).to receive(:set_user).with(user, scope: :user)
+      request = double('request', env: { 'warden' => warden })
+
+      described_class.sign_in_request(user, request)
+      expect(::Current.user).to equal(user)
+    end
+
+    it 'sign_in_request is a no-op on warden when the request has none (still sets Current.user)' do
+      user = Object.new
+      request = double('request', env: {})
+      expect { described_class.sign_in_request(user, request) }.not_to raise_error
+      expect(::Current.user).to equal(user)
+    end
+
+    it 'honors a replace override on sign_in_request' do
+      seen = []
+      EvoExtensionPoints.replace(:auth_bridge_sign_in_request) { |user, request| seen << [user, request] }
+      described_class.sign_in_request(:user_42, :req_stub)
+      expect(seen).to eq([[:user_42, :req_stub]])
     end
   end
 
