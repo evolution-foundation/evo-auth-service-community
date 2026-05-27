@@ -119,9 +119,7 @@ EvoExtensionPoints::AuthBridge.sign_out(user)                            # => us
 ```
 
 `find_user_by_email` lets a consumer look up an existing user by email
-without touching `User` directly — needed when a flow attaches a
-side-channel association (e.g. a new tenant membership) to a user who
-already exists. Returns `nil` when no row matches.
+without touching `User` directly. Returns `nil` when no row matches.
 
 `sign_in_request` binds `user` to the request's Warden proxy so the next
 request — typically after a redirect — sees them as authenticated.
@@ -300,11 +298,11 @@ document itself is unversioned.
 - Registration API `1.0.0` — Initial: `replace(name) { ... }` +
   `reset(name)`.
 - `auth_bridge` `1.0.0` — Initial contract.
-- `auth_bridge` `1.1.0` — Additive: `find_user_by_email(email)` and
-  `sign_in_request(user, request)` so consumers can attach side-channel
-  associations without touching `User`, and can persist authentication
-  across a redirect (e.g. token-based invite-accept flows). New
-  registration keys: `:auth_bridge_find_user_by_email` and
+- `auth_bridge` `1.1.0` — Additive: `find_user_by_email(email)` for
+  email-based user lookup without touching `User`, and
+  `sign_in_request(user, request)` to bind a user to the request's
+  Warden proxy so authentication survives a redirect. New registration
+  keys: `:auth_bridge_find_user_by_email` and
   `:auth_bridge_sign_in_request`.
 - `token_claims` `1.0.0` — Initial contract.
 - `login_gate` `1.0.0` — Initial contract.

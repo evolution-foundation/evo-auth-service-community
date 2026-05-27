@@ -29,11 +29,9 @@ module EvoExtensionPoints
         end
       end
 
-      # Lookup by email, returning the User or nil. Added in v1.1.0 to
-      # support flows that need to attach a side-channel association
-      # (e.g. a new tenant membership) to a user who already exists in
-      # the auth-service — without forcing the consumer to touch `User`
-      # directly. Default delegates to `User.find_by(email:)`.
+      # Lookup by email, returning the User or nil. Added in v1.1.0 so
+      # consumers can resolve an existing user without depending on
+      # `::User` directly. Default delegates to `User.find_by(email:)`.
       def find_user_by_email(email)
         if (impl = EvoExtensionPoints.impl_for(:auth_bridge_find_user_by_email))
           impl.call(email)
