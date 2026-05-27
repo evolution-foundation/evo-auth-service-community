@@ -31,6 +31,12 @@ class InitSchema < ActiveRecord::Migration[7.1]
     enable_extension "plpgsql"
     enable_extension "uuid-ossp"
 
+    # Drop foreign-key stub `users(id integer)` created by other services
+    # (eg. evo-processor SQLAlchemy create_all) before this migration runs.
+    # Without this, `create_table :users, if_not_exists: true` below silently
+    # skips and the real schema is never created — breaking authentication.
+    drop_stub_users_table_if_present
+
     # Access tokens table (managed by auth service)
     create_table :access_tokens, id: :uuid, default: -> { "gen_random_uuid()" }, if_not_exists: true do |t|
       t.string :name, limit: 255, null: false
@@ -245,6 +251,26 @@ class InitSchema < ActiveRecord::Migration[7.1]
   end
 
   private
+
+  # Detect and remove a stub `users(id integer)` table created by another
+  # service (eg. evo-processor `Base.metadata.create_all`) before the auth
+  # service got to run. The stub has only an integer `id` column and no
+  # foreign keys pointing into it — distinct from the real auth `users`
+  # which has dozens of columns and a UUID primary key.
+  def drop_stub_users_table_if_present
+    return unless connection.table_exists?(:users)
+
+    users_columns = connection.columns(:users).map(&:name)
+    real_schema_present = (users_columns & %w[encrypted_password mfa_method pubsub_token]).any?
+    return if real_schema_present
+
+    say_with_time "Dropping foreign-key stub users table created by another service" do
+      # Drop with CASCADE to also remove any FK constraints other services
+      # added pointing into the stub. The auth service will recreate the
+      # table with the correct schema in the create_table call below.
+      execute "DROP TABLE users CASCADE"
+    end
+  end
 
   def add_fk_if_missing(from_table, to_table, column)
     return if foreign_key_exists?(from_table, to_table, column: column)
