@@ -11,7 +11,9 @@
 module EvoExtensionPoints
   KNOWN_KEYS = %i[
     auth_bridge_create_user
+    auth_bridge_find_user_by_email
     auth_bridge_sign_in_user
+    auth_bridge_sign_in_request
     auth_bridge_current_user
     auth_bridge_sign_out
     token_claims
@@ -29,12 +31,14 @@ module EvoExtensionPoints
   #   { || } / { }                        => 0
   #   { |user, **context| }               => 1
   EXPECTED_ARITY = {
-    auth_bridge_create_user: 1,  # |email:, password:, attrs: {}|
-    auth_bridge_sign_in_user: 1, # |user|
-    auth_bridge_current_user: 0, # ||
-    auth_bridge_sign_out: 1,     # |user|
-    token_claims: 1,             # |user|
-    login_gate: 1                # |user, **context|  (proc arity = 1)
+    auth_bridge_create_user: 1,         # |email:, password:, attrs: {}|
+    auth_bridge_find_user_by_email: 1,  # |email|
+    auth_bridge_sign_in_user: 1,        # |user|
+    auth_bridge_sign_in_request: 2,     # |user, request|
+    auth_bridge_current_user: 0,        # ||
+    auth_bridge_sign_out: 1,            # |user|
+    token_claims: 1,                    # |user|
+    login_gate: 1                       # |user, **context|  (proc arity = 1)
   }.freeze
 
   class << self
