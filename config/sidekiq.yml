@@ -6,6 +6,7 @@
   - default
   - mailers
   - webhooks
+  - licensing
   - low_priority
 
 # Redis configuration
