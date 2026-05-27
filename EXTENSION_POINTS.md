@@ -55,9 +55,11 @@ override goes through one method:
 EvoExtensionPoints.replace(name) { |*args, **kwargs| ... }
 ```
 
-**Accepted `name` values (v1.0.0):** `:auth_bridge_create_user`,
-`:auth_bridge_sign_in_user`, `:auth_bridge_current_user`,
-`:auth_bridge_sign_out`, `:token_claims`, `:login_gate`. Adding a new
+**Accepted `name` values:** `:auth_bridge_create_user`,
+`:auth_bridge_find_user_by_email` (v1.1.0+),
+`:auth_bridge_sign_in_user`, `:auth_bridge_sign_in_request` (v1.1.0+),
+`:auth_bridge_current_user`, `:auth_bridge_sign_out`, `:token_claims`,
+`:login_gate`. Adding a new
 accepted name is a minor bump; removing or renaming an accepted name is
 a major bump.
 
@@ -102,17 +104,28 @@ independently.
 
 ### 1. `auth_bridge`
 
-**Version:** `1.0.0`
+**Version:** `1.1.0`
 **Default:** delegates to the in-tree Devise / devise_token_auth stack;
 `current_user` returns the user resolved by `devise_token_auth` from the
 current request, or `nil` outside a request scope.
 
 ```ruby
 EvoExtensionPoints::AuthBridge.create_user(email:, password:, attrs: {}) # => User
+EvoExtensionPoints::AuthBridge.find_user_by_email(email)                 # => User | nil   (v1.1.0+)
 EvoExtensionPoints::AuthBridge.sign_in_user(user)                        # => user signed in for the current request
+EvoExtensionPoints::AuthBridge.sign_in_request(user, request)            # => user bound to request (Warden); v1.1.0+
 EvoExtensionPoints::AuthBridge.current_user                              # => User | nil
 EvoExtensionPoints::AuthBridge.sign_out(user)                            # => user signed out
 ```
+
+`find_user_by_email` lets a consumer look up an existing user by email
+without touching `User` directly. Returns `nil` when no row matches.
+
+`sign_in_request` binds `user` to the request's Warden proxy so the next
+request — typically after a redirect — sees them as authenticated.
+`sign_in_user` only carries the user through `ActiveSupport::Current`
+inside the live request and does not survive a redirect; flows that
+need post-redirect authentication MUST use `sign_in_request` instead.
 
 Override:
 
@@ -121,16 +134,18 @@ EvoExtensionPoints.replace(:auth_bridge_create_user) do |email:, password:, attr
   MyConsumer::Accounts.create_user(email: email, password: password, attrs: attrs)
 end
 
-EvoExtensionPoints.replace(:auth_bridge_sign_in_user)  { |user| MyConsumer::Sessions.sign_in(user) }
-EvoExtensionPoints.replace(:auth_bridge_current_user)  { MyConsumer::Current.user }
-EvoExtensionPoints.replace(:auth_bridge_sign_out)      { |user| MyConsumer::Sessions.sign_out(user) }
+EvoExtensionPoints.replace(:auth_bridge_find_user_by_email) { |email| MyConsumer::Users.find_by_email(email) }
+EvoExtensionPoints.replace(:auth_bridge_sign_in_user)       { |user| MyConsumer::Sessions.sign_in(user) }
+EvoExtensionPoints.replace(:auth_bridge_sign_in_request)    { |user, request| MyConsumer::Sessions.bind(user, request) }
+EvoExtensionPoints.replace(:auth_bridge_current_user)       { MyConsumer::Current.user }
+EvoExtensionPoints.replace(:auth_bridge_sign_out)           { |user| MyConsumer::Sessions.sign_out(user) }
 ```
 
-**Breaking-change policy:** renaming `create_user`, `sign_in_user`,
-`current_user` or `sign_out`, changing required keyword arguments, or
-changing the return type of `current_user` from `User | nil` is a major
-bump. Adding an optional keyword argument to `create_user` or sibling
-helpers is a minor bump.
+**Breaking-change policy:** renaming `create_user`, `find_user_by_email`,
+`sign_in_user`, `sign_in_request`, `current_user` or `sign_out`,
+changing required keyword arguments, or changing the return type of
+`current_user` from `User | nil` is a major bump. Adding an optional
+keyword argument to `create_user` or sibling helpers is a minor bump.
 
 ### 2. `token_claims`
 
@@ -283,5 +298,11 @@ document itself is unversioned.
 - Registration API `1.0.0` — Initial: `replace(name) { ... }` +
   `reset(name)`.
 - `auth_bridge` `1.0.0` — Initial contract.
+- `auth_bridge` `1.1.0` — Additive: `find_user_by_email(email)` for
+  email-based user lookup without touching `User`, and
+  `sign_in_request(user, request)` to bind a user to the request's
+  Warden proxy so authentication survives a redirect. New registration
+  keys: `:auth_bridge_find_user_by_email` and
+  `:auth_bridge_sign_in_request`.
 - `token_claims` `1.0.0` — Initial contract.
 - `login_gate` `1.0.0` — Initial contract.

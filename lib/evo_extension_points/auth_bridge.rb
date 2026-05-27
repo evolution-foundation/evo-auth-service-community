@@ -18,7 +18,7 @@ module EvoExtensionPoints
   # EvoExtensionPoints.replace(:auth_bridge_*). See EXTENSION_POINTS.md
   # at the repository root.
   module AuthBridge
-    VERSION = '1.0.0'
+    VERSION = '1.1.0'
 
     class << self
       def create_user(email:, password:, attrs: {})
@@ -29,11 +29,37 @@ module EvoExtensionPoints
         end
       end
 
+      # Lookup by email, returning the User or nil. Added in v1.1.0 so
+      # consumers can resolve an existing user without depending on
+      # `::User` directly. Default delegates to `User.find_by(email:)`.
+      def find_user_by_email(email)
+        if (impl = EvoExtensionPoints.impl_for(:auth_bridge_find_user_by_email))
+          impl.call(email)
+        else
+          User.find_by(email: email)
+        end
+      end
+
       def sign_in_user(user)
         if (impl = EvoExtensionPoints.impl_for(:auth_bridge_sign_in_user))
           impl.call(user)
         else
           default_sign_in_user(user)
+        end
+      end
+
+      # Bind `user` to the current request so subsequent requests see them
+      # as authenticated. Added in v1.1.0 because `sign_in_user(user)` has
+      # no request scope and therefore cannot persist a session across the
+      # post-redirect boundary. Default uses the Warden proxy on
+      # `request.env['warden']` (Devise / devise_token_auth populate it);
+      # consumers that ship their own session layer override the
+      # `:auth_bridge_sign_in_request` key.
+      def sign_in_request(user, request)
+        if (impl = EvoExtensionPoints.impl_for(:auth_bridge_sign_in_request))
+          impl.call(user, request)
+        else
+          default_sign_in_request(user, request)
         end
       end
 
@@ -65,6 +91,15 @@ module EvoExtensionPoints
         return user unless defined?(::Current)
 
         ::Current.user = user if ::Current.respond_to?(:user=)
+        user
+      end
+
+      def default_sign_in_request(user, request)
+        warden = request&.env&.[]("warden")
+        if warden.respond_to?(:set_user)
+          warden.set_user(user, scope: :user)
+        end
+        default_sign_in_user(user)
         user
       end
 
