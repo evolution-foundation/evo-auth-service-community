@@ -19,6 +19,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - N/A
 
+## [v1.0.0-rc5] - 2026-05-27
+
+Hardening release for fresh-install scenarios. Three critical fixes from the multimport incident (2026-05-27) make EvoAuth survive cold starts where multiple services race against the shared database and the licensing server is unreachable. The auth-service no longer 500s when a sibling service has pre-created a stub `users` table, no longer blocks any request behind a licensing gate, and now actually processes its licensing Sidekiq queue so `SetupJob` / `HeartbeatJob` complete instead of being silently parked. Also ships AuthBridge 1.1.0 (extension point for Enterprise email lookup + sign-in) and a small batch of migration compatibility fixes.
+
+### Highlights
+
+- **Multimport / cold-start hardening (3 fixes)** — fresh installs that boot alongside other services sharing the same Postgres no longer break authentication. Stub `users(id integer)` tables created by sibling services (e.g. `evo-processor` SQLAlchemy `create_all`) are now detected and dropped before `InitSchema` runs, so the canonical schema (uuid PK, `mfa_method`, `encrypted_password`, `oauth_access_tokens`, …) is created intact. Combined with the SetupGate and Sidekiq queue fixes below, the auth-service boots and serves traffic cleanly in mixed-service environments even when the licensing server is temporarily unreachable.
+- **Licensing never blocks a request** — `SetupGate` is downgraded from a hard 503 gate to a pure observability hook. Self-hosted Community installs no longer go down when the licensing server is unreachable — license state becomes telemetry, not an enforcement layer.
+- **AuthBridge 1.1.0** — new strict extension points (`find_user_by_email`, `sign_in_request`) for Enterprise builds, contract-versioned via the existing `EXTENSION_POINTS.md` flow.
+
+### Added
+
+- **AuthBridge 1.1.0 — `find_user_by_email` + `sign_in_request`** (`e7c31e5`) — two new strict extension points exposed by `AuthBridge`. `find_user_by_email` lets an Enterprise implementation resolve a user from an alternate identity store (e.g. SSO directory) before the local lookup; `sign_in_request` lets it inject custom logic around request-time sign-in (audit, MFA elevation, just-in-time provisioning). Both follow the existing duck-typed contract with explicit error if the implementation returns an invalid shape. Documented in `EXTENSION_POINTS.md` (consumer-specific examples scrubbed in `1eed63e`).
+
+### Changed
+
+- **Docs — `EXTENSION_POINTS.md` scrub** (`1eed63e`) — removed consumer-specific examples from the AuthBridge 1.1.0 notes so the contract document stays generic and stable across Enterprise consumers.
+
+### Fixed
+
+- **Multimport stub `users` table drop before `InitSchema`** (`a962b3b`) — on fresh installs where another service (typically `evo-processor` via SQLAlchemy `create_all`) wins the race to Postgres, a minimal `users(id integer)` stub is created with the wrong primary-key type and no auth columns. `InitSchema` then silently aliased onto that stub, leaving the database without `oauth_access_tokens`, `mfa_method`, `encrypted_password`, etc. — every authentication path 500'd on `relation "oauth_access_tokens" does not exist`. The migration now detects the stub (integer-PK `users` with no auth columns) and drops it before `InitSchema` runs, so the canonical schema is created intact. Idempotent — does nothing on installations whose `users` table already matches the canonical shape.
+- **`SetupGate` is observability, never enforcement** (`221097c`) — the licensing setup gate previously returned `503 SETUP_REQUIRED` on every non-bypass route when license context was inactive. On self-hosted Community this turned any licensing-server outage into a full auth outage. `SetupGate` now (a) attempts to rehydrate license context if inactive, (b) emits the observability signal regardless of the result, and (c) **always forwards the request**. License state becomes telemetry; no request is blocked by it.
+- **Sidekiq licensing queue actually processed** (`6219e38`) — `licensing` was missing from `config/sidekiq.yml`, so `SetupJob` and `HeartbeatJob` were enqueued and silently parked forever. Result: `api_key` was never persisted after setup, and heartbeat retries never fired. The queue is now registered and processed alongside the default queues.
+- **`add_fk_if_missing` type-aware for legacy integer PKs** (`39c92b3`, #36) — the FK helper now inspects the referenced PK type and matches the column type accordingly, so installations migrating from a historical integer-PK `users` table no longer fail with type-mismatch errors when adding foreign keys.
+- **ActiveRecord migration version downgrade for compatibility** (`c725a96`, #37) — migration version downgraded to 7.1 to match the Rails version actually in use, preventing boot errors on `db:migrate` against environments still on 7.1.
+
+### Notes for upgrade
+
+- **Licensing no longer blocks any endpoint.** If your operational runbooks relied on the auth-service returning `503 SETUP_REQUIRED` while licensing was unreachable, update them — that signal is now an observability event, not a request-blocking response. License state still surfaces via logs/metrics for monitoring.
+- **Fresh installs in mixed-service environments now boot cleanly** even when multiple services race against the shared Postgres. No action required for new installs.
+- **If you are upgrading from an installation broken by the rc4 multimport race** (typical symptom: `relation "oauth_access_tokens" does not exist` on every login attempt; the `users` table exists but its PK is `integer` instead of `uuid` and the auth columns are missing), drop the cached stub `users` table manually before running `db:migrate` on rc5 — the migration's auto-detect handles the common shape, but if your stub diverges you may need to drop it explicitly. Back up first.
+- **Sidekiq operators**: the `licensing` queue is now active. Ensure your Sidekiq worker process is started with the default queue list (or explicitly includes `licensing`) so `SetupJob` / `HeartbeatJob` are picked up.
+- **AuthBridge consumers (Enterprise)**: extension contract bumped to 1.1.0 — see `EXTENSION_POINTS.md`. 1.0.x consumers continue to work; new hooks are opt-in.
+
 ## [v1.0.0-rc4] - 2026-05-25
 
 MFA hardening release focused on plaintext backup-code remediation, plus licensing resilience, onboarding survey delivery, and runtime storage configuration. The post-EVO-991 cleanup forces re-setup for any user whose backup-code array still contains legacy plaintext entries; the licensing service now operates fail-open during outages instead of blocking logins; and Admin UI storage changes (S3/GCS/local) apply at runtime without restart.
@@ -350,3 +384,10 @@ Thanks to all contributors who made this release possible:
 ---
 
 **Note**: This changelog follows the [Keep a Changelog](https://keepachangelog.com/) format. Each release includes detailed information about new features, changes, deprecations, removals, fixes, and security updates.
+
+[Unreleased]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc5...HEAD
+[v1.0.0-rc5]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc4...v1.0.0-rc5
+[v1.0.0-rc4]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc3...v1.0.0-rc4
+[v1.0.0-rc3]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc2...v1.0.0-rc3
+[v1.0.0-rc2]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc1...v1.0.0-rc2
+[v1.0.0-rc1]: https://github.com/evolution-foundation/evo-auth-service-community/releases/tag/v1.0.0-rc1
