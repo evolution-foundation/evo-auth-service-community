@@ -89,8 +89,12 @@ module Mail
     end
 
     def send_via_bms_api(payload, bms_api_key)
-      bms_api_url = GlobalConfigService.load('BMS_API_URL', 'https://bms-api.bri.us/services/send-email')
-      uri = URI(bms_api_url)
+      # BMS_API_URL é a BASE (sem path) — mesmo contrato do gem enterprise
+      # (BmsRegisterLeadJob:32 faz base + path). Cada consumidor anexa o seu
+      # endpoint; o mailer usa /services/send-email. Sem isso o Auth bate na
+      # URL cravada (bri.us) e dá 401.
+      base = GlobalConfigService.load('BMS_API_URL', 'https://bms-api.bri.us').to_s.sub(%r{/\z}, '')
+      uri = URI("#{base}/services/send-email")
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = true
       http.read_timeout = 30
