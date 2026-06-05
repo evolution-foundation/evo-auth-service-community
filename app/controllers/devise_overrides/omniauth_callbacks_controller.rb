@@ -23,6 +23,14 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     # return redirect_to login_page_url(error: 'no-account-found') unless account_signup_allowed? # Not needed for evo-auth-service
     # return redirect_to login_page_url(error: 'business-account-only') unless validate_signup_email_is_business_domain? # Not needed for evo-auth-service
 
+    # O provedor OAuth já validou o e-mail — usuário social nasce confirmado
+    # (não passa pela barreira de confirmação por link). skip_confirmation! só
+    # marca em memória, então persistimos explicitamente para que confirmed_at
+    # fique gravado mesmo que set_reset_password_token mude o caminho de save.
+    if confirmable_enabled? && !@resource.confirmed?
+      @resource.skip_confirmation!
+      @resource.save(validate: false)
+    end
     create_account_for_user
     token = @resource.send(:set_reset_password_token)
     frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
@@ -58,8 +66,11 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
   # end
 
   def create_account_for_user
-    admin_role = Role.find_by!(key: 'administrator')
-    UserRole.assign_role_to_user(@resource, admin_role)
+    # Usuário que entra por social NÃO deve virar admin automaticamente — recebe
+    # o role básico `account_owner` (mesmo padrão do cadastro normal). O role
+    # 'administrator' nem existe no seed deste serviço (causaria erro).
+    role = Role.find_by(key: 'account_owner') || Role.find_by!(key: 'agent')
+    UserRole.assign_role_to_user(@resource, role)
   end
 
   def default_devise_mapping
