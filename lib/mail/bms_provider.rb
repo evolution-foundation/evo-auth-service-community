@@ -89,7 +89,8 @@ module Mail
     end
 
     def send_via_bms_api(payload, bms_api_key)
-      uri = URI('https://bms-api.bri.us/services/send-email')
+      bms_api_url = GlobalConfigService.load('BMS_API_URL', 'https://bms-api.bri.us/services/send-email')
+      uri = URI(bms_api_url)
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = true
       http.read_timeout = 30
