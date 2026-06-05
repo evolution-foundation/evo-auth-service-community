@@ -3,16 +3,17 @@
 class SetupBootstrapService
   class AlreadyBootstrappedError < StandardError; end
 
-  def self.call(first_name:, last_name:, email:, password:, client_ip: nil)
-    new(first_name:, last_name:, email:, password:, client_ip:).call
+  def self.call(first_name:, last_name:, email:, password:, client_ip: nil, extension_payload: {})
+    new(first_name:, last_name:, email:, password:, client_ip:, extension_payload:).call
   end
 
-  def initialize(first_name:, last_name:, email:, password:, client_ip: nil)
-    @first_name = first_name
-    @last_name  = last_name
-    @email      = email
-    @password   = password
-    @client_ip  = client_ip
+  def initialize(first_name:, last_name:, email:, password:, client_ip: nil, extension_payload: {})
+    @first_name        = first_name
+    @last_name         = last_name
+    @email             = email
+    @password          = password
+    @client_ip         = client_ip
+    @extension_payload = extension_payload || {}
   end
 
   def call
@@ -26,6 +27,7 @@ class SetupBootstrapService
       ensure_account_config
       user      = create_user
       assign_global_role(user)
+      EvoExtensionPoints::AfterBootstrap.run(user: user, payload: @extension_payload)
 
       survey_token = generate_survey_token(user)
       { user: user, survey_token: survey_token }
