@@ -3,15 +3,28 @@ class Api::V1::AuthController < Api::BaseController
   include AuthHelper
   include LicensingSetupConcern
 
-  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation]
+  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation]
 
   # Login
   def login
     # Tenta encontrar o usuário pelo email
     email = params[:email]&.strip&.downcase
     user = User.from_email(email)
-    
+
     if user&.valid_password?(params[:password])
+      # Barreira de confirmação de e-mail: OPT-IN via REQUIRE_EMAIL_CONFIRMATION.
+      # Default OFF para não quebrar instalações existentes; o nosso docker liga.
+      # Quando ON, usuário não-confirmado não acessa (retorna code próprio p/ o
+      # front oferecer reenvio).
+      if require_email_confirmation? && !user.active_for_authentication?
+        return error_response(
+          'EMAIL_NOT_CONFIRMED',
+          'Confirme seu e-mail para acessar.',
+          details: [{ email: user.email }],
+          status: :forbidden
+        )
+      end
+
       if user.mfa_enabled?
         render_mfa_required(user)
       else
@@ -20,6 +33,18 @@ class Api::V1::AuthController < Api::BaseController
     else
       render_invalid_credentials
     end
+  end
+
+  # Reenvia o e-mail de confirmação. PÚBLICO (o user não-confirmado não loga, então
+  # não pode usar o endpoint autenticado de profiles). Resposta genérica anti-enumeração.
+  def resend_confirmation
+    email = params[:email]&.strip&.downcase
+    user = User.from_email(email) if email.present?
+    user.send_confirmation_instructions if user && !user.confirmed?
+    success_response(
+      data: {},
+      message: 'Se o e-mail existir e não estiver confirmado, enviamos um novo link.'
+    )
   end
 
   def logout

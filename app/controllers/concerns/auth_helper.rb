@@ -1,8 +1,15 @@
 module AuthHelper
   extend ActiveSupport::Concern
-  
+
   included do
     include AccountSerializerHelper if defined?(AccountSerializerHelper)
+  end
+
+  # Feature flag (OPT-IN): exigir confirmação de e-mail no cadastro/login.
+  # Default OFF p/ não introduzir breaking change em instalações existentes.
+  # Ative com REQUIRE_EMAIL_CONFIRMATION=true (nosso docker liga; dev fica off).
+  def require_email_confirmation?
+    ActiveModel::Type::Boolean.new.cast(ENV.fetch('REQUIRE_EMAIL_CONFIRMATION', false))
   end
 
   OAUTH_CONFIG = {
@@ -462,6 +469,16 @@ module AuthHelper
       end
       
       if @user.save
+        # Só envia o e-mail de confirmação quando a barreira está LIGADA
+        # (REQUIRE_EMAIL_CONFIRMATION). Sem a flag, o cadastro segue como antes
+        # (sem exigir confirmação) — evita breaking change.
+        if require_email_confirmation? && !@user.confirmed?
+          @user.send_confirmation_instructions(
+            client_config: params[:config_name],
+            redirect_url: params[:confirm_success_url] ||
+              "#{ENV.fetch('FRONTEND_URL', 'http://localhost:5173')}/verificar-email"
+          )
+        end
         success_response(
           data: { user: UserSerializer.full(@user) },
           message: 'User created successfully',

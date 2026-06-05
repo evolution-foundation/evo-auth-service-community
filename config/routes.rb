@@ -55,6 +55,7 @@ Rails.application.routes.draw do
           post :forgot_password
           post :reset_password
           post :confirmation
+          post :resend_confirmation
         end
       end
 
