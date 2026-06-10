@@ -19,7 +19,7 @@ class Api::V1::AccountController < Api::BaseController
 
     allowed = %w[name domain support_email locale settings custom_attributes]
     updates = account_params.to_h.slice(*allowed)
-    RuntimeConfig.set('account', account.merge(updates))
+    RuntimeConfig.set('account', deep_merge_account(account, updates))
 
     updated = RuntimeConfig.account
     success_response(data: updated.merge('role' => current_user&.role_data), message: 'Account updated successfully')
@@ -32,13 +32,35 @@ class Api::V1::AccountController < Api::BaseController
                                     settings: {}, custom_attributes: {})
   end
 
-  # EVO-1551: only admins may flip the contact-PII mask. Without this, an agent
-  # could PATCH /account directly via curl and disable masking even though the
-  # UI toggle is hidden for them.
+  # Hash#merge is shallow — sending `settings: { foo: 1 }` would wipe every
+  # other key under `settings`. Deep-merge nested hash keys so partial PATCHes
+  # preserve sibling keys (e.g. mask_contact_pii stays put when only an
+  # unrelated setting is updated).
+  def deep_merge_account(account, updates)
+    account.merge(updates) do |key, old_val, new_val|
+      if %w[settings custom_attributes].include?(key.to_s) && old_val.is_a?(Hash) && new_val.is_a?(Hash)
+        old_val.deep_merge(new_val)
+      else
+        new_val
+      end
+    end
+  end
+
+  # EVO-1551: only admins may flip the contact-PII mask. Check the EFFECTIVE
+  # change (current vs incoming) instead of mere key presence — otherwise an
+  # agent could PATCH `{ settings: { other_key: "x" } }` and rely on the (now
+  # fixed) shallow merge to wipe the flag without ever naming it.
   def enforce_admin_for_mask_pii_change
     incoming_settings = params.dig(:account, :settings)
     return unless incoming_settings.is_a?(ActionController::Parameters) || incoming_settings.is_a?(Hash)
-    return unless incoming_settings.to_h.key?(PII_MASK_SETTING_KEY)
+    # `key?` works on both ActionController::Parameters and Hash; avoid `to_h`
+    # here because params are not yet permitted in a before_action and that
+    # would raise UnfilteredParameters.
+    return unless incoming_settings.key?(PII_MASK_SETTING_KEY)
+
+    current_value = RuntimeConfig.account&.dig('settings', PII_MASK_SETTING_KEY)
+    next_value = incoming_settings[PII_MASK_SETTING_KEY]
+    return if current_value == next_value
 
     return if current_user_admin?
 

@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- N/A
+- **EVO-1551 (round 2)** — fecha dois bypasses do mascaramento de PII de contato no `PATCH /api/v1/account`. (1) `enforce_admin_for_mask_pii_change` agora checa **mudança efetiva** (current vs incoming) em vez de mera presença da chave — agent não consegue mais derrubar `mask_contact_pii` mandando um body sem a chave. (2) `update` passa a fazer deep-merge em `settings` e `custom_attributes`; PATCH parcial deixou de apagar chaves irmãs (bug genérico de perda de dados). Specs novos em `spec/requests/api/v1/account_spec.rb` cobrem ambos os caminhos.
 
 ## [v1.0.0-rc5] - 2026-05-27
 
