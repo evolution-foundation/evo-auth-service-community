@@ -365,6 +365,17 @@ class ResourceActionsConfig
       }
     },
 
+    message_templates: {
+      name: 'Message Templates',
+      description: 'Global (channel-independent) message templates',
+      actions: {
+        read: { name: 'View', description: 'View global message templates' },
+        create: { name: 'Create', description: 'Create global message templates' },
+        update: { name: 'Update', description: 'Update global message templates' },
+        delete: { name: 'Delete', description: 'Delete global message templates' }
+      }
+    },
+
     products: {
       name: 'Products',
       description: 'Product catalog for AI agent recommendations and pipeline sales',

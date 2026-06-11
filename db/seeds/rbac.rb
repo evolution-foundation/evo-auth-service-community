@@ -142,6 +142,7 @@ agent_permissions = [
   'team_members.read', 'team_members.create', 'team_members.update', 'team_members.delete',
   'labels.read', 'labels.create', 'labels.update', 'labels.delete',
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
+  'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
   'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
   'inboxes.read',
   'channels.read',
