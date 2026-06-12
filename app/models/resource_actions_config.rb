@@ -320,6 +320,17 @@ class ResourceActionsConfig
       }
     },
 
+    message_templates: {
+      name: 'Message Templates',
+      description: 'Global and channel-bound message template catalog management',
+      actions: {
+        read: { name: 'View', description: 'View message templates' },
+        create: { name: 'Create', description: 'Create message templates' },
+        update: { name: 'Update', description: 'Update message templates' },
+        delete: { name: 'Delete', description: 'Delete message templates' }
+      }
+    },
+
     teams: {
       name: 'Teams',
       description: 'Agent team management and organization',
