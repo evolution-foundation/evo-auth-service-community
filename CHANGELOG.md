@@ -21,24 +21,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.0.0-rc6] - 2026-06-12
 
-**Republish-only release.** No source changes vs. `v1.0.0-rc5` content-wise — the public `evoapicloud/evo-auth-service-community:latest` image was discovered (EVO-1404) to contain pre-rc4 `setup_gate.rb` (the old blocking version returning `503 SETUP_REQUIRED`) and a pre-`#36` `init_schema.rb` (without the type-aware `add_fk_if_missing`), despite the `v1.0.0-rc5` git tag containing both fixes. Operators pulling `:latest` since 2026-05-27 were therefore still affected by:
+**Republish + feature batch.** Republishes `:latest` from a fresh build (the rc5-named image at Docker Hub had been desynced — see Operator action below) **and** ships eight commits accumulated on `develop` since rc5 was tagged. Operators upgrading from rc5 should expect both new features and bugfixes; operators upgrading from a poisoned `:latest` get those plus the actual rc5 content they thought they already had.
 
-- `DatatypeMismatch` boot crashes on legacy installs with `users.id integer` (PR #36 was supposed to fix this).
-- Permanent `503 SETUP_REQUIRED` on `/api/v1/*` whenever the licensing server was unreachable (PR `221097c` was supposed to fix this).
+### Operator action
 
-Root cause was traced to GitHub Actions cache (`cache-from: type=gha`) serving stale layers across builds — the `COPY . .` layer was reused with old source. This RC ships a fresh build and a workflow hardening (see Changed).
+- **ACTION REQUIRED if you pulled `:latest` between 2026-05-27 and 2026-06-12 12:00 UTC.**
+  The image at that period was the desynced rc5 build (digest `sha256:4c08dca7…`) which contained pre-rc4 source for `app/services/licensing/setup_gate.rb` (the old blocking version that returns `503 SETUP_REQUIRED`) and `db/migrate/20250819224900_init_schema.rb` (pre-`#36`, without the type-aware `add_fk_if_missing`). Pull again:
+  ```sh
+  docker pull evoapicloud/evo-auth-service-community:latest
+  # Expected new digest: sha256:7bed488c1c2612dc3a395f2543c501ac485ec2d5d0ec7716d27f6c756d7d514e
+  ```
+- Symptoms you may have hit on the poisoned image: `DatatypeMismatch` boot crashes on legacy installs with `users.id integer`; permanent `503 SETUP_REQUIRED` on `/api/v1/*` when the licensing server was unreachable. Both are now correctly fixed in `:latest`.
 
 ### Added
 
-- **`docker-compose.smoke-fresh.yml` + `.github/workflows/smoke-fresh.yml`** — fresh-DB smoke harness that pulls `:latest` and asserts (a) container reaches `healthy`, (b) `/health` 200, (c) `/ready` 200 (proves DB connect + Redis + non-blocking licensing). Triggered on PR changes to `Dockerfile`, `bin/docker-entrypoint`, `db/migrate/**`, the compose, or the workflow itself.
+- **EVO-1233 — message_templates RBAC resource + seed grants** (`54e15eb`).
+- **EVO-1716 — message_templates resource actions** (`ab1e422`, #41).
+- **Email confirmation flow + GitHub OAuth provider** (`a0e0702`) — adds Devise email-confirmation lifecycle and a GitHub identity provider in the OmniAuth chain. Existing logins unaffected; new signups receive a confirmation email if `SMTP_*` env vars are configured.
+- **Bootstrap user gets enterprise `evolution_admin` grant** (`61b099e`) — first user created via `setup/register` is now assigned the `evolution_admin` role automatically. Cleaner self-hosted bootstrap; no manual grant step.
+- **Smoke harness for `:latest`** (`b2a514a`, EVO-1404) — `docker-compose.smoke-fresh.yml` + `.github/workflows/smoke-fresh.yml`. Pulls `:latest`, runs `db:create && db:migrate && rails server` against fresh Postgres + Redis, asserts container reaches `healthy` + `/health` 200 + `/ready` 200. Triggered on PR changes to `Dockerfile`, `bin/docker-entrypoint`, `db/migrate/**`, the smoke compose or the smoke workflow.
 
 ### Changed
 
-- **`.github/workflows/docker-publish.yml` — bypass cache on tag builds** — added `no-cache: ${{ startsWith(github.ref, 'refs/tags/v') }}` to `docker/build-push-action`. Branch builds (`develop`, `main`) keep the GHA cache for speed; release tag builds rebuild from scratch to guarantee the published image content matches the source at the tagged commit. Mitigates the rc5 image desync that motivated this republish.
+- **EVO-1551 round 2 — `mask_contact_pii` toggle hardening** (`49e62d0`, #39) — restricts the `mask_contact_pii` flip on `PATCH /api/v1/account` to admin roles (`enforce_admin_for_mask_pii_change` with effective-change gate). Earlier round 1 fix is upgraded to also deep-merge `settings`/`custom_attributes` so a partial PATCH no longer drops sibling keys.
+- **OmniAuth runtime credential resolution** (`f2f2872`) — OAuth provider secrets are now resolved at request time from `runtime_configs` instead of at boot. Operators changing `GOOGLE_OAUTH_*` / `GITHUB_OAUTH_*` via the Admin UI no longer need a service restart for the new credentials to take effect.
+- **`docker-publish.yml` — bypass cache on release paths** (`b2a514a`, EVO-1404) — added `no-cache: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}` to `docker/build-push-action`. Tag pushes (`v*.*.*`) and `main` branch pushes — both of which publish `:latest` — now rebuild from scratch. The `develop` branch keeps GHA cache for speed (it publishes only `:develop` / `:develop-<sha>`). This was the root-cause mitigation for the rc5 desync.
 
 ### Fixed
 
-- **Image `:latest` now actually contains `v1.0.0-rc5` content** — republishing from a fresh build closes the binary/source mismatch described above. AC1 of EVO-1404 (`:latest` ≥ `39c92b35`) is satisfied at both git and image layers.
+- **`bms_provider` URL construction** (`37c9097`, `fe084a5`) — BMS API URL is now read from runtime config and built dynamically per endpoint instead of hardcoded. Mail delivery via the BMS provider works against per-tenant BMS instances.
+- **Image `:latest` actually contains rc5+ content** (EVO-1404 republish) — fresh build of `v1.0.0-rc6` replaces the desynced `:latest`. Verified inside the container: `setup_gate.rb` is the observability-only version (no `UNAVAILABLE_BODY`); `init_schema.rb` contains `column_type_incompatible?` and the `Skipping FK ... type mismatch` log line.
 
 
 
