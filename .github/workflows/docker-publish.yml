@@ -44,6 +44,11 @@ jobs:
           provenance: mode=max
           sbom: true
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true
+          # Tag builds (releases) bypass cache to guarantee a from-scratch image.
+          # See EVO-1404: v1.0.0-rc5 image shipped pre-rc4 setup_gate + init_schema
+          # despite the source tag containing the fixes — cache served stale layers.
+          # Branch builds keep cache for speed.
+          no-cache: ${{ startsWith(github.ref, 'refs/tags/v') }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
 

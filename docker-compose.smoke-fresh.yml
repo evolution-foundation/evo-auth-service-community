@@ -1,0 +1,57 @@
+# Smoke EVO-1404 — fresh DB validation against published :latest
+#
+# Sobe Postgres limpo + Redis e roda a image evoapicloud/evo-auth-service-community:latest
+# usando o entrypoint padrao (bin/docker-entrypoint), exercitando db:migrate end-to-end.
+# Healthcheck verde + /ready 200 = AC2 satisfeito.
+#
+# RAILS_ENV=development por design: o Dockerfile publicado roda em development
+# (sem assets:precompile, bundle com todos os groups). Forcar production aqui
+# quebraria por motivos nao relacionados ao AC.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: evo
+      POSTGRES_PASSWORD: evo
+      POSTGRES_DB: evo_auth_smoke
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evo -d evo_auth_smoke"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  evo-auth:
+    image: evoapicloud/evo-auth-service-community:latest
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    # .env.example fornece ~30 vars obrigatorias para o boot (Doorkeeper, mailer, etc).
+    # Sobrescrevemos abaixo so o que muda no smoke (DB, Redis sem senha, host names).
+    env_file:
+      - .env.example
+    environment:
+      RAILS_ENV: development
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USERNAME: evo
+      POSTGRES_PASSWORD: evo
+      POSTGRES_DATABASE: evo_auth_smoke
+      REDIS_URL: redis://redis:6379/0
+      RAILS_LOG_TO_STDOUT: "true"
+    ports:
+      # Host 13001 para nao colidir com umbrella stack local; container continua em 3001.
+      # Em CI runner, qualquer porta livre serve; mantemos 13001 para consistencia.
+      - "13001:3001"
+    # Migrate explicito + server. NAO usamos bin/docker-entrypoint porque o pattern
+    # match dele (last-2-args == "./bin/rails server") nao bate quando passamos -p/-b
+    # aqui ou no umbrella. Operadores reais (umbrella) tambem fazem chain explicito.
+    command: ["bash", "-c", "bundle exec rails db:create && bundle exec rails db:migrate && bundle exec rails server -p 3001 -b 0.0.0.0"]
