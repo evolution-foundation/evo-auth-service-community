@@ -1,0 +1,65 @@
+name: Smoke - fresh DB against :latest
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "bin/docker-entrypoint"
+      - "db/migrate/**"
+      - "docker-compose.smoke-fresh.yml"
+      - ".github/workflows/smoke-fresh.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-fresh:
+    name: docker compose up -> assert healthcheck + /ready
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Pull :latest digest (record for evidence)
+        run: |
+          docker pull evoapicloud/evo-auth-service-community:latest
+          docker inspect --format='{{index .RepoDigests 0}}' \
+            evoapicloud/evo-auth-service-community:latest | tee /tmp/digest.txt
+
+      - name: Compose up
+        run: |
+          docker compose -f docker-compose.smoke-fresh.yml up -d
+          echo "Aguardando healthcheck (ate 180s)..."
+          for i in $(seq 1 36); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' \
+              $(docker compose -f docker-compose.smoke-fresh.yml ps -q evo-auth) 2>/dev/null || echo "starting")
+            echo "[$i/36] evo-auth health: $status"
+            if [ "$status" = "healthy" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::evo-auth nao ficou healthy em 180s"
+          exit 1
+
+      - name: Probe /health (liveness) + /ready (readiness)
+        run: |
+          curl -fsS http://localhost:13001/health || (echo "::error::/health falhou - app nao subiu"; exit 1)
+          curl -fsS http://localhost:13001/ready  || (echo "::error::/ready falhou - migrations ou DB nao OK"; exit 1)
+
+      - name: Capture logs (always)
+        if: always()
+        run: |
+          mkdir -p /tmp/logs
+          docker compose -f docker-compose.smoke-fresh.yml logs evo-auth > /tmp/logs/evo-auth.log
+          docker compose -f docker-compose.smoke-fresh.yml logs postgres > /tmp/logs/postgres.log
+          cp /tmp/digest.txt /tmp/logs/ 2>/dev/null || true
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: smoke-fresh-logs
+          path: /tmp/logs/
+          retention-days: 7
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.smoke-fresh.yml down -v
