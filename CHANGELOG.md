@@ -17,6 +17,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- N/A
+
+## [v1.0.0-rc6] - 2026-06-12
+
+**Republish-only release.** No source changes vs. `v1.0.0-rc5` content-wise — the public `evoapicloud/evo-auth-service-community:latest` image was discovered (EVO-1404) to contain pre-rc4 `setup_gate.rb` (the old blocking version returning `503 SETUP_REQUIRED`) and a pre-`#36` `init_schema.rb` (without the type-aware `add_fk_if_missing`), despite the `v1.0.0-rc5` git tag containing both fixes. Operators pulling `:latest` since 2026-05-27 were therefore still affected by:
+
+- `DatatypeMismatch` boot crashes on legacy installs with `users.id integer` (PR #36 was supposed to fix this).
+- Permanent `503 SETUP_REQUIRED` on `/api/v1/*` whenever the licensing server was unreachable (PR `221097c` was supposed to fix this).
+
+Root cause was traced to GitHub Actions cache (`cache-from: type=gha`) serving stale layers across builds — the `COPY . .` layer was reused with old source. This RC ships a fresh build and a workflow hardening (see Changed).
+
+### Added
+
+- **`docker-compose.smoke-fresh.yml` + `.github/workflows/smoke-fresh.yml`** — fresh-DB smoke harness that pulls `:latest` and asserts (a) container reaches `healthy`, (b) `/health` 200, (c) `/ready` 200 (proves DB connect + Redis + non-blocking licensing). Triggered on PR changes to `Dockerfile`, `bin/docker-entrypoint`, `db/migrate/**`, the compose, or the workflow itself.
+
+### Changed
+
+- **`.github/workflows/docker-publish.yml` — bypass cache on tag builds** — added `no-cache: ${{ startsWith(github.ref, 'refs/tags/v') }}` to `docker/build-push-action`. Branch builds (`develop`, `main`) keep the GHA cache for speed; release tag builds rebuild from scratch to guarantee the published image content matches the source at the tagged commit. Mitigates the rc5 image desync that motivated this republish.
+
+### Fixed
+
+- **Image `:latest` now actually contains `v1.0.0-rc5` content** — republishing from a fresh build closes the binary/source mismatch described above. AC1 of EVO-1404 (`:latest` ≥ `39c92b35`) is satisfied at both git and image layers.
+
+
+
+- N/A
+
+### Fixed
+
 - **EVO-1551 (round 2)** — fecha dois bypasses do mascaramento de PII de contato no `PATCH /api/v1/account`. (1) `enforce_admin_for_mask_pii_change` agora checa **mudança efetiva** (current vs incoming) em vez de mera presença da chave — agent não consegue mais derrubar `mask_contact_pii` mandando um body sem a chave. (2) `update` passa a fazer deep-merge em `settings` e `custom_attributes`; PATCH parcial deixou de apagar chaves irmãs (bug genérico de perda de dados). Specs novos em `spec/requests/api/v1/account_spec.rb` cobrem ambos os caminhos.
 
 ## [v1.0.0-rc5] - 2026-05-27
