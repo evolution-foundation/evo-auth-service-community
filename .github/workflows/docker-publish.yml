@@ -44,11 +44,18 @@ jobs:
           provenance: mode=max
           sbom: true
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true
-          # Tag builds (releases) bypass cache to guarantee a from-scratch image.
+          # Release paths bypass cache to guarantee a from-scratch image:
+          #   - tag builds (v*.*.*) — explicit releases
+          #   - main branch push    — also publishes :latest (see "Resolve tags" below)
           # See EVO-1404: v1.0.0-rc5 image shipped pre-rc4 setup_gate + init_schema
           # despite the source tag containing the fixes — cache served stale layers.
-          # Branch builds keep cache for speed.
-          no-cache: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          # `develop` branch keeps cache for speed (publishes :develop, not :latest).
+          #
+          # INVARIANT: this expression MUST match every ref that publishes :latest
+          # in the "Resolve tags" step below. If you add a new :latest publisher
+          # ref (or change the existing ones), update this expression too — or the
+          # cache poisoning class of bug from EVO-1404 will recur on that path.
+          no-cache: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
 

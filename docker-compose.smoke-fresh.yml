@@ -39,7 +39,10 @@ services:
     env_file:
       - .env.example
     environment:
-      RAILS_ENV: development
+      # TODO(EVO-1404 review L3): hoje o Dockerfile publicado e dev-only. Se um PR
+      # futuro mudar pra multi-stage prod, este RAILS_ENV vai mascarar regressao.
+      # Parametrizar via SMOKE_RAILS_ENV quando esse refactor chegar.
+      RAILS_ENV: ${SMOKE_RAILS_ENV:-development}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USERNAME: evo

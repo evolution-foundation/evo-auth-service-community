@@ -31,10 +31,18 @@ jobs:
           docker compose -f docker-compose.smoke-fresh.yml up -d
           echo "Aguardando healthcheck (ate 180s)..."
           for i in $(seq 1 36); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' \
-              $(docker compose -f docker-compose.smoke-fresh.yml ps -q evo-auth) 2>/dev/null || echo "starting")
-            echo "[$i/36] evo-auth health: $status"
+            cid=$(docker compose -f docker-compose.smoke-fresh.yml ps -aq evo-auth)
+            state=$(docker inspect --format='{{.State.Status}}' "$cid" 2>/dev/null || echo "starting")
+            status=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "starting")
+            echo "[$i/36] evo-auth state=$state health=$status"
             if [ "$status" = "healthy" ]; then exit 0; fi
+            # Early exit: container died, no point waiting 180s
+            # restarting covers crashloop when compose has restart: on-failure
+            if [ "$state" = "exited" ] || [ "$state" = "dead" ] || [ "$state" = "restarting" ]; then
+              echo "::error::container crashed (state=$state)"
+              docker compose -f docker-compose.smoke-fresh.yml logs evo-auth 2>&1 | tail -50
+              exit 1
+            fi
             sleep 5
           done
           echo "::error::evo-auth nao ficou healthy em 180s"
@@ -42,8 +50,14 @@ jobs:
 
       - name: Probe /health (liveness) + /ready (readiness)
         run: |
-          curl -fsS http://localhost:13001/health || (echo "::error::/health falhou - app nao subiu"; exit 1)
-          curl -fsS http://localhost:13001/ready  || (echo "::error::/ready falhou - migrations ou DB nao OK"; exit 1)
+          # IMPORTANT: use `{ ...; exit 1; }` not `( ...; exit 1 )`. Subshell exit
+          # does not propagate to the script outer (GHA bash -eo pipefail), so
+          # a failure in the FIRST line can be masked by later successes.
+          curl -fsS http://localhost:13001/health || { echo "::error::/health falhou - app nao subiu"; exit 1; }
+          # /ready body must say status:ready — a future bug could return 200 with
+          # status:not_ready, and HTTP 200 alone would mask it.
+          body=$(curl -fsS http://localhost:13001/ready) || { echo "::error::/ready falhou - migrations ou DB nao OK"; exit 1; }
+          echo "$body" | grep -q '"status":"ready"' || { echo "::error::/ready body nao reporta status:ready (body=$body)"; exit 1; }
 
       - name: Capture logs (always)
         if: always()
