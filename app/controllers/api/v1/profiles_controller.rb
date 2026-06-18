@@ -149,7 +149,8 @@ class Api::V1::ProfilesController < Api::BaseController
       custom_attributes: user.custom_attributes || {},
       ui_settings: user.ui_settings || {},
       created_at: user.created_at,
-      updated_at: user.updated_at
+      updated_at: user.updated_at,
+      roles: user.roles.map { |r| { id: r.id, key: r.key, name: r.name } }
     }
   end
 

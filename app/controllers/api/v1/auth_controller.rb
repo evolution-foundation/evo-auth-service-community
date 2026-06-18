@@ -3,7 +3,7 @@ class Api::V1::AuthController < Api::BaseController
   include AuthHelper
   include LicensingSetupConcern
 
-  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation]
+  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation, :keycloak_exchange, :keycloak_refresh]
 
   # Login
   def login
@@ -99,7 +99,16 @@ class Api::V1::AuthController < Api::BaseController
                   same_site: is_secure ? :none : :lax, 
                   domain: cookie_domain)
 
-    success_response(data: {}, message: 'Logged out successfully')
+    keycloak_logout_url = nil
+    if current_user&.keycloak_id_token.present?
+      frontend_url = ENV.fetch('FRONTEND_URL', request.headers['Origin'])
+      keycloak_logout_url = Keycloak::LogoutUrl.build(
+        id_token_hint:  current_user.keycloak_id_token,
+        post_logout_redirect_uri: "#{frontend_url}/login"
+      )
+      current_user.update_columns(keycloak_id_token: nil)
+    end
+    success_response(data: { keycloak_logout_url: keycloak_logout_url }, message: 'Logged out successfully')
   end
 
   def register
@@ -343,6 +352,86 @@ class Api::V1::AuthController < Api::BaseController
         status: :unprocessable_entity
       )
     end
+  end
+
+  def keycloak_exchange
+    unless ENV['KEYCLOAK_ENABLED'] == 'true'
+      return error_response('KEYCLOAK_NOT_CONFIGURED', 'Keycloak integration is not enabled', status: :not_implemented)
+    end
+
+    kc_tokens = if params[:code].present?
+                  Keycloak::CodeExchanger.exchange(
+                    code:          params[:code],
+                    code_verifier: params[:code_verifier],
+                    redirect_uri:  params[:redirect_uri]
+                  )
+                else
+                  { access_token: params[:keycloak_token].presence }
+                end
+    raw_token = kc_tokens[:access_token]
+    id_token = kc_tokens[:id_token]
+
+    return error_response('MISSING_TOKEN', 'code or keycloak_token param is required', status: :bad_request) unless raw_token
+
+    claims = Keycloak::JwtValidator.verify(raw_token)
+    user   = Keycloak::UserProvisioner.provision!(claims)
+
+    kc_updates = {}
+    kc_updates[:keycloak_id_token] = id_token if id_token.present?
+    if kc_tokens[:refresh_token].present?
+      kc_updates[:keycloak_refresh_token] = kc_tokens[:refresh_token]
+      if kc_tokens[:refresh_expires_in].present?
+        kc_updates[:keycloak_refresh_token_expires_at] = Time.current + kc_tokens[:refresh_expires_in].to_i.seconds
+      end
+    end
+    user.update_columns(kc_updates) if kc_updates.any?
+
+    render_successful_login(user)
+  rescue Keycloak::CodeExchanger::Error => e
+    error_response('TOKEN_EXCHANGE_FAILED', e.message, status: :bad_gateway)
+  rescue Keycloak::JwtValidator::Error => e
+    error_response('INVALID_TOKEN', e.message, status: :unauthorized)
+  rescue ActiveRecord::RecordInvalid => e
+    error_response('VALIDATION_ERROR', e.message, status: :unprocessable_entity)
+  end
+
+  def keycloak_refresh
+    unless ENV['KEYCLOAK_ENABLED'] == 'true'
+      return error_response('KEYCLOAK_NOT_CONFIGURED', 'Keycloak integration is not enabled', status: :not_implemented)
+    end
+
+    refresh_token = params[:keycloak_refresh_token].presence || cookies[:_evo_kc_rt]
+
+    unless refresh_token.present?
+      return error_response('MISSING_TOKEN', 'keycloak_refresh_token param is required', status: :bad_request)
+    end
+
+    kc_tokens = Keycloak::TokenRefresher.refresh(refresh_token: refresh_token)
+    raw_token  = kc_tokens[:access_token]
+    id_token   = kc_tokens[:id_token]
+
+    claims = Keycloak::JwtValidator.verify(raw_token)
+    user   = Keycloak::UserProvisioner.provision!(claims)
+
+    kc_updates = {}
+    kc_updates[:keycloak_id_token] = id_token if id_token.present?
+    if kc_tokens[:refresh_token].present?
+      kc_updates[:keycloak_refresh_token] = kc_tokens[:refresh_token]
+      if kc_tokens[:refresh_expires_in].present?
+        kc_updates[:keycloak_refresh_token_expires_at] = Time.current + kc_tokens[:refresh_expires_in].to_i.seconds
+      end
+    end
+    user.update_columns(kc_updates) if kc_updates.any?
+
+    render_successful_login(user)
+  rescue Keycloak::TokenRefresher::ExpiredError => e
+    error_response('REFRESH_TOKEN_EXPIRED', e.message, status: :unauthorized)
+  rescue Keycloak::TokenRefresher::Error => e
+    error_response('TOKEN_REFRESH_FAILED', e.message, status: :bad_gateway)
+  rescue Keycloak::JwtValidator::Error => e
+    error_response('INVALID_TOKEN', e.message, status: :unauthorized)
+  rescue ActiveRecord::RecordInvalid => e
+    error_response('VALIDATION_ERROR', e.message, status: :unprocessable_entity)
   end
 
   private

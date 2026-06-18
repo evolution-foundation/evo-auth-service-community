@@ -147,6 +147,11 @@ class User < ApplicationRecord
     end
   end
   
+  def all_roles_data
+    return [] unless persisted?
+    roles.map { |r| { id: r.id, key: r.key, name: r.name } }
+  end
+
   # Retorna a role do usuário (busca na user_roles - nível de usuário)
   def role_data
     return nil unless persisted?

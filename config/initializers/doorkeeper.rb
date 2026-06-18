@@ -168,6 +168,7 @@ Doorkeeper::JWT.configure do
         name: user.name,
         type: user.type,
         role: user.role_data,
+        roles: user.all_roles_data,
         setup_active: Licensing::Runtime.context&.active? || false
       }
     else

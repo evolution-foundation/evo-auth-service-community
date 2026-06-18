@@ -82,27 +82,43 @@ module AuthHelper
   def set_refresh_cookie(refresh_token)
     is_secure = is_secure_request?
     domain = cookie_domain
-    
+    request_host = request.host
+
     # Debug logs
     Rails.logger.info "AuthHelper: Setting refresh cookie"
-    Rails.logger.info "AuthHelper: Request host: #{request.host}"
+    Rails.logger.info "AuthHelper: Request host: #{request_host}"
     Rails.logger.info "AuthHelper: Cookie domain: #{domain.inspect}"
     Rails.logger.info "AuthHelper: Is secure: #{is_secure}"
-    Rails.logger.info "AuthHelper: SameSite: #{is_secure ? :none : :lax}"
-    
+
+    # Em desenvolvimento localhost, usar SameSite=None para permitir cross-port
+    # Isso resolve o problema de cookies entre localhost:3000 e localhost:3001
+    is_localhost_dev = Rails.env.development? && (request_host == 'localhost' || request_host =~ /\.local$/)
+    samesite = if is_localhost_dev
+                 :none
+               elsif is_secure
+                 :none
+               else
+                 :lax
+               end
+
+    # Para localhost em desenvolvimento, não definir secure (senão o navegador rejeita)
+    secure_flag = is_localhost_dev ? false : is_secure
+
+    Rails.logger.info "AuthHelper: SameSite: #{samesite}, secure: #{secure_flag}, localhost_dev: #{is_localhost_dev}"
+
     cookie_options = {
       value: refresh_token,
       httponly: true,
-      secure: is_secure,
-      same_site: is_secure ? :none : :lax, # :none requer secure: true para funcionar (Rails usa same_site, NÃO samesite)
+      secure: secure_flag,
+      same_site: samesite,
       path: '/api/v1/auth', # Path mais amplo para incluir refresh e outros endpoints
     }
-    
+
     # Só adiciona domain se não for nil
     cookie_options[:domain] = domain if domain.present?
-    
+
     cookies[:_evo_rt] = cookie_options
-    
+
     Rails.logger.info "AuthHelper: Cookie set with options: #{cookie_options.except(:value).inspect}"
   end
   
@@ -113,7 +129,7 @@ module AuthHelper
       value: access_token,
       httponly: true,
       secure: is_secure,
-      same_site: is_secure ? :none : :lax, # :none requer secure: true para funcionar (Rails usa same_site, NÃO samesite)
+      same_site: is_secure ? :none : :lax, # :none requer secure: true para funcionar
       domain: cookie_domain
     }
   end

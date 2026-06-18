@@ -56,6 +56,8 @@ Rails.application.routes.draw do
           post :reset_password
           post :confirmation
           post :resend_confirmation
+          post :keycloak_exchange
+          post :keycloak_refresh
         end
       end
 

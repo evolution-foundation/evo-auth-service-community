@@ -221,6 +221,14 @@ COVERAGE=true bundle exec rspec
 
 ---
 
+## Keycloak Integration
+
+> ⚠️ **Role type terminology is not a 1:1 mapping.**
+>
+> Evolution's internal role types are `user` (system-wide roles such as `super_admin` and `account_owner`) and `account` (account-level roles such as `agent`).
+>
+> Keycloak, on the other hand, distinguishes between `realm` roles and `client` roles. When importing roles from Keycloak, keep in mind that these concepts are not linearly equivalent: a Keycloak realm role may map to either an Evolution `user` role or an `account` role depending on its scope and usage. Review the role type carefully before running the `keycloak:create_roles` rake task.
+
 ## Documentation
 
 | Resource | Link |

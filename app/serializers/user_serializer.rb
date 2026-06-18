@@ -13,6 +13,7 @@ module UserSerializer
       email: user.email,
       type: user.type,
       role: user.role_data,
+      roles: user.all_roles_data,
       pubsub_token: user.pubsub_token,
       avatar_url: user.avatar_url,
       created_at: user.created_at,

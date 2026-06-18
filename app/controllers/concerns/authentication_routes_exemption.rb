@@ -6,7 +6,7 @@ module AuthenticationRoutesExemption
   
   # List of specific actions that should be exempt from permission checks
   EXEMPT_ACTIONS = {
-    'api/v1/auth' => ['login'],
+    'api/v1/auth' => ['login', 'keycloak_exchange'],
   }.freeze
   
   # Check if the current route is exempt from permission verification
