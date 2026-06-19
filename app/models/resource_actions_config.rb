@@ -735,6 +735,17 @@ class ResourceActionsConfig
       }
     },
 
+    crm_forms: {
+      name: 'Lead Capture Forms',
+      description: 'Public lead-capture form builder (form -> pipeline)',
+      actions: {
+        read: { name: 'View', description: 'View lead-capture forms' },
+        create: { name: 'Create', description: 'Create new lead-capture forms' },
+        update: { name: 'Update', description: 'Update lead-capture forms' },
+        delete: { name: 'Delete', description: 'Delete lead-capture forms' }
+      }
+    },
+
     # === EVO FLOW SERVICE (segments / journeys / campaigns) ===
     segments: {
       name: 'Segments',
