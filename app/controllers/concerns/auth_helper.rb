@@ -94,7 +94,7 @@ module AuthHelper
       value: refresh_token,
       httponly: true,
       secure: is_secure,
-      samesite: is_secure ? :none : :lax, # :none requer secure: true para funcionar
+      same_site: is_secure ? :none : :lax, # :none requer secure: true para funcionar (Rails usa same_site, NÃO samesite)
       path: '/api/v1/auth', # Path mais amplo para incluir refresh e outros endpoints
     }
     
@@ -113,7 +113,7 @@ module AuthHelper
       value: access_token,
       httponly: true,
       secure: is_secure,
-      samesite: is_secure ? :none : :lax, # :none requer secure: true para funcionar
+      same_site: is_secure ? :none : :lax, # :none requer secure: true para funcionar (Rails usa same_site, NÃO samesite)
       domain: cookie_domain
     }
   end
