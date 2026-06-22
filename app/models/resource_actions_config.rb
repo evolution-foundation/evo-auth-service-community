@@ -737,6 +737,28 @@ class ResourceActionsConfig
       }
     },
 
+    crm_forms: {
+      name: 'Lead Capture Forms',
+      description: 'Public lead-capture form builder (form -> pipeline)',
+      actions: {
+        read: { name: 'View', description: 'View lead-capture forms' },
+        create: { name: 'Create', description: 'Create new lead-capture forms' },
+        update: { name: 'Update', description: 'Update lead-capture forms' },
+        delete: { name: 'Delete', description: 'Delete lead-capture forms' }
+      }
+    },
+
+    chat_pages: {
+      name: 'Chat Pages',
+      description: 'Public chat page builder (slug -> embedded web widget)',
+      actions: {
+        read: { name: 'View', description: 'View chat pages' },
+        create: { name: 'Create', description: 'Create new chat pages' },
+        update: { name: 'Update', description: 'Update chat pages' },
+        delete: { name: 'Delete', description: 'Delete chat pages' }
+      }
+    },
+
     # === EVO FLOW SERVICE (segments / journeys / campaigns) ===
     segments: {
       name: 'Segments',
