@@ -117,6 +117,14 @@ else
 end
 
 agent_permissions = [
+  # Operational reads previously inherited via BASIC_READ_PERMISSIONS. Now that
+  # the split removed users.read/inboxes.read from BASIC, the agent role grants
+  # them explicitly. conversations.read_all preserves the current behavior of
+  # agents seeing every inbox (the per-inbox restriction is opt-in: it only
+  # applies to roles WITHOUT conversations.read_all). NOTE: users.manage is
+  # intentionally NOT granted — agents do not see the administrative panel.
+  'users.read',
+  'conversations.read_all',
   'conversations.read', 'conversations.create', 'conversations.update', 'conversations.delete',
   'conversations.meta', 'conversations.search', 'conversations.filter', 'conversations.available_for_pipeline',
   'conversations.mute', 'conversations.unmute', 'conversations.transcript', 'conversations.toggle_status',

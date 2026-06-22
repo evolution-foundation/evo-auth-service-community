@@ -121,9 +121,14 @@ class Api::V1::RolesController < Api::V1::BaseController
     )
   end
 
-  # Get available roles for account users (agent and account_owner)
+  # Get available roles assignable to account users: the system roles
+  # (agent + account_owner) plus any custom `type: 'account'` role. This is the
+  # fix for "custom profile does not appear when creating an attendant" — custom
+  # account roles are assignable to attendants and must be listed here.
   def account_user_roles
-    roles = Role.where(key: ['agent', 'account_owner']).map do |role|
+    roles = Role.where(type: 'account')
+                .or(Role.where(key: ['agent', 'account_owner']))
+                .map do |role|
       RoleSerializer.basic(role)
     end
 

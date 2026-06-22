@@ -20,7 +20,8 @@ class ResourceActionsConfig
         check_permission: { name: 'Check Permission', description: 'Validate specific user permissions' },
         destroy_access_token: {name: 'Destroy Access Token', description: 'Revoke user access tokens'},
         remove_avatar: { name: 'Remove Avatar', description: 'Remove user profile avatar' },
-        create_account_user: { name: 'Create Account User', description: 'Create account user associations' }
+        create_account_user: { name: 'Create Account User', description: 'Create account user associations' },
+        manage: { name: 'Manage', description: 'Administer users via Settings (view/manage agents panel)' }
       }
     },
 
@@ -260,7 +261,8 @@ class ResourceActionsConfig
         unread: { name: 'Unread', description: 'Mark conversation as unread' },
         custom_attributes: { name: 'Custom Attributes', description: 'Manage conversation custom attributes' },
         attachments: { name: 'Attachments', description: 'View conversation attachments' },
-        inbox_assistant: { name: 'Inbox Assistant', description: 'Access inbox assistant features' }
+        inbox_assistant: { name: 'Inbox Assistant', description: 'Access inbox assistant features' },
+        read_all: { name: 'Read all inboxes', description: 'View conversations from all inboxes (bypass per-inbox restriction)' }
       }
     },
 
