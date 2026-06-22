@@ -58,8 +58,19 @@ class User < ApplicationRecord
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
   BASIC_READ_PERMISSIONS = %w[
-    accounts.read labels.read dashboard.read inboxes.read teams.read users.read
+    accounts.read labels.read dashboard.read teams.read
   ].freeze
+
+  # Operational implications: holding a granular permission implies a minimal
+  # operational read on dependent resources. A role with conversations.read
+  # needs to load attendants (users.read) and inbox metadata (inboxes.read) to
+  # operate the Conversations screen, even though those reads are no longer
+  # granted to everyone via BASIC_READ_PERMISSIONS. The implied users.read is
+  # OPERATIONAL only — the administrative gate (Settings > Agents) moved to
+  # users.manage, so this does not re-open the admin panel.
+  OPERATIONAL_IMPLICATIONS = {
+    'conversations.read' => %w[users.read inboxes.read]
+  }.freeze
 
   devise :database_authenticatable,
          :registerable,
@@ -103,9 +114,14 @@ class User < ApplicationRecord
     return false unless permission_key.present?
     return true if BASIC_READ_PERMISSIONS.include?(permission_key)
 
-    user_roles.joins(role: :role_permissions_actions)
-              .where(role_permissions_actions: { permission_key: permission_key })
-              .exists?
+    explicit = role_permission_keys
+    return true if explicit.include?(permission_key)
+
+    # Operational implication: a role with conversations.read implies
+    # users.read / inboxes.read (needed to operate the Conversations screen).
+    OPERATIONAL_IMPLICATIONS.any? do |source_key, implied_keys|
+      implied_keys.include?(permission_key) && explicit.include?(source_key)
+    end
   end
   
   # Verifica se o usuário tem uma role específica
@@ -131,9 +147,17 @@ class User < ApplicationRecord
   def all_permissions
     return BASIC_READ_PERMISSIONS.dup unless persisted?
 
-    role_perms = user_roles.joins(role: :role_permissions_actions)
-                           .pluck('role_permissions_actions.permission_key')
-    (BASIC_READ_PERMISSIONS + role_perms).uniq.sort
+    role_perms = role_permission_keys
+    combined = (BASIC_READ_PERMISSIONS + role_perms)
+
+    # Inject operational implications so the frontend (PermissionsContext reads
+    # all_permissions) agrees with has_permission? (API enforcement): a role
+    # with conversations.read also has the implied users.read / inboxes.read.
+    OPERATIONAL_IMPLICATIONS.each do |source_key, implied_keys|
+      combined += implied_keys if combined.include?(source_key)
+    end
+
+    combined.uniq.sort
   end
   
   # Lista permissões agrupadas por recurso
@@ -246,6 +270,20 @@ class User < ApplicationRecord
   end
 
   private
+
+  # Permission keys granted explicitly via the user's roles (no BASIC, no
+  # operational implications). Single source of truth for has_permission? and
+  # all_permissions — keeps the implication logic from recursing into
+  # has_permission?.
+  def role_permission_keys
+    return [] unless persisted?
+
+    # Memoized per instance (User is per-request): has_permission? is called on
+    # every authorize_resource!, and roles like account_owner/super_admin carry
+    # hundreds of keys — without this we'd re-pluck the full set on each check.
+    @role_permission_keys ||= user_roles.joins(role: :role_permissions_actions)
+                                        .pluck('role_permissions_actions.permission_key')
+  end
 
   def set_password_and_uid
     self.uid = email
