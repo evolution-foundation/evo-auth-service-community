@@ -149,6 +149,14 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   def check_authorization
+    # IMPORTANT: read actions stay gated on `users.read` (OPERATIONAL), not
+    # `users.manage` (ADMINISTRATIVE). The Conversations screen needs to load
+    # the attendant list/filters via GET /api/v1/users, so any role with
+    # conversations.read receives users.read operationally (see User model's
+    # OPERATIONAL_IMPLICATIONS). Gating these endpoints on users.manage would
+    # 403 the attendant dropdown in Conversations — rejected by design.
+    # The administrative gate (Settings > Agents menu/route) lives in the
+    # FRONTEND, keyed on users.manage; it is NOT enforced here.
     action_map = {
       'index' => 'users.read',
       'show' => 'users.read',
