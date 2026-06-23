@@ -262,7 +262,8 @@ class ResourceActionsConfig
         custom_attributes: { name: 'Custom Attributes', description: 'Manage conversation custom attributes' },
         attachments: { name: 'Attachments', description: 'View conversation attachments' },
         inbox_assistant: { name: 'Inbox Assistant', description: 'Access inbox assistant features' },
-        read_all: { name: 'Read all inboxes', description: 'View conversations from all inboxes (bypass per-inbox restriction)' }
+        read_all: { name: 'Read all inboxes', description: 'View conversations from all inboxes (bypass per-inbox restriction)' },
+        import: { name: 'Import', description: 'Import conversation history from CSV (EVO-1557)' }
       }
     },
 

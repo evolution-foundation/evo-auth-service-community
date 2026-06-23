@@ -129,4 +129,22 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(super_admin_permissions).to include('conversations.read_all')
     end
   end
+
+  describe 'conversations.import — EVO-1557 catalog + role grants' do
+    it 'is a valid permission registered in ResourceActionsConfig' do
+      expect(ResourceActionsConfig.valid_permission?('conversations.import')).to be true
+    end
+
+    it 'is granted to the agent role (mirrors contacts.import precedent)' do
+      expect(agent_permissions).to include('conversations.import')
+    end
+
+    it 'is granted to account_owner via all_permission_keys' do
+      expect(account_owner_permissions).to include('conversations.import')
+    end
+
+    it 'is granted to super_admin via all_permission_keys' do
+      expect(super_admin_permissions).to include('conversations.import')
+    end
+  end
 end
