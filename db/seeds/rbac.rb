@@ -130,6 +130,7 @@ agent_permissions = [
   'conversations.mute', 'conversations.unmute', 'conversations.transcript', 'conversations.toggle_status',
   'conversations.toggle_priority', 'conversations.toggle_typing_status', 'conversations.update_last_seen',
   'conversations.unread', 'conversations.custom_attributes', 'conversations.attachments', 'conversations.inbox_assistant',
+  'conversations.import',
   'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete',
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
