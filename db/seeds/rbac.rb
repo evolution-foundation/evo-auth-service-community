@@ -138,28 +138,25 @@ agent_permissions = [
   'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
   'pipelines.read',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
-  'agents.read', 'agents.create', 'agents.update', 'agents.delete',
-  'oauth_agents.read', 'oauth_agents.create', 'oauth_agents.update', 'oauth_agents.delete',
-  'agent_bots.read', 'agent_bots.create', 'agent_bots.update', 'agent_bots.delete', 'agent_bots.avatar',
-  'agent_apikeys.read', 'agent_apikeys.create', 'agent_apikeys.update', 'agent_apikeys.delete',
-  'agent_folders.read', 'agent_folders.create', 'agent_folders.update', 'agent_folders.delete',
-  'agent_shared_folders.read', 'agent_shared_folders.create', 'agent_shared_folders.update', 'agent_shared_folders.delete',
-  'ai_chat_sessions.read', 'ai_chat_sessions.create', 'ai_chat_sessions.update', 'ai_chat_sessions.delete',
   'accounts.read', 'accounts.update',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
-  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
-  'team_members.read', 'team_members.create', 'team_members.update', 'team_members.delete',
+  # Operational resources used inside conversations (quick-replies, labels, macros,
+  # templates, and team assignment) stay with the agent. EVO-1955 will split their
+  # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
   'labels.read', 'labels.create', 'labels.update', 'labels.delete',
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
   'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
   'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
-  'inboxes.read',
-  'channels.read',
-  'integrations.read',
-  'working_hours.read', 'working_hours.create', 'working_hours.update', 'working_hours.delete',
-  'segments.read',
-  'journeys.read',
-  'campaigns.read'
+  # teams/team_members power the in-chat "Assign team" picker (GET /teams), so the
+  # read is operational and kept here; the Teams Settings screen split is EVO-1955.
+  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
+  'team_members.read', 'team_members.create', 'team_members.update', 'team_members.delete',
+  'inboxes.read'
+  # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
+  # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)
+  # are intentionally NOT granted to the default agent. The frontend routes/menu and
+  # the CRM controllers gate by these keys, so omitting them hides the screens and
+  # 403s the endpoints.
 ]
 
 agent.role_permissions_actions.destroy_all
