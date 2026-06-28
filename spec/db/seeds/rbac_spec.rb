@@ -115,6 +115,38 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
   end
 
+  # EVO-1938: administrative Settings resources must not reach the default agent.
+  # The frontend routes/menu and the CRM controllers gate by these permission
+  # keys, so granting them is exactly what let an attendant see/manage admin-only
+  # Settings screens. Operational resources used inside conversations stay (their
+  # use-vs-manage split is the EVO-1955 follow-up).
+  describe 'agent role — EVO-1938 administrative Settings exclusion' do
+    admin_only_resources = %w[
+      agents oauth_agents agent_bots agent_apikeys agent_folders
+      agent_shared_folders ai_chat_sessions
+      integrations channels working_hours segments journeys campaigns
+    ]
+
+    admin_only_resources.each do |resource|
+      it "does NOT grant any #{resource}.* permission to the agent" do
+        expect(agent_permissions.select { |k| k.start_with?("#{resource}.") }).to be_empty
+      end
+    end
+
+    it 'keeps the operational resources agents use inside conversations' do
+      # teams.read powers the in-chat "Assign team" picker, so it stays operational.
+      %w[labels.read canned_responses.read macros.execute message_templates.read teams.read].each do |key|
+        expect(agent_permissions).to include(key)
+      end
+    end
+
+    it 'still grants the administrative resources to account_owner' do
+      %w[integrations.read channels.read campaigns.read agents.read].each do |key|
+        expect(account_owner_permissions).to include(key)
+      end
+    end
+  end
+
   describe 'account_owner / super_admin — RBAC split (administrative gate)' do
     it 'account_owner receives users.manage automatically via all_permission_keys' do
       expect(account_owner_permissions).to include('users.manage')
