@@ -1,3 +1,5 @@
+require 'public_suffix'
+
 module AuthHelper
   extend ActiveSupport::Concern
 
@@ -119,6 +121,9 @@ module AuthHelper
   end
   
   def cookie_domain
+    # Override explicito por ambiente (recomendado em producao). Ex.: COOKIE_DOMAIN=.refletia.com.br
+    return ENV['COOKIE_DOMAIN'].presence if ENV['COOKIE_DOMAIN'].present?
+
     request_host = request.host
     
     # Em desenvolvimento com ngrok, NÃO definir domain para permitir cookies funcionarem
@@ -141,16 +146,24 @@ module AuthHelper
     # Verifica se o host é um IP ou localhost
     return nil if request_host =~ /\A\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ || request_host == 'localhost'
     
-    # Extrai o domínio principal para definir cookies entre subdomínios
-    domain_parts = request_host.split('.')
-    
-    # Para garantir que não definimos cookies para TLDs genéricos
-    if domain_parts.size >= 2
-      # Retorna os dois últimos segmentos do domínio (ex: example.com)
-      ".#{domain_parts[-2]}.#{domain_parts[-1]}"
+    # Extrai o dominio REGISTRAVEL para compartilhar o cookie entre subdominios.
+    # Usa public_suffix (cobre ccTLDs de 2o nivel: .com.br, .co.uk, .com.au...),
+    # evitando gerar Domain=.com.br (public suffix, rejeitado pelos navegadores).
+    registrable = registrable_domain(request_host)
+    registrable.present? ? ".#{registrable}" : request_host
+  end
+
+  # Dominio registravel via public_suffix; fallback heuristico se a lib nao resolver.
+  def registrable_domain(host)
+    PublicSuffix.domain(host)
+  rescue StandardError
+    parts = host.to_s.split('.')
+    return host if parts.size < 2
+    second_level = %w[com.br net.br org.br gov.br edu.br co.uk com.au com.ar]
+    if parts.size >= 3 && second_level.include?(parts.last(2).join('.'))
+      parts.last(3).join('.')
     else
-      # Fallback para o host completo se não conseguirmos determinar o domínio principal
-      request_host
+      parts.last(2).join('.')
     end
   end
 
