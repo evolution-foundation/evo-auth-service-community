@@ -56,6 +56,9 @@ gem "oj", "~> 3.16"
 gem "valid_email2"
 gem "telephone_number"
 gem "attr_extras"
+# Extracao de dominio registravel para cookies de auth entre subdominios (EVO-1964).
+# Antes so vinha transitivamente (via addressable/mail); auth_helper.rb agora exige direto.
+gem "public_suffix"
 
 # Configuration
 gem "dotenv-rails", ">= 3.0.0"

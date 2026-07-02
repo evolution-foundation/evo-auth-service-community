@@ -61,12 +61,4 @@ RSpec.describe AuthHelper do
       end
     end
   end
-
-  describe '#registrable_domain fallback' do
-    it 'falls back to the manual heuristic when public_suffix raises' do
-      allow(PublicSuffix).to receive(:domain).and_raise(StandardError)
-      expect(instance.registrable_domain('evocrm-evo-auth.cap.refletia.com.br')).to eq('refletia.com.br')
-      expect(instance.registrable_domain('app.exemplo.com')).to eq('exemplo.com')
-    end
-  end
 end
