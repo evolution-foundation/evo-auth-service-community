@@ -107,9 +107,13 @@ class SetupBootstrapService
     SQL
     Rails.logger.info "[SetupBootstrap] granted enterprise evolution_admin to #{user.email}"
   rescue StandardError => e
-    # Never block the installation if the enterprise grant fails — the manual
-    # `evo_enterprise:bootstrap_dev` rake task remains a fallback.
-    Rails.logger.warn "[SetupBootstrap] Failed to grant enterprise evolution_admin: #{e.message}"
+    # Never block the installation if the enterprise grant fails. The non-manual
+    # recovery is the org-única net in `evo_enterprise:install` (runs every boot,
+    # re-mints the single owner's global membership) — NOT the manual
+    # `evo_enterprise:bootstrap_dev`. Logged at ERROR: a miss here leaves the admin
+    # without cross-tenant access, and the self-hosted login path has no heal for
+    # the global membership (deliberate — see the auth-enterprise login_heal).
+    Rails.logger.error "[SetupBootstrap] Failed to grant enterprise evolution_admin: #{e.message}"
   end
 
   def create_oauth_app
