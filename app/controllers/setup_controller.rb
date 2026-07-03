@@ -16,7 +16,7 @@ class SetupController < ActionController::Base
     ctx = Licensing::Runtime.context
 
     unless ctx
-      render json: { status: 'inactive', instance_id: nil }
+      render json: { status: 'inactive', instance_id: nil, whitelabel: whitelabel_supported? }
       return
     end
 
@@ -37,7 +37,11 @@ class SetupController < ActionController::Base
     resp = {
       status:      bootstrapped ? 'active' : 'inactive',
       licensed:    licensed,
-      instance_id: resolve_instance_id(ctx)
+      instance_id: resolve_instance_id(ctx),
+      # Tells the Setup wizard whether the box supports box branding (the enterprise
+      # whitelabel table exists) so it can show the "Sua marca" step. On a
+      # community-only install the table is absent → false → the step is hidden.
+      whitelabel:  whitelabel_supported?
     }
 
     if licensed
@@ -265,5 +269,15 @@ class SetupController < ActionController::Base
 
   def resolve_instance_id(ctx)
     ctx.instance_id.presence || Licensing::Store.new.load_or_create_instance_id
+  end
+
+  # True when the enterprise whitelabel table is present — the same guard the
+  # bootstrap service uses before writing branding. Mirrors the enterprise-vs-
+  # community split without loading the enterprise gem. Fail-soft: any error
+  # (no connection, etc.) reports false so the wizard degrades to no branding.
+  def whitelabel_supported?
+    ActiveRecord::Base.connection.table_exists?('evo_enterprise_whitelabel_configs')
+  rescue StandardError
+    false
   end
 end
