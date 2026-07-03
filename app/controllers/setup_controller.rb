@@ -238,11 +238,15 @@ class SetupController < ActionController::Base
   # Optional box branding captured at /setup. Only present, non-blank fields count
   # (blank leaves the install default untouched — overwrite per field).
   def brand_params(bp)
+    # Coerce to String before validating/persisting: params.permit lets non-string
+    # scalars through (a JSON number or boolean), and a later `.length`/`.match?`
+    # on those would raise and 500 /setup. `to_s` normalizes; blank values are then
+    # dropped so an absent field leaves the install default untouched.
     {
       app_title:       bp[:app_title],
       primary_color:   bp[:primary_color],
       secondary_color: bp[:secondary_color]
-    }.select { |_, v| v.present? }
+    }.transform_values(&:to_s).select { |_, v| v.present? }
   end
 
   # Validate branding BEFORE creating the admin so an invalid color never rolls

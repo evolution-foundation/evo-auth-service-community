@@ -134,4 +134,15 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     expect(response).to have_http_status(:unprocessable_entity)
     expect(User.count).to eq(0)
   end
+
+  # params.permit lets non-string scalars through; a JSON number reaching the hex
+  # validation used to raise (NoMethodError) and 500. It must coerce and 422.
+  it 'does not 500 when a color arrives as a non-string JSON number' do
+    post '/setup/bootstrap',
+         params: base_params.merge(primary_color: 12_345).to_json,
+         headers: { 'CONTENT_TYPE' => 'application/json' }
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(User.count).to eq(0)
+  end
 end
