@@ -3,16 +3,17 @@
 class SetupBootstrapService
   class AlreadyBootstrappedError < StandardError; end
 
-  def self.call(first_name:, last_name:, email:, password:, client_ip: nil)
-    new(first_name:, last_name:, email:, password:, client_ip:).call
+  def self.call(first_name:, last_name:, email:, password:, client_ip: nil, brand: {})
+    new(first_name:, last_name:, email:, password:, client_ip:, brand:).call
   end
 
-  def initialize(first_name:, last_name:, email:, password:, client_ip: nil)
+  def initialize(first_name:, last_name:, email:, password:, client_ip: nil, brand: {})
     @first_name = first_name
     @last_name  = last_name
     @email      = email
     @password   = password
     @client_ip  = client_ip
+    @brand      = brand || {}
   end
 
   def call
@@ -27,6 +28,7 @@ class SetupBootstrapService
       user      = create_user
       assign_global_role(user)
       assign_enterprise_evolution_admin(user)
+      apply_enterprise_whitelabel
 
       survey_token = generate_survey_token(user)
       { user: user, survey_token: survey_token }
@@ -107,9 +109,49 @@ class SetupBootstrapService
     SQL
     Rails.logger.info "[SetupBootstrap] granted enterprise evolution_admin to #{user.email}"
   rescue StandardError => e
-    # Never block the installation if the enterprise grant fails — the manual
-    # `evo_enterprise:bootstrap_dev` rake task remains a fallback.
-    Rails.logger.warn "[SetupBootstrap] Failed to grant enterprise evolution_admin: #{e.message}"
+    # Never block the installation if the enterprise grant fails. The non-manual
+    # recovery is the org-única net in `evo_enterprise:install` (runs every boot,
+    # re-mints the single owner's global membership) — NOT the manual
+    # `evo_enterprise:bootstrap_dev`. Logged at ERROR: a miss here leaves the admin
+    # without cross-tenant access, and the self-hosted login path has no heal for
+    # the global membership (deliberate — see the auth-enterprise login_heal).
+    Rails.logger.error "[SetupBootstrap] Failed to grant enterprise evolution_admin: #{e.message}"
+  end
+
+  # Persist the operator's box branding captured at /setup onto the single agency's
+  # whitelabel row. Mirrors assign_enterprise_evolution_admin: the auth service
+  # shares the evo_community DB but does not load the enterprise gem, so we write
+  # via guarded, parameterized SQL. Guard skips silently on a community-only
+  # install. This is an EXPLICIT operator write (overwrite per field) — only the
+  # provided fields are set, so it composes with the install's fill-if-unclaimed
+  # default without clobbering unspecified columns.
+  def apply_enterprise_whitelabel
+    cols = @brand.slice(:app_title, :primary_color, :secondary_color)
+                 .select { |_, v| v.present? }
+    return if cols.empty?
+
+    conn  = ActiveRecord::Base.connection
+    table = 'evo_enterprise_whitelabel_configs'
+    return unless conn.table_exists?(table)
+
+    agency_id = conn.select_value('SELECT id FROM evo_enterprise_agencies ORDER BY created_at LIMIT 1')
+    return if agency_id.nil?
+
+    insert_primary   = cols[:primary_color] || '#22C55E'
+    insert_title     = cols[:app_title] || ''
+    insert_secondary = cols[:secondary_color] # may be nil
+    set_clause = cols.keys.map { |c| "#{c} = EXCLUDED.#{c}" }.join(', ')
+
+    conn.execute(<<~SQL.squish)
+      INSERT INTO #{table}
+        (agency_id, primary_color, app_title, secondary_color, smtp_config, email_templates, hide_evo_branding)
+      VALUES
+        (#{conn.quote(agency_id)}, #{conn.quote(insert_primary)}, #{conn.quote(insert_title)}, #{conn.quote(insert_secondary)}, '{}', '{}', false)
+      ON CONFLICT (agency_id) DO UPDATE SET #{set_clause}, updated_at = now()
+    SQL
+    Rails.logger.info "[SetupBootstrap] applied enterprise whitelabel brand (#{cols.keys.join(', ')})"
+  rescue StandardError => e
+    Rails.logger.warn "[SetupBootstrap] Failed to apply enterprise whitelabel: #{e.message}"
   end
 
   def create_oauth_app
