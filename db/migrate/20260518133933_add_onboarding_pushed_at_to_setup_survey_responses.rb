@@ -2,6 +2,6 @@
 
 class AddOnboardingPushedAtToSetupSurveyResponses < ActiveRecord::Migration[7.1]
   def change
-    add_column :setup_survey_responses, :onboarding_pushed_at, :datetime
+    add_column :setup_survey_responses, :onboarding_pushed_at, :datetime, if_not_exists: true
   end
 end
