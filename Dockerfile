@@ -41,6 +41,11 @@ RUN rm -f bin/thrust bin/docker-entrypoint
 COPY --chown=1000:1000 bin/healthcheck /usr/local/bin/evo-auth-healthcheck
 RUN chmod +x /usr/local/bin/evo-auth-healthcheck
 
+# Normaliza CRLF->LF no healthcheck: um checkout Windows deixa \r no shebang
+# (#!/bin/sh\r), fazendo o kernel procurar "/bin/sh\r" -> "not found" (exit 127)
+# no HEALTHCHECK. O container fica unhealthy e o gateway responde 502.
+RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-healthcheck
+
 # Create non-root user for security
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash && \
