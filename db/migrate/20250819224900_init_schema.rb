@@ -280,7 +280,7 @@ class InitSchema < ActiveRecord::Migration[7.1]
       return
     end
 
-    add_foreign_key from_table, to_table, column: column
+    add_foreign_key from_table, to_table, column: column, if_not_exists: true
   end
 
   def column_type_incompatible?(from_table, column, to_table)

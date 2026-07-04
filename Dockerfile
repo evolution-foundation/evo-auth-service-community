@@ -23,8 +23,10 @@ RUN apt-get update -qq && \
     libvips \
     && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-# Set development environment
-ENV RAILS_ENV=development \
+# RAILS_ENV configuravel no build: default 'development' (mantem o compose local),
+# passe --build-arg RAILS_ENV=production para as imagens de deploy (CapRover).
+ARG RAILS_ENV=development
+ENV RAILS_ENV=${RAILS_ENV} \
     BUNDLE_PATH="/usr/local/bundle"
 
 # Copy Gemfile and install dependencies
@@ -41,6 +43,16 @@ RUN rm -f bin/thrust bin/docker-entrypoint
 COPY --chown=1000:1000 bin/healthcheck /usr/local/bin/evo-auth-healthcheck
 RUN chmod +x /usr/local/bin/evo-auth-healthcheck
 
+# EVO-1999: entrypoint que roda migrations no boot da imagem, para que qualquer
+# orquestrador (incl. CapRover, que ignora o command do compose) suba o schema
+# atualizado. Instalado antes do USER para poder dar permissão como root.
+COPY --chown=1000:1000 docker-entrypoint.sh /usr/local/bin/evo-auth-entrypoint
+RUN chmod +x /usr/local/bin/evo-auth-entrypoint
+
+# Normaliza CRLF->LF no entrypoint: um checkout Windows deixa \r no shebang, o
+# que faz o kernel procurar "/bin/bash\r" -> "not found" (exit 127) ao subir.
+RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-entrypoint
+
 # Create non-root user for security
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash && \
@@ -54,3 +66,9 @@ EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD ["/usr/local/bin/evo-auth-healthcheck"]
+
+# EVO-1999: a imagem migra sozinha no boot (gate RUN_MIGRATIONS, default true) e
+# sobe o server. Orquestradores que passam um command próprio (ex.: sidekiq) ainda
+# passam pelo entrypoint — defina RUN_MIGRATIONS=false nesses para não migrar.
+ENTRYPOINT ["/usr/local/bin/evo-auth-entrypoint"]
+CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "3001"]
