@@ -49,9 +49,13 @@ RUN chmod +x /usr/local/bin/evo-auth-healthcheck
 COPY --chown=1000:1000 docker-entrypoint.sh /usr/local/bin/evo-auth-entrypoint
 RUN chmod +x /usr/local/bin/evo-auth-entrypoint
 
-# Normalize CRLF->LF in the entrypoint: a Windows checkout leaves \r in the
-# shebang, making the kernel look for "/bin/bash\r" -> "not found" (exit 127) on boot.
-RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-entrypoint
+# Normalize CRLF->LF on all scripts: a Windows checkout leaves \r in shebangs
+# (#!/bin/sh\r), making the kernel look for "/bin/sh\r" -> "not found" (exit
+# 127). On the HEALTHCHECK this marks the container unhealthy and the gateway
+# answers 502; on bin/* it breaks e.g. `bin/rails runner` the same way; on the
+# entrypoint it aborts the boot.
+RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-healthcheck /usr/local/bin/evo-auth-entrypoint bin/* \
+    && chmod +x bin/*
 
 # Create non-root user for security
 RUN groupadd --system --gid 1000 rails && \

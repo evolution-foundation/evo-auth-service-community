@@ -17,7 +17,7 @@
 # macros, message_templates) are deliberately NOT revoked — removing them would
 # break the chat. Their use-vs-manage split is the EVO-1955 follow-up.
 #
-# Pattern mirrors GrantRbacSplitPermissionsToExistingRoles (20260622120000):
+# Pattern mirrors GrantRbacSplitPermissionsToExistingRoles (20260622120001):
 # idempotent (exists-before-destroy), no-op when the table/role is absent.
 #
 # ROLLBACK IS LOSSY — `down` re-grants the keys to the system `agent` role as a
