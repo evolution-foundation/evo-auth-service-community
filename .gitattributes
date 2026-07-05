@@ -7,3 +7,9 @@ db/schema.rb linguist-generated
 vendor/* linguist-vendored
 config/credentials/*.yml.enc diff=rails_credentials
 config/credentials.yml.enc diff=rails_credentials
+
+# Force LF on scripts: CRLF in a shebang breaks exec inside Docker images
+# built from a Windows checkout (EVO-2011).
+*.sh  text eol=lf
+*.rb  text eol=lf
+bin/* text eol=lf
