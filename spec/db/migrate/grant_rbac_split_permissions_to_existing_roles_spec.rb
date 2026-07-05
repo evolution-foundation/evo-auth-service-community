@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20260622120000_grant_rbac_split_permissions_to_existing_roles.rb')
+require Rails.root.join('db/migrate/20260622120001_grant_rbac_split_permissions_to_existing_roles.rb')
 
 # Spec for the paired data-migration that backfills the RBAC permission split
 # (tech-spec rbac-granular-inbox-permissions) into already-bootstrapped
