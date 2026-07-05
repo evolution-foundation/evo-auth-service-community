@@ -23,8 +23,8 @@ RUN apt-get update -qq && \
     libvips \
     && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-# RAILS_ENV configuravel no build: default 'development' (mantem o compose local),
-# passe --build-arg RAILS_ENV=production para as imagens de deploy (CapRover).
+# RAILS_ENV is configurable at build time: defaults to 'development' (keeps the
+# local compose working); pass --build-arg RAILS_ENV=production for deploy images.
 ARG RAILS_ENV=development
 ENV RAILS_ENV=${RAILS_ENV} \
     BUNDLE_PATH="/usr/local/bundle"
@@ -43,14 +43,14 @@ RUN rm -f bin/thrust bin/docker-entrypoint
 COPY --chown=1000:1000 bin/healthcheck /usr/local/bin/evo-auth-healthcheck
 RUN chmod +x /usr/local/bin/evo-auth-healthcheck
 
-# EVO-1999: entrypoint que roda migrations no boot da imagem, para que qualquer
-# orquestrador (incl. CapRover, que ignora o command do compose) suba o schema
-# atualizado. Instalado antes do USER para poder dar permissão como root.
+# EVO-1999: entrypoint that runs migrations on image boot, so any orchestrator
+# (incl. CapRover, which ignores the compose command) brings up an up-to-date
+# schema. Installed before USER so we can set permissions as root.
 COPY --chown=1000:1000 docker-entrypoint.sh /usr/local/bin/evo-auth-entrypoint
 RUN chmod +x /usr/local/bin/evo-auth-entrypoint
 
-# Normaliza CRLF->LF no entrypoint: um checkout Windows deixa \r no shebang, o
-# que faz o kernel procurar "/bin/bash\r" -> "not found" (exit 127) ao subir.
+# Normalize CRLF->LF in the entrypoint: a Windows checkout leaves \r in the
+# shebang, making the kernel look for "/bin/bash\r" -> "not found" (exit 127) on boot.
 RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-entrypoint
 
 # Create non-root user for security
@@ -67,8 +67,8 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD ["/usr/local/bin/evo-auth-healthcheck"]
 
-# EVO-1999: a imagem migra sozinha no boot (gate RUN_MIGRATIONS, default true) e
-# sobe o server. Orquestradores que passam um command próprio (ex.: sidekiq) ainda
-# passam pelo entrypoint — defina RUN_MIGRATIONS=false nesses para não migrar.
+# EVO-1999: the image migrates on boot (RUN_MIGRATIONS gate, default true) and
+# starts the server. Orchestrators that pass their own command (e.g. sidekiq)
+# still go through the entrypoint — set RUN_MIGRATIONS=false on those to skip it.
 ENTRYPOINT ["/usr/local/bin/evo-auth-entrypoint"]
 CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "3001"]
