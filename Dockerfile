@@ -41,6 +41,13 @@ RUN rm -f bin/thrust bin/docker-entrypoint
 COPY --chown=1000:1000 bin/healthcheck /usr/local/bin/evo-auth-healthcheck
 RUN chmod +x /usr/local/bin/evo-auth-healthcheck
 
+# Normalize CRLF->LF on all scripts: a Windows checkout leaves \r in shebangs
+# (#!/bin/sh\r), making the kernel look for "/bin/sh\r" -> "not found" (exit
+# 127). On the HEALTHCHECK this marks the container unhealthy and the gateway
+# answers 502; on bin/* it breaks e.g. `bin/rails runner` the same way.
+RUN sed -i 's/\r$//' /usr/local/bin/evo-auth-healthcheck bin/* \
+    && chmod +x bin/*
+
 # Create non-root user for security
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash && \
