@@ -73,6 +73,23 @@ RSpec.describe 'email-confirmation posture (EVO-2016)', type: :request do
 
       expect(response).to have_http_status(:ok)
     end
+
+    # The posture must follow the same SMTP_ADDRESS lookup the mailer uses
+    # (GlobalConfigService: installation_configs -> runtime_configs -> ENV), not
+    # just the bare env. SMTP configured via the admin UI (installation_configs)
+    # sends mail while SMTP_ADDRESS env is empty; keying off the env alone would
+    # leave the barrier open while mail works (AC1 breach).
+    it 'requires confirmation when SMTP is admin-configured (GlobalConfigService) with the env unset' do
+      set_posture_env(smtp: nil)
+      allow(GlobalConfigService).to receive(:load).and_call_original
+      allow(GlobalConfigService).to receive(:load).with('SMTP_ADDRESS').and_return('smtp.example.com')
+      user = create_user(confirmed: false, confirmation_sent: true)
+
+      login(user)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body.dig('error', 'code')).to eq('EMAIL_NOT_CONFIRMED')
+    end
   end
 
   describe 'explicit REQUIRE_EMAIL_CONFIRMATION override' do
