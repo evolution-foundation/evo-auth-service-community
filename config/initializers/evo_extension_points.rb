@@ -11,7 +11,9 @@ Rails.application.config.after_initialize do
   versions = {
     auth_bridge: EvoExtensionPoints::AuthBridge::VERSION,
     token_claims: EvoExtensionPoints::TokenClaims::VERSION,
-    login_gate: EvoExtensionPoints::LoginGate::VERSION
+    login_gate: EvoExtensionPoints::LoginGate::VERSION,
+    after_bootstrap: EvoExtensionPoints::AfterBootstrap::VERSION,
+    extra_setup_steps: EvoExtensionPoints::ExtraSetupSteps::VERSION
   }
 
   Rails.logger.info(

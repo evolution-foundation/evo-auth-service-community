@@ -18,6 +18,8 @@ module EvoExtensionPoints
     auth_bridge_sign_out
     token_claims
     login_gate
+    after_bootstrap
+    extra_setup_steps
   ].freeze
 
   # Arity expected by each override block. Negative values follow Ruby's
@@ -38,7 +40,9 @@ module EvoExtensionPoints
     auth_bridge_current_user: 0,        # ||
     auth_bridge_sign_out: 1,            # |user|
     token_claims: 1,                    # |user|
-    login_gate: 1                       # |user, **context|  (proc arity = 1)
+    login_gate: 1,                      # |user, **context|  (proc arity = 1)
+    after_bootstrap: 1,                 # |user:, payload:|   (kwargs collapse to 1)
+    extra_setup_steps: 0                # ||
   }.freeze
 
   class << self
