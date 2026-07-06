@@ -6,9 +6,8 @@ module EvoExtensionPoints
   # Backs the `extra_setup_steps` boolean on GET /setup/status. Tells the
   # frontend Setup wizard whether a consumer contributes extra steps after the
   # account step. Community default is false — a pure community install has a
-  # single-step wizard. Replaces the old
-  # `table_exists?('evo_enterprise_whitelabel_configs')` probe, so the community
-  # no longer names any enterprise table. Override via:
+  # single-step wizard. Replaces the old enterprise whitelabel-table probe, so
+  # the community no longer names any enterprise table. Override via:
   #   EvoExtensionPoints.replace(:extra_setup_steps) { true }
   #
   # Fail-soft: any error from the consumer block degrades to false so the wizard
