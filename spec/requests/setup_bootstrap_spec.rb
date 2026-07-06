@@ -2,22 +2,20 @@
 
 require 'rails_helper'
 
-# POST /setup/bootstrap creates the first admin and, in an enterprise deployment,
-# also grants the global `evolution_admin` membership and persists the operator's
-# box branding onto the single agency's whitelabel row. The auth service shares
-# the evo_community DB with the enterprise gem, whose tables only exist there; the
-# auth schema does not carry them, so we create minimal stand-ins for the test DB.
-# The users.agency_id bridge is an enterprise-DB trigger, covered by the gem's
-# seed_singleton_org spec, not here.
+# POST /setup/bootstrap creates the first admin user and dispatches the neutral
+# `:after_bootstrap` extension point INSIDE the bootstrap transaction, right
+# after the admin user and its global role are created. The community assigns no
+# meaning to the request's `extension_payload`; it forwards the opaque bag to the
+# hook verbatim. A registered consumer (the enterprise overlay, out of scope
+# here) is what restores the old enterprise behavior — the community knows
+# nothing about it.
 RSpec.describe 'POST /setup/bootstrap', type: :request do
   # SetupBootstrapService#run_seeds (load db/seeds.rb) commits, which defeats the
   # transactional-fixture rollback and leaks the created admin across examples
   # (the 2nd bootstrap then hits an already-bootstrapped state). Manage isolation
-  # explicitly instead: truncate users + reset the enterprise stand-ins per example.
+  # explicitly instead: truncate users per example.
   self.use_transactional_tests = false
 
-  let(:memberships) { 'evo_enterprise_tenant_memberships' }
-  let(:whitelabel)  { 'evo_enterprise_whitelabel_configs' }
   let(:base_params) do
     {
       first_name: 'Owner',
@@ -28,61 +26,16 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     }
   end
 
-  before(:all) do
-    conn = ActiveRecord::Base.connection
-    conn.execute(<<~SQL)
-      CREATE TABLE IF NOT EXISTS evo_enterprise_tenant_memberships (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id uuid NOT NULL,
-        tenant_id uuid,
-        role varchar NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
-      )
-    SQL
-    conn.execute(<<~SQL)
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_evo_enterprise_memberships_user_global
-      ON evo_enterprise_tenant_memberships (user_id) WHERE tenant_id IS NULL
-    SQL
-    conn.execute("CREATE TABLE IF NOT EXISTS evo_enterprise_agencies (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), created_at timestamptz NOT NULL DEFAULT now())")
-    conn.execute(<<~SQL)
-      CREATE TABLE IF NOT EXISTS evo_enterprise_whitelabel_configs (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        agency_id uuid NOT NULL UNIQUE,
-        primary_color varchar NOT NULL,
-        app_title varchar NOT NULL,
-        secondary_color varchar,
-        smtp_config jsonb NOT NULL DEFAULT '{}',
-        email_templates jsonb NOT NULL DEFAULT '{}',
-        hide_evo_branding boolean NOT NULL DEFAULT false,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
-      )
-    SQL
-    # The org-única baseline the install leaves: one agency + a neutral whitelabel row.
-    agency_id = conn.select_value("INSERT INTO evo_enterprise_agencies DEFAULT VALUES RETURNING id")
-    conn.execute("INSERT INTO evo_enterprise_whitelabel_configs (agency_id, primary_color, app_title) VALUES ('#{agency_id}', '#22C55E', '')")
-  end
-
-  after(:all) do
-    conn = ActiveRecord::Base.connection
-    conn.execute("DROP TABLE IF EXISTS evo_enterprise_tenant_memberships")
-    conn.execute("DROP TABLE IF EXISTS evo_enterprise_whitelabel_configs")
-    conn.execute("DROP TABLE IF EXISTS evo_enterprise_agencies")
-  end
-
   before do
-    conn = ActiveRecord::Base.connection
-    conn.execute("TRUNCATE users CASCADE")
-    conn.execute("DELETE FROM #{memberships}")
-    conn.execute("UPDATE #{whitelabel} SET app_title = '', primary_color = '#22C55E', secondary_color = NULL")
+    ActiveRecord::Base.connection.execute('TRUNCATE users CASCADE')
   end
 
-  def whitelabel_row
-    ActiveRecord::Base.connection.select_one("SELECT app_title, primary_color FROM #{whitelabel} LIMIT 1")
+  after do
+    # The registry is process-global — never let an override leak between examples.
+    EvoExtensionPoints.reset(:after_bootstrap)
   end
 
-  it 'creates the first admin with super_admin + the global evolution_admin membership' do
+  it 'creates the first admin with super_admin and returns a survey_token' do
     expect(User.count).to eq(0)
 
     post '/setup/bootstrap', params: base_params
@@ -93,56 +46,52 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     expect(user).to be_present
     expect(user.has_role?('super_admin')).to be(true)
 
-    membership = ActiveRecord::Base.connection.select_one(
-      "SELECT role, tenant_id FROM #{memberships} WHERE user_id = '#{user.id}'"
-    )
-    expect(membership).to be_present
-    expect(membership['role']).to eq('evolution_admin')
-    expect(membership['tenant_id']).to be_nil
+    body = JSON.parse(response.body)
+    expect(body['survey_token']).to be_present
   end
 
-  it 'persists the operator brand onto the singleton whitelabel row' do
-    post '/setup/bootstrap', params: base_params.merge(app_title: 'Acme', primary_color: '#3366FF')
+  it 'invokes the :after_bootstrap hook with the persisted user and the opaque payload' do
+    received = nil
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| received = [user.id, payload] }
+
+    post '/setup/bootstrap', params: base_params.merge(extension_payload: { 'foo' => 'bar' })
 
     expect(response).to have_http_status(:created)
-    row = whitelabel_row
-    expect(row['app_title']).to eq('Acme')
-    expect(row['primary_color']).to eq('#3366FF')
+    expect(received).not_to be_nil
+    expect(received.first).to eq(User.last.id)
+    expect(received.last).to eq({ 'foo' => 'bar' })
   end
 
-  it 'overwrites only the provided fields (blank leaves the default)' do
-    post '/setup/bootstrap', params: base_params.merge(app_title: 'Acme')
-
-    expect(response).to have_http_status(:created)
-    row = whitelabel_row
-    expect(row['app_title']).to eq('Acme')       # provided → overwritten
-    expect(row['primary_color']).to eq('#22C55E') # not provided → default kept
-  end
-
-  it 'leaves the whitelabel untouched when no brand is provided' do
+  it 'still succeeds with no consumer registered (community no-op default)' do
     post '/setup/bootstrap', params: base_params
 
     expect(response).to have_http_status(:created)
-    row = whitelabel_row
-    expect(row['app_title']).to eq('')
-    expect(row['primary_color']).to eq('#22C55E')
+    expect(User.count).to eq(1)
   end
 
-  it 'rejects an invalid color with 422 and does not create the admin' do
-    post '/setup/bootstrap', params: base_params.merge(primary_color: 'not-a-hex')
+  # extension_payload is opaque: a malformed (non-object) value must not 500 this
+  # public, unauthenticated endpoint. It degrades to {} and the hook still fires.
+  it 'does not 500 when extension_payload arrives as a non-hash scalar' do
+    received = :untouched
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| received = payload }
 
-    expect(response).to have_http_status(:unprocessable_entity)
-    expect(User.count).to eq(0)
-  end
-
-  # params.permit lets non-string scalars through; a JSON number reaching the hex
-  # validation used to raise (NoMethodError) and 500. It must coerce and 422.
-  it 'does not 500 when a color arrives as a non-string JSON number' do
     post '/setup/bootstrap',
-         params: base_params.merge(primary_color: 12_345).to_json,
+         params: base_params.merge(extension_payload: 'not-an-object').to_json,
          headers: { 'CONTENT_TYPE' => 'application/json' }
 
-    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response).to have_http_status(:created)
+    expect(received).to eq({})
+  end
+
+  it 'rolls the whole install back when the :after_bootstrap consumer raises' do
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| raise 'consumer exploded' }
+
+    expect do
+      post '/setup/bootstrap', params: base_params
+    end.to raise_error('consumer exploded')
+
+    # The hook runs inside the bootstrap transaction, so its exception rolls the
+    # user creation back — atomic by design.
     expect(User.count).to eq(0)
   end
 end

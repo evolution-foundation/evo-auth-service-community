@@ -73,34 +73,38 @@ RSpec.describe 'GET /setup/status', type: :request do
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
-      expect(body).to eq('status' => 'inactive', 'instance_id' => nil, 'whitelabel' => false)
+      expect(body).to eq('status' => 'inactive', 'instance_id' => nil, 'extra_setup_steps' => false)
     end
   end
 
-  # The `whitelabel` flag gates the Setup wizard's "Sua marca" step: it is only
-  # shown on a box that supports box branding (the enterprise whitelabel table
-  # exists). The community auth test DB has no such table → false.
-  context 'the whitelabel branding flag' do
+  # The `extra_setup_steps` flag gates the Setup wizard's extra steps: it is only
+  # shown when a registered consumer contributes steps after the account step.
+  # Backed by the :extra_setup_steps extension point; community default is false.
+  context 'the extra_setup_steps capability flag' do
     before do
       allow(Licensing::Runtime).to receive(:context).and_return(active_ctx)
       allow(User).to receive(:exists?).and_return(false)
     end
 
-    it 'is false on a community-only install (table absent)' do
-      get '/setup/status'
-
-      expect(JSON.parse(response.body)['whitelabel']).to be(false)
+    after do
+      # The registry is process-global — never let an override leak between examples.
+      EvoExtensionPoints.reset(:extra_setup_steps)
     end
 
-    it 'is true when the enterprise whitelabel table is present' do
-      allow(ActiveRecord::Base.connection)
-        .to receive(:table_exists?)
-        .with('evo_enterprise_whitelabel_configs')
-        .and_return(true)
+    it 'is false on a community-only install (no consumer) and carries no whitelabel key' do
+      get '/setup/status'
+
+      body = JSON.parse(response.body)
+      expect(body['extra_setup_steps']).to be(false)
+      expect(body).not_to have_key('whitelabel')
+    end
+
+    it 'is true when a consumer registers the :extra_setup_steps override' do
+      EvoExtensionPoints.replace(:extra_setup_steps) { true }
 
       get '/setup/status'
 
-      expect(JSON.parse(response.body)['whitelabel']).to be(true)
+      expect(JSON.parse(response.body)['extra_setup_steps']).to be(true)
     end
   end
 end
