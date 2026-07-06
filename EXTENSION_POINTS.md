@@ -17,7 +17,7 @@ devise_token_auth stack; a consumer can **replace** the default
 implementation of one or more of them without modifying files in `app/`,
 `lib/` or `db/`.
 
-If you are about to change any of the three extension points below, read
+If you are about to change any of the extension points below, read
 the [Compatibility Promise](#compatibility-promise) first.
 
 ---
@@ -59,7 +59,7 @@ EvoExtensionPoints.replace(name) { |*args, **kwargs| ... }
 `:auth_bridge_find_user_by_email` (v1.1.0+),
 `:auth_bridge_sign_in_user`, `:auth_bridge_sign_in_request` (v1.1.0+),
 `:auth_bridge_current_user`, `:auth_bridge_sign_out`, `:token_claims`,
-`:login_gate`. Adding a new
+`:login_gate`, `:after_bootstrap`, `:extra_setup_steps`. Adding a new
 accepted name is a minor bump; removing or renaming an accepted name is
 a major bump.
 
@@ -94,7 +94,7 @@ unknown name raises `KeyError`.
 
 ## Extension points
 
-All three are exposed under the `EvoExtensionPoints` namespace,
+All are exposed under the `EvoExtensionPoints` namespace,
 implemented by `lib/evo_extension_points/` (shipped in a complementary
 story). Each extension point exposes its own version as
 `EvoExtensionPoints::<EP>::VERSION` (e.g.
@@ -238,6 +238,71 @@ or changing the fail-closed default for unknown returns / exceptions
 is a major bump. Adding new accepted keys in `context` or new accepted
 denial reasons is a minor bump.
 
+### 4. `after_bootstrap`
+
+**Version:** `1.0.0`
+**Default:** no-op; a pure community install runs no side effect after the
+first admin user is created.
+
+```ruby
+EvoExtensionPoints::AfterBootstrap.run(user:, payload:) # => nil
+```
+
+Dispatched **inside** the `/setup` bootstrap transaction, immediately after
+the first admin `user` and its global role are created. `payload` is an
+**opaque** hash forwarded verbatim from the request's `extension_payload`; the
+community assigns it no meaning, and the consumer validates and interprets it.
+
+> ⚠️ **Security:** `payload` arrives **fully unfiltered** — the community
+> `permit!`s the request bag and forwards it as-is, performing no allow-listing.
+> A consumer MUST `permit` / validate every key before using it in any
+> mass-assignment or SQL write; treat it as untrusted end-user input.
+
+**Error policy — no rescue (fail-through):** the dispatcher does NOT rescue.
+Because the call site is inside the bootstrap transaction, an exception raised
+by the consumer block rolls the **whole install** back — atomicity is the
+feature. The consumer owns any internal fail-open / fail-closed policy.
+
+Override:
+
+```ruby
+EvoExtensionPoints.replace(:after_bootstrap) do |user:, payload:|
+  MyConsumer::Bootstrap.after(user: user, payload: payload)
+end
+```
+
+**Breaking-change policy:** renaming `run`, changing the `user:` / `payload:`
+keyword shape, moving the call site outside the bootstrap transaction, or
+changing the no-rescue policy is a major bump. Adding an optional keyword is a
+minor bump.
+
+### 5. `extra_setup_steps`
+
+**Version:** `1.0.0`
+**Default:** returns `false`; a pure community install has a single-step Setup
+wizard.
+
+```ruby
+EvoExtensionPoints::ExtraSetupSteps.enabled? # => Boolean
+```
+
+Backs the `extra_setup_steps` boolean on `GET /setup/status`, telling the
+frontend Setup wizard whether a registered consumer contributes extra steps
+after the account step.
+
+**Error policy — fail-soft:** any exception raised by the consumer block is
+caught, logged at `WARN`, and degrades to `false` so a broken probe never traps
+the user on `/setup`.
+
+Override:
+
+```ruby
+EvoExtensionPoints.replace(:extra_setup_steps) { true }
+```
+
+**Breaking-change policy:** renaming `enabled?`, changing the return type from
+`Boolean`, or changing the fail-soft default is a major bump.
+
 ---
 
 ## How to use as a consumer
@@ -306,3 +371,10 @@ document itself is unversioned.
   `:auth_bridge_sign_in_request`.
 - `token_claims` `1.0.0` — Initial contract.
 - `login_gate` `1.0.0` — Initial contract.
+- `after_bootstrap` `1.0.0` — Initial: no-op hook dispatched inside the
+  `/setup` bootstrap transaction with `(user:, payload:)`; no rescue, so a
+  consumer exception rolls the install back. New registration key:
+  `:after_bootstrap`.
+- `extra_setup_steps` `1.0.0` — Initial: fail-soft capability query backing
+  the `extra_setup_steps` boolean on `GET /setup/status`; default false. New
+  registration key: `:extra_setup_steps`.

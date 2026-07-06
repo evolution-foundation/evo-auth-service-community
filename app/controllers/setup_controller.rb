@@ -16,7 +16,8 @@ class SetupController < ActionController::Base
     ctx = Licensing::Runtime.context
 
     unless ctx
-      render json: { status: 'inactive', instance_id: nil, whitelabel: whitelabel_supported? }
+      render json: { status: 'inactive', instance_id: nil,
+                     extra_setup_steps: EvoExtensionPoints::ExtraSetupSteps.enabled? }
       return
     end
 
@@ -38,10 +39,10 @@ class SetupController < ActionController::Base
       status:      bootstrapped ? 'active' : 'inactive',
       licensed:    licensed,
       instance_id: resolve_instance_id(ctx),
-      # Tells the Setup wizard whether the box supports box branding (the enterprise
-      # whitelabel table exists) so it can show the "Sua marca" step. On a
-      # community-only install the table is absent → false → the step is hidden.
-      whitelabel:  whitelabel_supported?
+      # Tells the Setup wizard whether a registered consumer contributes extra
+      # steps after the account step. Community default is false → single-step
+      # wizard. Backed by the :extra_setup_steps extension point.
+      extra_setup_steps: EvoExtensionPoints::ExtraSetupSteps.enabled?
     }
 
     if licensed
@@ -161,19 +162,13 @@ class SetupController < ActionController::Base
       return
     end
 
-    brand = brand_params(bp)
-    if (brand_error = brand_validation_error(brand))
-      render json: { error: brand_error }, status: :unprocessable_entity
-      return
-    end
-
     result = SetupBootstrapService.call(
       first_name: bp[:first_name],
       last_name:  bp[:last_name],
       email:      bp[:email],
       password:   bp[:password],
       client_ip:  request.remote_ip,
-      brand:      brand
+      extension_payload: extension_payload_param
     )
 
     render json: { status: 'ok', message: 'Installation completed successfully', survey_token: result[:survey_token] }, status: :created
@@ -229,37 +224,22 @@ class SetupController < ActionController::Base
   end
 
   def bootstrap_params
-    params.permit(:first_name, :last_name, :email, :password, :password_confirmation,
-                  :app_title, :primary_color, :secondary_color)
+    params.permit(:first_name, :last_name, :email, :password, :password_confirmation)
   end
 
-  HEX_COLOR = /\A#[0-9A-Fa-f]{6}\z/
+  # Opaque bag forwarded verbatim to the :after_bootstrap extension point. The
+  # community assigns NO meaning to its contents; a registered consumer (the
+  # enterprise overlay) validates and interprets it. Absent -> {} (no-op hook).
+  #
+  # Only a nested object is meaningful: a scalar or array (or an absent value)
+  # yields {} so this public, unauthenticated endpoint never 500s on a malformed
+  # payload (`"x".to_h`/`[1].to_h` would raise). The community drops it either
+  # way since it assigns the bag no meaning.
+  def extension_payload_param
+    raw = params[:extension_payload]
+    return {} unless raw.respond_to?(:permit!) || raw.is_a?(Hash)
 
-  # Optional box branding captured at /setup. Only present, non-blank fields count
-  # (blank leaves the install default untouched — overwrite per field).
-  def brand_params(bp)
-    # Coerce to String before validating/persisting: params.permit lets non-string
-    # scalars through (a JSON number or boolean), and a later `.length`/`.match?`
-    # on those would raise and 500 /setup. `to_s` normalizes; blank values are then
-    # dropped so an absent field leaves the install default untouched.
-    {
-      app_title:       bp[:app_title],
-      primary_color:   bp[:primary_color],
-      secondary_color: bp[:secondary_color]
-    }.transform_values(&:to_s).select { |_, v| v.present? }
-  end
-
-  # Validate branding BEFORE creating the admin so an invalid color never rolls
-  # back the user. Returns an error string or nil.
-  def brand_validation_error(brand)
-    if brand[:app_title] && brand[:app_title].length > 120
-      return 'Brand title must be at most 120 characters'
-    end
-
-    [brand[:primary_color], brand[:secondary_color]].compact.each do |color|
-      return "Invalid color: #{color}" unless color.match?(HEX_COLOR)
-    end
-    nil
+    raw.respond_to?(:permit!) ? raw.permit!.to_h : raw.to_h
   end
 
   def survey_params
@@ -273,15 +253,5 @@ class SetupController < ActionController::Base
 
   def resolve_instance_id(ctx)
     ctx.instance_id.presence || Licensing::Store.new.load_or_create_instance_id
-  end
-
-  # True when the enterprise whitelabel table is present — the same guard the
-  # bootstrap service uses before writing branding. Mirrors the enterprise-vs-
-  # community split without loading the enterprise gem. Fail-soft: any error
-  # (no connection, etc.) reports false so the wizard degrades to no branding.
-  def whitelabel_supported?
-    ActiveRecord::Base.connection.table_exists?('evo_enterprise_whitelabel_configs')
-  rescue StandardError
-    false
   end
 end
