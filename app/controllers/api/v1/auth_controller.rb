@@ -12,11 +12,12 @@ class Api::V1::AuthController < Api::BaseController
     user = User.from_email(email)
 
     if user&.valid_password?(params[:password])
-      # Barreira de confirmação de e-mail: OPT-IN via REQUIRE_EMAIL_CONFIRMATION.
-      # Default OFF para não quebrar instalações existentes; o nosso docker liga.
-      # Quando ON, usuário não-confirmado não acessa (retorna code próprio p/ o
-      # front oferecer reenvio).
-      if require_email_confirmation? && !user.active_for_authentication?
+      # Email-confirmation barrier. Posture derives from SMTP presence (8.3b);
+      # accounts that never received confirmation instructions (created while
+      # the posture was off — confirmation_sent_at nil) are grandfathered in:
+      # no retroactive lockout. active_for_authentication? is kept so the
+      # enterprise allow-unconfirmed override still neutralizes the barrier.
+      if require_email_confirmation? && user.confirmation_sent_at.present? && !user.active_for_authentication?
         return error_response(
           'EMAIL_NOT_CONFIRMED',
           'Confirme seu e-mail para acessar.',
