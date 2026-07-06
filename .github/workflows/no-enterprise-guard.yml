@@ -1,0 +1,21 @@
+name: no-enterprise-guard
+on:
+  pull_request:
+  push:
+    branches: [develop]
+permissions:
+  contents: read
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject forbidden identifiers
+        run: |
+          # These identifiers must not exist in this community repo. No allowlist:
+          # the code was removed and must not be reintroduced.
+          if git grep -nE 'evo_enterprise|enterprise/v1' -- . ':!.github/workflows/no-enterprise-guard.yml' ; then
+            echo "::error::Forbidden identifiers (evo_enterprise / enterprise/v1) found — must not be reintroduced."
+            exit 1
+          fi
+          echo "OK — no forbidden identifiers."
