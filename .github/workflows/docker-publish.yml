@@ -54,6 +54,10 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          # EVO-1999: deploy images must bake RAILS_ENV=production (the Dockerfile
+          # defaults to development for the local compose).
+          build-args: |
+            RAILS_ENV=production
           cache-from: type=gha,scope=linux/amd64
           cache-to: type=gha,scope=linux/amd64,mode=max
 
@@ -89,6 +93,10 @@ jobs:
           push: true
           provenance: mode=max
           sbom: true
+          # EVO-1999: deploy images must bake RAILS_ENV=production (the Dockerfile
+          # defaults to development for the local compose).
+          build-args: |
+            RAILS_ENV=production
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true
           # Release paths bypass cache to guarantee a from-scratch image:
           #   - tag builds (v*.*.*) — explicit releases
