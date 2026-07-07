@@ -165,7 +165,8 @@ class Api::V1::UsersController < Api::BaseController
       'destroy' => 'users.delete',
       'bulk_create' => 'users.bulk_operations',
       'permissions' => 'users.read',
-      'check_permission' => 'users.read'
+      'check_permission' => 'users.read',
+      'role' => 'users.read'
     }
 
     required_permission = action_map[action_name]

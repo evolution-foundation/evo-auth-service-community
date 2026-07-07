@@ -14,22 +14,28 @@ require 'rails_helper'
 RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551)', type: :request do
   let(:password) { 'Test123!@' }
 
-  # Seeded roles already exist in the auth DB:
-  #   - 'agent' (type=account) — non-admin from the controller's perspective
-  #   - 'super_admin' (type=user) — admin per ADMIN_ROLE_KEYS in the controller
-  # Reuse them instead of trying to create new ones (unique key constraint).
-  let(:agent_role) { Role.find_by!(key: 'agent') }
+  # PATCH /api/v1/account now enforces accounts.update, which the seeded
+  # 'agent' role no longer holds, so the non-admin actor here is a custom
+  # role that DOES hold accounts.update: it passes the outer gate and still
+  # exercises the mask_contact_pii admin guard (the original regression).
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
 
-  let(:agent_user) do
+  let(:updater_role) do
+    role = Role.create!(key: "account-updater-#{SecureRandom.hex(3)}", name: "Updater #{SecureRandom.hex(3)}",
+                        type: 'account', system: false)
+    RolePermissionsAction.create!(role: role, permission_key: 'accounts.update')
+    role
+  end
+
+  let(:updater_user) do
     user = User.create!(
-      name: 'Agent User',
-      email: "agent-#{SecureRandom.hex(4)}@example.com",
+      name: 'Updater User',
+      email: "updater-#{SecureRandom.hex(4)}@example.com",
       password: password,
       password_confirmation: password,
       confirmed_at: Time.current
     )
-    UserRole.create!(user: user, role: agent_role)
+    UserRole.create!(user: user, role: updater_role)
     user
   end
 
@@ -45,10 +51,10 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
     user
   end
 
-  let(:agent_token) { AccessToken.create!(owner: agent_user, name: 'agent-token', scopes: 'default') }
+  let(:updater_token) { AccessToken.create!(owner: updater_user, name: 'updater-token', scopes: 'default') }
   let(:admin_token) { AccessToken.create!(owner: admin_user, name: 'admin-token', scopes: 'default') }
 
-  let(:agent_headers) { { 'api_access_token' => agent_token.token, 'Host' => 'localhost' } }
+  let(:updater_headers) { { 'api_access_token' => updater_token.token, 'Host' => 'localhost' } }
   let(:admin_headers) { { 'api_access_token' => admin_token.token, 'Host' => 'localhost' } }
 
   before do
@@ -68,10 +74,10 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
   end
 
   describe 'CB-1.a — gate uses effective change, not key presence' do
-    it 'agent PATCH without mask_contact_pii preserves the flag (no shallow-merge wipe)' do
+    it 'non-admin updater PATCH without mask_contact_pii preserves the flag (no shallow-merge wipe)' do
       patch '/api/v1/account',
             params: { account: { settings: { audio_transcription: false } } },
-            headers: agent_headers,
+            headers: updater_headers,
             as: :json
 
       expect(response).to have_http_status(:ok)
@@ -79,20 +85,20 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
       expect(RuntimeConfig.account.dig('settings', 'audio_transcription')).to be(false)
     end
 
-    it 'agent PATCH that flips mask_contact_pii is rejected with 403' do
+    it 'non-admin updater PATCH that flips mask_contact_pii is rejected with 403' do
       patch '/api/v1/account',
             params: { account: { settings: { mask_contact_pii: false } } },
-            headers: agent_headers,
+            headers: updater_headers,
             as: :json
 
       expect(response).to have_http_status(:forbidden)
       expect(RuntimeConfig.account.dig('settings', 'mask_contact_pii')).to be(true)
     end
 
-    it 'agent PATCH that re-asserts the same value is allowed (no effective change)' do
+    it 'non-admin updater PATCH that re-asserts the same value is allowed (no effective change)' do
       patch '/api/v1/account',
             params: { account: { settings: { mask_contact_pii: true } } },
-            headers: agent_headers,
+            headers: updater_headers,
             as: :json
 
       expect(response).to have_http_status(:ok)

@@ -4,6 +4,7 @@ class Api::V1::AccountController < Api::BaseController
   PII_MASK_SETTING_KEY = 'mask_contact_pii'
   ADMIN_ROLE_KEYS = %w[super_admin account_owner administrator admin].freeze
 
+  before_action :check_authorization, only: :update
   before_action :enforce_admin_for_mask_pii_change, only: :update
 
   def show
@@ -26,6 +27,10 @@ class Api::V1::AccountController < Api::BaseController
   end
 
   private
+
+  def check_authorization
+    authorize_resource!('accounts', 'update')
+  end
 
   def account_params
     params.require(:account).permit(:name, :domain, :support_email, :locale,

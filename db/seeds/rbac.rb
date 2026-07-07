@@ -138,7 +138,9 @@ agent_permissions = [
   'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
   'pipelines.read',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
-  'accounts.read', 'accounts.update',
+  # accounts.update is administrative (Settings > Account) and deliberately
+  # NOT granted; PATCH /api/v1/account enforces it.
+  'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
   # Operational resources used inside conversations (quick-replies, labels, macros,
   # templates, and team assignment) stay with the agent. EVO-1955 will split their
