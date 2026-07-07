@@ -853,23 +853,47 @@ class ResourceActionsConfig
       "#{resource_config[:name]} - #{action_config[:name]}"
     end
 
+    # Lock metadata for a permission key. `basic` keys are held by every
+    # authenticated user (User::BASIC_READ_PERMISSIONS); `implied_by` names the
+    # grant that carries this one operationally (User::OPERATIONAL_IMPLICATIONS).
+    # Either makes the permission NON-manageable in a role editor: granting or
+    # revoking it on a role has no effect, so the UI must show it locked instead
+    # of offering a checkbox that lies. User is the single source of truth; this
+    # only reads its constants (at call time, so no load-order coupling).
+    def permission_lock_info(permission_key)
+      return { basic: true, implied_by: nil } if User::BASIC_READ_PERMISSIONS.include?(permission_key)
+
+      source = User::OPERATIONAL_IMPLICATIONS.find { |_src, implied| implied.include?(permission_key) }
+      { basic: false, implied_by: source&.first }
+    end
+
     # Get formatted data for API responses
     def api_format
       {
-        resources: RESOURCES.transform_values do |resource_config|
-          {
-            name: resource_config[:name],
-            description: resource_config[:description],
-            actions: resource_config[:actions].transform_values do |action_config|
-              {
-                name: action_config[:name],
-                description: action_config[:description]
-              }
-            end
-          }
-        end,
+        resources: RESOURCES.map do |resource_key, resource_config|
+          [
+            resource_key,
+            {
+              name: resource_config[:name],
+              description: resource_config[:description],
+              actions: resource_config[:actions].map do |action_key, action_config|
+                info = permission_lock_info(permission_key(resource_key, action_key))
+                [
+                  action_key,
+                  {
+                    name: action_config[:name],
+                    description: action_config[:description],
+                    basic: info[:basic],
+                    implied_by: info[:implied_by]
+                  }
+                ]
+              end.to_h
+            }
+          ]
+        end.to_h,
         all_permissions: all_permission_keys.map do |permission_key|
           resource_key, action_key = permission_key.split('.')
+          info = permission_lock_info(permission_key)
           {
             key: permission_key,
             display_name: permission_display_name(permission_key),
@@ -877,7 +901,9 @@ class ResourceActionsConfig
             action: action_key,
             resource_name: resource(resource_key)[:name],
             action_name: action(resource_key, action_key)[:name],
-            description: action(resource_key, action_key)[:description]
+            description: action(resource_key, action_key)[:description],
+            basic: info[:basic],
+            implied_by: info[:implied_by]
           }
         end
       }
