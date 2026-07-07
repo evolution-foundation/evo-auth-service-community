@@ -57,6 +57,11 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
+  # dashboard.read has no catalog resource ON PURPOSE (product decision, D2 of
+  # the RBAC audit): the dashboard is the landing page of every authenticated
+  # user, so the key lives only here and the frontend gate that reads it
+  # always passes. Do not "clean it up" — removing it hides the home screen
+  # from everyone.
   BASIC_READ_PERMISSIONS = %w[
     accounts.read labels.read dashboard.read teams.read
   ].freeze
