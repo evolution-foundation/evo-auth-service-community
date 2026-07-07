@@ -455,7 +455,8 @@ class ResourceActionsConfig
         update: { name: 'Update', description: 'Update integration settings' },
         delete: { name: 'Delete', description: 'Delete integrations' },
         connect: { name: 'Connect', description: 'Establish integration connections' },
-        disconnect: { name: 'Disconnect', description: 'Disconnect integrations' }
+        disconnect: { name: 'Disconnect', description: 'Disconnect integrations' },
+        execute: { name: 'Execute', description: 'Execute integration events (AI prompt processing)' }
       }
     },
 
