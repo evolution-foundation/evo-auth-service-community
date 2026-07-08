@@ -3,28 +3,28 @@
 require 'rails_helper'
 
 # EVO-2070 RBAC catalog hygiene. Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 270 permission keys across 48 resources
+#   1) the trimmed catalog holds exactly 281 permission keys across 50 resources
 #      (the dead/duplicated resources are gone, the survivors stay). NOTE: the
-#      spec's 262/47 target assumed ai_tools was dead; the EVO-2070 audit found
-#      it still enforced by live processor endpoints, so ai_tools (8 keys) stays
-#      — see the story Dev Agent Record. Removing it is deferred to a follow-up
-#      that also repoints the processor. And
+#      spec's 262/47 target assumed ai_tools, ai_folders and ai_mcp_servers were
+#      dead; the EVO-2070 audit found all three still enforced by live
+#      core/processor routes (ai_tools 8 keys, ai_folders 6, ai_mcp_servers 5),
+#      so they stay — see the resource_actions_config.rb comments. And
 #   2) api_format propagates a `system` flag (default false) so the permissions
 #      screen (1.2) can hide system-managed keys from the role editor without
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 270 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(270)
+    it 'exposes exactly 281 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(281)
     end
 
-    it 'exposes exactly 48 resources' do
-      expect(described_class.all_resources.size).to eq(48)
+    it 'exposes exactly 50 resources' do
+      expect(described_class.all_resources.size).to eq(50)
     end
 
     it 'dropped the dead/duplicated/consolidated resources' do
       removed = %i[
-        permissions ai_folders ai_mcp_servers channels
+        permissions channels
         oauth_contacts oauth_agents oauth_pipelines oauth_pipeline_stages
         agent_apikeys agent_folders agent_shared_folders
         team_members live_reports summary_reports reports
@@ -33,9 +33,11 @@ RSpec.describe ResourceActionsConfig do
     end
 
     it 'kept the survivors that looked removable but are live' do
-      # ai_tools stays: live processor enforcement (see story Dev Agent Record).
+      # ai_tools/ai_folders/ai_mcp_servers stay: live core/processor enforcement
+      # (see resource_actions_config.rb comments — the §A0 audit missed the core).
       %i[oauth_applications ai_agent_processor ai_a2a_protocol agents ai_agents
-         ai_tools ai_custom_tools ai_custom_mcp_servers teams roles].each do |key|
+         ai_tools ai_folders ai_mcp_servers ai_custom_tools ai_custom_mcp_servers
+         teams roles].each do |key|
         expect(described_class::RESOURCES).to have_key(key)
       end
     end

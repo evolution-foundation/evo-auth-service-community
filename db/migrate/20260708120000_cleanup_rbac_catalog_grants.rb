@@ -49,13 +49,15 @@ class CleanupRbacCatalogGrants < ActiveRecord::Migration[7.1]
   # deleted. The prefixes contain `_`, which is a LIKE wildcard, so they are run
   # through sanitize_sql_like before matching (see #up step 2) — otherwise
   # e.g. `ai_mcp_servers.%` could match unrelated keys.
-  # NOTE: ai_tools is intentionally absent — the EVO-2070 audit found it still
-  # enforced by live processor endpoints, so it stays in the catalog (see story
-  # Dev Agent Record). ai_mcp_servers has no backend enforcement and is removed.
+  # NOTE: ai_tools, ai_folders and ai_mcp_servers are intentionally absent — the
+  # EVO-2070 audit found all three still enforced by live core/processor routes,
+  # so they stay in the catalog (see resource_actions_config.rb comments). Their
+  # grants must NOT be deleted. agent_folders/agent_shared_folders/agent_apikeys
+  # are the CRM's phantom (non-routed) controllers and ARE removed.
   REMOVED_PREFIXES = %w[
     oauth_contacts. oauth_agents. oauth_pipelines. oauth_pipeline_stages.
-    ai_folders. agent_folders. agent_shared_folders. agent_apikeys.
-    ai_mcp_servers. channels. reports. live_reports. summary_reports.
+    agent_folders. agent_shared_folders. agent_apikeys.
+    channels. reports. live_reports. summary_reports.
   ].freeze
 
   def up

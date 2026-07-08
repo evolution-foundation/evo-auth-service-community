@@ -140,6 +140,42 @@ class ResourceActionsConfig
       }
     },
 
+    # Kept: the core-service (Go) enforces ai_folders in 14 mounted routes
+    # (pkg/folder + pkg/folder_share, registered in cmd/api/main.go) and the
+    # frontend consumes them via agentService (/folders CRUD + sharing). The
+    # EVO-2070 §A0 audit matrix marked this dead because it never grepped the
+    # core service — removing it would 403 the agent-folders feature for everyone.
+    ai_folders: {
+      name: 'AI Folders',
+      description: 'Folder organization for AI resources',
+      actions: {
+        read: { name: 'View', description: 'View folders and their contents' },
+        create: { name: 'Create', description: 'Create new folders' },
+        update: { name: 'Update', description: 'Update folder properties' },
+        delete: { name: 'Delete', description: 'Delete folders and reorganize contents' },
+        share: { name: 'Share', description: 'Share folders with other users' },
+        access_shared: { name: 'Access Shared', description: 'Access folders shared by others' }
+      }
+    },
+
+    # Kept: NOT a dead twin of ai_custom_mcp_servers. The core-service enforces
+    # ai_mcp_servers in 6 mounted routes (pkg/mcp_server, main.go) backing the
+    # "MCP Servers" feature (frontend MCPServers.tsx + Admin/McpServers.tsx via
+    # mcpServerService -> /mcp-servers), which is distinct from "Custom MCP
+    # Servers" (ai_custom_mcp_servers -> /custom-mcp-servers). The §A0 audit
+    # missed the core enforcement; removing it would 403 the MCP Servers screens.
+    ai_mcp_servers: {
+      name: 'MCP Servers',
+      description: 'Model Context Protocol server management',
+      actions: {
+        read: { name: 'View', description: 'View MCP servers and configurations' },
+        create: { name: 'Create', description: 'Create new MCP servers' },
+        update: { name: 'Update', description: 'Update MCP server configurations' },
+        delete: { name: 'Delete', description: 'Delete MCP servers' },
+        test: { name: 'Test', description: 'Test MCP server connections' }
+      }
+    },
+
     # === EVO AI AGENT PROCESSOR SERVICE ===
     ai_agent_processor: {
       name: 'AI Agent Processor',

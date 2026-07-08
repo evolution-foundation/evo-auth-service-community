@@ -34,9 +34,10 @@ RSpec.describe CleanupRbacCatalogGrants do
   describe '#up' do
     it 'deletes grants for fully removed resources' do
       role = make_role
-      # ai_tools is intentionally NOT here — the audit kept it (live processor
-      # enforcement); the migration must leave its grants alone.
-      %w[channels.read ai_mcp_servers.read ai_folders.read
+      # ai_tools/ai_folders/ai_mcp_servers are intentionally NOT here — the audit
+      # kept them (live core/processor enforcement); the migration must leave
+      # their grants alone (see the preservation test below).
+      %w[channels.read
          oauth_contacts.read oauth_agents.read oauth_pipelines.read
          oauth_pipeline_stages.read agent_apikeys.read agent_folders.read
          agent_shared_folders.read reports.read live_reports.read
@@ -78,16 +79,21 @@ RSpec.describe CleanupRbacCatalogGrants do
       expect(keys(role)).to contain_exactly('teams.update')
     end
 
-    it 'preserves unrelated surviving grants (incl. ai_tools, kept by the audit)' do
+    it 'preserves surviving grants kept by the audit (ai_tools/ai_folders/ai_mcp_servers)' do
       role = make_role
       grant_raw(role, 'conversations.read')
       grant_raw(role, 'teams.read')
       grant_raw(role, 'ai_tools.read')
+      grant_raw(role, 'ai_folders.read')
+      grant_raw(role, 'ai_mcp_servers.read')
       grant_raw(role, 'channels.read')
 
       migration.up
 
-      expect(keys(role)).to contain_exactly('conversations.read', 'teams.read', 'ai_tools.read')
+      expect(keys(role)).to contain_exactly(
+        'conversations.read', 'teams.read', 'ai_tools.read',
+        'ai_folders.read', 'ai_mcp_servers.read'
+      )
     end
 
     it 'is idempotent' do
