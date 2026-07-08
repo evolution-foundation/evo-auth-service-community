@@ -2,12 +2,15 @@
 
 class Api::V1::AccountController < Api::BaseController
   PII_MASK_SETTING_KEY = 'mask_contact_pii'
-  # Settings keys that only administrators may change. They live inside the
-  # free-form `settings` blob permitted by account_params, so without this
-  # explicit gate a non-admin could smuggle a privileged value through the open
-  # hash. Any future security- or billing-relevant settings key MUST be listed
-  # here to inherit the admin-only guard.
+  # Settings keys that only administrators may change. They can appear inside
+  # either free-form blob permitted by account_params (`settings` or
+  # `custom_attributes`), so without this explicit gate a non-admin could smuggle
+  # a privileged value through an open hash. Any future security- or
+  # billing-relevant key MUST be listed here to inherit the admin-only guard.
   ADMIN_ONLY_SETTINGS_KEYS = [PII_MASK_SETTING_KEY].freeze
+  # Both free-form hashes account_params permits; a privileged key is guarded in
+  # whichever blob it is sent through, not just `settings`.
+  PRIVILEGED_SETTING_BLOBS = %w[settings custom_attributes].freeze
   ADMIN_ROLE_KEYS = %w[super_admin account_owner administrator admin].freeze
 
   before_action :check_authorization, only: :update
@@ -61,23 +64,28 @@ class Api::V1::AccountController < Api::BaseController
   # key in ADMIN_ONLY_SETTINGS_KEYS). Check the EFFECTIVE change (current vs
   # incoming) instead of mere key presence — otherwise an agent could PATCH
   # `{ settings: { other_key: "x" } }` and rely on a shallow merge to wipe a
-  # flag without ever naming it.
+  # flag without ever naming it. The key is guarded in EITHER free-form blob
+  # (`settings` or `custom_attributes`), so it cannot be smuggled through the
+  # other hash.
   def enforce_admin_for_privileged_settings
-    incoming_settings = params.dig(:account, :settings)
-    return unless incoming_settings.is_a?(ActionController::Parameters) || incoming_settings.is_a?(Hash)
+    return if current_user_admin?
 
-    changed = ADMIN_ONLY_SETTINGS_KEYS.select do |key|
-      # `key?` works on both ActionController::Parameters and Hash; avoid `to_h`
-      # here because params are not yet permitted in a before_action and that
-      # would raise UnfilteredParameters.
-      next false unless incoming_settings.key?(key)
+    privileged_change = PRIVILEGED_SETTING_BLOBS.any? do |blob|
+      incoming = params.dig(:account, blob)
+      next false unless incoming.is_a?(ActionController::Parameters) || incoming.is_a?(Hash)
 
-      current_value = RuntimeConfig.account&.dig('settings', key)
-      current_value != incoming_settings[key]
+      ADMIN_ONLY_SETTINGS_KEYS.any? do |key|
+        # `key?` works on both ActionController::Parameters and Hash; avoid `to_h`
+        # here because params are not yet permitted in a before_action and that
+        # would raise UnfilteredParameters.
+        next false unless incoming.key?(key)
+
+        current_value = RuntimeConfig.account&.dig(blob, key)
+        current_value != incoming[key]
+      end
     end
 
-    return if changed.empty?
-    return if current_user_admin?
+    return unless privileged_change
 
     error_response('FORBIDDEN', 'Only admins can change privileged account settings', status: :forbidden)
   end

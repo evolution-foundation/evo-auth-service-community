@@ -120,7 +120,7 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
   # this block is data-driven off the controller registry so any privileged key
   # added to ADMIN_ONLY_SETTINGS_KEYS is automatically held to the same guard
   # (a non-admin cannot smuggle it through the free-form `settings` blob).
-  describe 'privileged settings keys are admin-only (no smuggling via settings blob)' do
+  describe 'privileged settings keys are admin-only (no smuggling via either free-form blob)' do
     Api::V1::AccountController::ADMIN_ONLY_SETTINGS_KEYS.each do |privileged_key|
       context "for `#{privileged_key}`" do
         it 'rejects a non-admin flip with 403 and leaves the value untouched' do
@@ -133,6 +133,21 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
 
           expect(response).to have_http_status(:forbidden)
           expect(RuntimeConfig.account.dig('settings', privileged_key)).to eq(before_value)
+        end
+
+        # The guard covers BOTH free-form blobs — a privileged key cannot be
+        # slipped past it by moving it into `custom_attributes`.
+        it 'rejects a non-admin smuggle via custom_attributes with 403' do
+          before_value = RuntimeConfig.account.dig('settings', privileged_key)
+
+          patch '/api/v1/account',
+                params: { account: { custom_attributes: { privileged_key => 'smuggled-value' } } },
+                headers: updater_headers,
+                as: :json
+
+          expect(response).to have_http_status(:forbidden)
+          expect(RuntimeConfig.account.dig('settings', privileged_key)).to eq(before_value)
+          expect(RuntimeConfig.account.dig('custom_attributes', privileged_key)).to be_nil
         end
 
         it 'lets an admin change it' do
