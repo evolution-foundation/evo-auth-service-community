@@ -116,6 +116,48 @@ RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551
     end
   end
 
+  # Pins the admin-only settings surface. mask_contact_pii is one entry today;
+  # this block is data-driven off the controller registry so any privileged key
+  # added to ADMIN_ONLY_SETTINGS_KEYS is automatically held to the same guard
+  # (a non-admin cannot smuggle it through the free-form `settings` blob).
+  describe 'privileged settings keys are admin-only (no smuggling via settings blob)' do
+    Api::V1::AccountController::ADMIN_ONLY_SETTINGS_KEYS.each do |privileged_key|
+      context "for `#{privileged_key}`" do
+        it 'rejects a non-admin flip with 403 and leaves the value untouched' do
+          before_value = RuntimeConfig.account.dig('settings', privileged_key)
+
+          patch '/api/v1/account',
+                params: { account: { settings: { privileged_key => 'smuggled-value' } } },
+                headers: updater_headers,
+                as: :json
+
+          expect(response).to have_http_status(:forbidden)
+          expect(RuntimeConfig.account.dig('settings', privileged_key)).to eq(before_value)
+        end
+
+        it 'lets an admin change it' do
+          patch '/api/v1/account',
+                params: { account: { settings: { privileged_key => 'admin-value' } } },
+                headers: admin_headers,
+                as: :json
+
+          expect(response).to have_http_status(:ok)
+          expect(RuntimeConfig.account.dig('settings', privileged_key)).to eq('admin-value')
+        end
+      end
+    end
+
+    it 'still lets a non-admin change a non-privileged setting' do
+      patch '/api/v1/account',
+            params: { account: { settings: { audio_transcription: false } } },
+            headers: updater_headers,
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(RuntimeConfig.account.dig('settings', 'audio_transcription')).to be(false)
+    end
+  end
+
   describe 'CB-1.b — deep merge preserves sibling keys' do
     it 'partial custom_attributes PATCH does not wipe pre-existing keys' do
       patch '/api/v1/account',

@@ -2,10 +2,16 @@
 
 class Api::V1::AccountController < Api::BaseController
   PII_MASK_SETTING_KEY = 'mask_contact_pii'
+  # Settings keys that only administrators may change. They live inside the
+  # free-form `settings` blob permitted by account_params, so without this
+  # explicit gate a non-admin could smuggle a privileged value through the open
+  # hash. Any future security- or billing-relevant settings key MUST be listed
+  # here to inherit the admin-only guard.
+  ADMIN_ONLY_SETTINGS_KEYS = [PII_MASK_SETTING_KEY].freeze
   ADMIN_ROLE_KEYS = %w[super_admin account_owner administrator admin].freeze
 
   before_action :check_authorization, only: :update
-  before_action :enforce_admin_for_mask_pii_change, only: :update
+  before_action :enforce_admin_for_privileged_settings, only: :update
 
   def show
     account = RuntimeConfig.account
@@ -51,25 +57,29 @@ class Api::V1::AccountController < Api::BaseController
     end
   end
 
-  # EVO-1551: only admins may flip the contact-PII mask. Check the EFFECTIVE
-  # change (current vs incoming) instead of mere key presence — otherwise an
-  # agent could PATCH `{ settings: { other_key: "x" } }` and rely on the (now
-  # fixed) shallow merge to wipe the flag without ever naming it.
-  def enforce_admin_for_mask_pii_change
+  # Only admins may change privileged settings (contact-PII mask and any other
+  # key in ADMIN_ONLY_SETTINGS_KEYS). Check the EFFECTIVE change (current vs
+  # incoming) instead of mere key presence — otherwise an agent could PATCH
+  # `{ settings: { other_key: "x" } }` and rely on a shallow merge to wipe a
+  # flag without ever naming it.
+  def enforce_admin_for_privileged_settings
     incoming_settings = params.dig(:account, :settings)
     return unless incoming_settings.is_a?(ActionController::Parameters) || incoming_settings.is_a?(Hash)
-    # `key?` works on both ActionController::Parameters and Hash; avoid `to_h`
-    # here because params are not yet permitted in a before_action and that
-    # would raise UnfilteredParameters.
-    return unless incoming_settings.key?(PII_MASK_SETTING_KEY)
 
-    current_value = RuntimeConfig.account&.dig('settings', PII_MASK_SETTING_KEY)
-    next_value = incoming_settings[PII_MASK_SETTING_KEY]
-    return if current_value == next_value
+    changed = ADMIN_ONLY_SETTINGS_KEYS.select do |key|
+      # `key?` works on both ActionController::Parameters and Hash; avoid `to_h`
+      # here because params are not yet permitted in a before_action and that
+      # would raise UnfilteredParameters.
+      next false unless incoming_settings.key?(key)
 
+      current_value = RuntimeConfig.account&.dig('settings', key)
+      current_value != incoming_settings[key]
+    end
+
+    return if changed.empty?
     return if current_user_admin?
 
-    error_response('FORBIDDEN', 'Only admins can change contact data masking', status: :forbidden)
+    error_response('FORBIDDEN', 'Only admins can change privileged account settings', status: :forbidden)
   end
 
   def current_user_admin?
