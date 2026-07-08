@@ -46,7 +46,9 @@ class CleanupRbacCatalogGrants < ActiveRecord::Migration[7.1]
 
   # Resources removed outright (dead feature, phantom controllers, or vestigial
   # twins repointed on the frontend). Every grant with one of these prefixes is
-  # deleted.
+  # deleted. The prefixes contain `_`, which is a LIKE wildcard, so they are run
+  # through sanitize_sql_like before matching (see #up step 2) — otherwise
+  # e.g. `ai_mcp_servers.%` could match unrelated keys.
   # NOTE: ai_tools is intentionally absent — the EVO-2070 audit found it still
   # enforced by live processor endpoints, so it stays in the catalog (see story
   # Dev Agent Record). ai_mcp_servers has no backend enforcement and is removed.
@@ -75,10 +77,13 @@ class CleanupRbacCatalogGrants < ActiveRecord::Migration[7.1]
       ]))
     end
 
-    # 2) Delete grants for fully removed resources.
+    # 2) Delete grants for fully removed resources. sanitize_sql_like escapes the
+    #    `_`/`%` LIKE metacharacters in the prefix so only the literal resource
+    #    name matches; the trailing `%` stays an intentional wildcard.
     REMOVED_PREFIXES.each do |prefix|
       execute(ActiveRecord::Base.sanitize_sql_array([
-        "DELETE FROM #{TABLE} WHERE permission_key LIKE ?", "#{prefix}%"
+        "DELETE FROM #{TABLE} WHERE permission_key LIKE ?",
+        "#{ActiveRecord::Base.sanitize_sql_like(prefix)}%"
       ]))
     end
   end
