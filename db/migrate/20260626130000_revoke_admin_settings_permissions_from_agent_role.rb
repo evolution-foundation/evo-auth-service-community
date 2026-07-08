@@ -61,6 +61,12 @@ class RevokeAdminSettingsPermissionsFromAgentRole < ActiveRecord::Migration[7.1]
     return unless role
 
     REVOKED_PERMISSIONS.each do |permission_key|
+      # EVO-2070: some of these resources were later removed from the catalog
+      # (oauth_agents, agent_apikeys, agent_folders, agent_shared_folders,
+      # channels). create! validates against the current catalog, so this
+      # rollback-only path must skip keys that no longer exist rather than
+      # raise. up() is untouched (destroy_all needs no validation).
+      next unless ResourceActionsConfig.valid_permission?(permission_key)
       next if role.role_permissions_actions.exists?(permission_key: permission_key)
 
       role.role_permissions_actions.create!(permission_key: permission_key)

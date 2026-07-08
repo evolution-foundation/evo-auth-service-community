@@ -21,7 +21,7 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
   # Re-grants a representative slice of admin keys to simulate a pre-fix
   # (already-bootstrapped) install where the old seed had granted them.
   def regrant_admin_slice(role)
-    %w[integrations.read channels.read agents.read segments.read
+    %w[integrations.read agents.read segments.read
        journeys.read campaigns.read working_hours.read].each do |pk|
       role.role_permissions_actions.find_or_create_by!(permission_key: pk)
     end
@@ -35,7 +35,7 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
       migration.up
 
       expect(keys(agent)).not_to include(
-        'integrations.read', 'channels.read', 'agents.read',
+        'integrations.read', 'agents.read',
         'segments.read', 'journeys.read', 'campaigns.read', 'working_hours.read'
       )
     end
@@ -81,7 +81,9 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
 
       migration.down
 
-      expect(keys(agent)).to include('integrations.read', 'channels.read', 'campaigns.read')
+      # channels was removed from the catalog (EVO-2070); down now skips
+      # catalog-invalid keys instead of raising, so it is no longer re-granted.
+      expect(keys(agent)).to include('integrations.read', 'campaigns.read')
     end
   end
 end
