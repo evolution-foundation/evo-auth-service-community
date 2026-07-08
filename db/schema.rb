@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_07_06_191528) do
+ActiveRecord::Schema[7.1].define(version: 2026_07_07_170000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -80,6 +80,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_06_191528) do
     t.index ["granted_at"], name: "index_data_privacy_consents_on_granted_at"
     t.index ["user_id", "consent_type"], name: "index_data_privacy_consents_on_user_id_and_consent_type", unique: true
     t.index ["user_id"], name: "index_data_privacy_consents_on_user_id"
+  end
+
+  create_table "installation_configs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "name", null: false
+    t.jsonb "serialized_value", default: {}, null: false
+    t.boolean "locked", default: true, null: false
+    t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
+    t.datetime "updated_at", precision: nil, default: -> { "now()" }, null: false
+    t.index ["name"], name: "index_installation_configs_on_name", unique: true
   end
 
   create_table "oauth_access_grants", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

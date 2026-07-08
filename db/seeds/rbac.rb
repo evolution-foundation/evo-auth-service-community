@@ -20,59 +20,13 @@ else
   puts "   ♻️ Role already exists: #{account_owner.name}"
 end
 
-# Get all permissions except Account Owner specific ones
+# Keys withheld from Account Owner (super_admin only). Every entry MUST exist
+# in ResourceActionsConfig — keys absent from the catalog are inert here (the
+# subtraction below can only remove keys the catalog produces) and just
+# mislead readers; ~50 such phantom leftovers from removed enterprise
+# resources (plans/features/audit_logs/...) were pruned.
 account_owner_exclusive = [
-  'accounts.suspend',
-  'accounts.activate',
-  'accounts.seed',
-  'accounts.reset_cache',
   'accounts.stats',
-  'dashboard.view_admin',
-  'dashboard.instance_status',
-  'dashboard.system_info',
-  'audit_logs.read',
-  'audit_logs.export',
-  'audit_logs.purge',
-  'audit_logs.filter',
-  'audit_logs.view_details',
-  'plans.read',
-  'plans.create',
-  'plans.update',
-  'plans.delete',
-  'plans.assign',
-  'plans.manage_features',
-  'plans.activate_deactivate',
-  'features.create',
-  'features.update',
-  'features.delete',
-  'features.stats',
-  'features.seed',
-  'features.types',
-  'roles.stats',
-  'roles.seed',
-  'roles.add_permission',
-  'roles.remove_permission',
-  'account_features.read',
-  'account_features.assign',
-  'account_features.remove',
-  'account_features.configure',
-  'account_plans.read',
-  'account_plans.assign',
-  'account_plans.change',
-  'plan_features.read',
-  'plan_features.assign',
-  'plan_features.remove',
-  'plan_features.configure',
-  'feature_types.read',
-  'feature_types.create',
-  'feature_types.update',
-  'feature_types.delete',
-  'resource_actions.sync',
-  'permissions.create',
-  'permissions.update',
-  'permissions.delete',
-  'permissions.assign',
-  'permissions.bulk_operations',
   # Installation-level configuration (SMTP, Storage, Social Login, OpenAI,
   # Channels, Inbound Email, Frontend Runtime). Reserved for the
   # super_admin role — the bootstrap user gets it and it is the only role
@@ -138,7 +92,9 @@ agent_permissions = [
   'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
   'pipelines.read',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
-  'accounts.read', 'accounts.update',
+  # accounts.update is administrative (Settings > Account) and deliberately
+  # NOT granted; PATCH /api/v1/account enforces it.
+  'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
   # Operational resources used inside conversations (quick-replies, labels, macros,
   # templates, and team assignment) stay with the agent. EVO-1955 will split their

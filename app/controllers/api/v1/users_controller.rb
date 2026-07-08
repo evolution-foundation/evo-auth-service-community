@@ -165,15 +165,23 @@ class Api::V1::UsersController < Api::BaseController
       'destroy' => 'users.delete',
       'bulk_create' => 'users.bulk_operations',
       'permissions' => 'users.read',
-      'check_permission' => 'users.read'
+      'check_permission' => 'users.read',
+      'role' => 'users.read'
     }
 
     required_permission = action_map[action_name]
-    if required_permission
-      authorize_resource!('users', required_permission.split('.').last)
-    else
-      true
-    end
+    return authorize_resource!('users', required_permission.split('.').last) if required_permission
+
+    # Fail closed: an action with no explicit permission mapping must never be
+    # implicitly authorized when it can mutate state. Read-only verbs (GET/HEAD)
+    # carry no mutation risk and stay permissive so self/read endpoints keep
+    # working; any other verb is denied unless it arrives through an already
+    # authorized service or exempt channel (parity with authorize_resource!).
+    return true if request.get? || request.head?
+    return true if exempt_from_permission_check?
+    return true if Current.service_authenticated == true
+
+    respond_forbidden("You don't have permission to perform this action")
   end
 
   def fetch_user
