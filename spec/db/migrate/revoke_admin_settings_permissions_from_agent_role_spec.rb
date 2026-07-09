@@ -20,10 +20,17 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
 
   # Re-grants a representative slice of admin keys to simulate a pre-fix
   # (already-bootstrapped) install where the old seed had granted them.
+  #
+  # Validation is bypassed on purpose: `agents.read` is a dead catalog key since
+  # EVO-2072 consolidated `agents.*` into `ai_agents.*`, but this migration's
+  # revoke list still names it, and a legacy install still carries the row. The
+  # point of the fixture is to reproduce that legacy row so we can assert it gets
+  # revoked. (Same grant_raw pattern as cleanup_rbac_catalog_grants_spec.)
   def regrant_admin_slice(role)
-    %w[integrations.read channels.read agents.read segments.read
+    %w[integrations.read agents.read segments.read
        journeys.read campaigns.read working_hours.read].each do |pk|
-      role.role_permissions_actions.find_or_create_by!(permission_key: pk)
+      record = role.role_permissions_actions.find_or_initialize_by(permission_key: pk)
+      record.save!(validate: false) if record.new_record?
     end
   end
 
@@ -35,7 +42,7 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
       migration.up
 
       expect(keys(agent)).not_to include(
-        'integrations.read', 'channels.read', 'agents.read',
+        'integrations.read', 'agents.read',
         'segments.read', 'journeys.read', 'campaigns.read', 'working_hours.read'
       )
     end
@@ -81,7 +88,9 @@ RSpec.describe RevokeAdminSettingsPermissionsFromAgentRole do
 
       migration.down
 
-      expect(keys(agent)).to include('integrations.read', 'channels.read', 'campaigns.read')
+      # channels was removed from the catalog (EVO-2070); down now skips
+      # catalog-invalid keys instead of raising, so it is no longer re-granted.
+      expect(keys(agent)).to include('integrations.read', 'campaigns.read')
     end
   end
 end

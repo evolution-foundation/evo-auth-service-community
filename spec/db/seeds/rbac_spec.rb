@@ -121,10 +121,11 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
   # Settings screens. Operational resources used inside conversations stay (their
   # use-vs-manage split is the EVO-1955 follow-up).
   describe 'agent role — EVO-1938 administrative Settings exclusion' do
+    # `agents` became `ai_agents` (EVO-2072 consolidated the dead twin); the guard
+    # tracks the surviving resource — the attendant must not manage AI agents.
     admin_only_resources = %w[
-      agents oauth_agents agent_bots agent_apikeys agent_folders
-      agent_shared_folders ai_chat_sessions
-      integrations channels working_hours segments journeys campaigns
+      ai_agents agent_bots ai_chat_sessions
+      integrations working_hours segments journeys campaigns
     ]
 
     admin_only_resources.each do |resource|
@@ -141,7 +142,8 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
 
     it 'still grants the administrative resources to account_owner' do
-      %w[integrations.read channels.read campaigns.read agents.read].each do |key|
+      # agents.read -> ai_agents.read (EVO-2072 consolidation; same capability).
+      %w[integrations.read campaigns.read ai_agents.read].each do |key|
         expect(account_owner_permissions).to include(key)
       end
     end

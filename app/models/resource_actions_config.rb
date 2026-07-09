@@ -4,6 +4,18 @@
 # This serves as the single source of truth for RBAC permissions
 class ResourceActionsConfig
   RESOURCES = {
+    # Ubiquitous language (EVO-2072 — fixes FR12). This catalog is the single
+    # source of truth shared by every backend, so the naming lives here:
+    #   * `users`     = the human agent ("atendente") who operates the CRM and
+    #                   handles conversations. UI label: "Users" / "Usuários".
+    #   * `ai_agents` = the AI bot managed by evo-core. UI label: "AI Agents" /
+    #                   "Agentes de IA". A DIFFERENT resource — never conflate it
+    #                   with `users`.
+    #   * role `agent` (db/seeds/rbac.rb) = the *role identity* of the human
+    #                   agent, keyed 'agent'. NOT a catalog resource — do not
+    #                   rename its key, `Role.find_by(key: 'agent')` depends on it.
+    # The dead twin `agents` resource was consolidated into `ai_agents` (it only
+    # ever gated the CRM AgentsController, which proxies AI-agent CRUD).
     # User Management
     users: {
       name: 'Users',
@@ -92,16 +104,10 @@ class ResourceActionsConfig
       }
     },
 
-    # Permissions (for permission management interface)
-    permissions: {
-      name: 'Permissions',
-      description: 'Permission management interface',
-      actions: {
-        read: { name: 'View', description: 'View available permissions' }
-      }
-    },
-
     # === EVO AI CORE SERVICE ===
+    # `ai_agents` = the AI bot (evo-core). Distinct from `users` (the human
+    # agent / "atendente") and from the seed role `agent`. See the ubiquitous
+    # language note at the top of RESOURCES (EVO-2072).
     ai_agents: {
       name: 'AI Agents',
       description: 'AI agent management and configuration',
@@ -117,8 +123,14 @@ class ResourceActionsConfig
       }
     },
 
+    # Built-in tools catalog (NOT the same as ai_custom_tools). Kept: the processor
+    # tools_routes endpoints (GET /tools, /tools/{id}, /tools/categories/list,
+    # POST /tools/reload-config) are mounted (main.py) and enforce ai_tools.
+    # {available,read,categories,config}; the frontend Agents/Tools page consumes
+    # them via toolsService. EVO-2070 audit (§A0) contradicted the spec matrix,
+    # which had this as dead — see story Dev Agent Record.
     ai_tools: {
-      name: 'AI Custom Tools', 
+      name: 'AI Custom Tools',
       description: 'Custom tools and integrations for AI agents',
       actions: {
         read: { name: 'View', description: 'View custom tools and configurations' },
@@ -143,6 +155,11 @@ class ResourceActionsConfig
       }
     },
 
+    # Kept: the core-service (Go) enforces ai_folders in 14 mounted routes
+    # (pkg/folder + pkg/folder_share, registered in cmd/api/main.go) and the
+    # frontend consumes them via agentService (/folders CRUD + sharing). The
+    # EVO-2070 §A0 audit matrix marked this dead because it never grepped the
+    # core service — removing it would 403 the agent-folders feature for everyone.
     ai_folders: {
       name: 'AI Folders',
       description: 'Folder organization for AI resources',
@@ -156,6 +173,12 @@ class ResourceActionsConfig
       }
     },
 
+    # Kept: NOT a dead twin of ai_custom_mcp_servers. The core-service enforces
+    # ai_mcp_servers in 6 mounted routes (pkg/mcp_server, main.go) backing the
+    # "MCP Servers" feature (frontend MCPServers.tsx + Admin/McpServers.tsx via
+    # mcpServerService -> /mcp-servers), which is distinct from "Custom MCP
+    # Servers" (ai_custom_mcp_servers -> /custom-mcp-servers). The §A0 audit
+    # missed the core enforcement; removing it would 403 the MCP Servers screens.
     ai_mcp_servers: {
       name: 'MCP Servers',
       description: 'Model Context Protocol server management',
@@ -173,9 +196,9 @@ class ResourceActionsConfig
       name: 'AI Agent Processor',
       description: 'AI agent processing and execution management',
       actions: {
-        read: { name: 'View', description: 'View agent processing status and results' },
-        execute: { name: 'Execute', description: 'Execute agents and processing tasks' },
-        stream: { name: 'Stream', description: 'Stream agent responses and processing' }
+        read: { name: 'View', description: 'View agent processing status and results', system: true },
+        execute: { name: 'Execute', description: 'Execute agents and processing tasks', system: true },
+        stream: { name: 'Stream', description: 'Stream agent responses and processing', system: true }
       }
     },
 
@@ -183,12 +206,12 @@ class ResourceActionsConfig
       name: 'Chat Sessions',
       description: 'AI chat session management for agent interactions',
       actions: {
-        read: { name: 'View', description: 'View chat sessions and conversation history' },
-        create: { name: 'Create', description: 'Create new chat sessions with agents' },
-        update: { name: 'Update', description: 'Update chat session metadata and settings' },
-        delete: { name: 'Delete', description: 'Delete chat sessions and conversation history' },
-        bulk_delete: { name: 'Bulk Delete', description: 'Delete multiple chat sessions at once' },
-        metrics: { name: 'View Metrics', description: 'View session execution metrics and statistics' }
+        read: { name: 'View', description: 'View chat sessions and conversation history', system: true },
+        create: { name: 'Create', description: 'Create new chat sessions with agents', system: true },
+        update: { name: 'Update', description: 'Update chat session metadata and settings', system: true },
+        delete: { name: 'Delete', description: 'Delete chat sessions and conversation history', system: true },
+        bulk_delete: { name: 'Bulk Delete', description: 'Delete multiple chat sessions at once', system: true },
+        metrics: { name: 'View Metrics', description: 'View session execution metrics and statistics', system: true }
       }
     },
 
@@ -196,11 +219,11 @@ class ResourceActionsConfig
       name: 'A2A Protocol',
       description: 'Agent-to-Agent communication protocol management',
       actions: {
-        read: { name: 'View', description: 'View A2A protocol configurations and status' },
-        execute: { name: 'Execute', description: 'Execute A2A protocol operations and communications' },
-        stream: { name: 'Stream', description: 'Stream A2A protocol responses' },
-        message_send: { name: 'Send Messages', description: 'Send messages via A2A protocol' },
-        task_management: { name: 'Manage Tasks', description: 'Manage A2A protocol tasks and workflows' }
+        read: { name: 'View', description: 'View A2A protocol configurations and status', system: true },
+        execute: { name: 'Execute', description: 'Execute A2A protocol operations and communications', system: true },
+        stream: { name: 'Stream', description: 'Stream A2A protocol responses', system: true },
+        message_send: { name: 'Send Messages', description: 'Send messages via A2A protocol', system: true },
+        task_management: { name: 'Manage Tasks', description: 'Manage A2A protocol tasks and workflows', system: true }
       }
     },
 
@@ -283,19 +306,6 @@ class ResourceActionsConfig
         contactable_inboxes: { name: 'Contactable Inboxes', description: 'View contactable inboxes' },
         destroy_custom_attributes: { name: 'Destroy Custom Attributes', description: 'Remove custom attributes from contact' },
         avatar: { name: 'Avatar', description: 'Manage contact avatar' }
-      }
-    },
-
-    channels: {
-      name: 'Channels',
-      description: 'Communication channel management and configuration',
-      actions: {
-        read: { name: 'View', description: 'View channels and configurations' },
-        create: { name: 'Create', description: 'Create new communication channels' },
-        update: { name: 'Update', description: 'Update channel settings and configurations' },
-        delete: { name: 'Delete', description: 'Delete communication channels' },
-        settings: { name: 'Settings', description: 'Access channel settings and configuration' },
-        test_connection: { name: 'Test Connection', description: 'Test channel connectivity and functionality' }
       }
     },
 
@@ -460,102 +470,12 @@ class ResourceActionsConfig
       }
     },
 
-    # OAuth Controllers
-    oauth_contacts: {
-      name: 'OAuth Contacts',
-      description: 'OAuth-based contact management',
-      actions: {
-        read: { name: 'View', description: 'View OAuth contacts' },
-        create: { name: 'Create', description: 'Create OAuth contacts' },
-        update: { name: 'Update', description: 'Update OAuth contacts' },
-        delete: { name: 'Delete', description: 'Delete OAuth contacts' }
-      }
-    },
-
-    oauth_agents: {
-      name: 'OAuth Agents',
-      description: 'OAuth-based agent management',
-      actions: {
-        read: { name: 'View', description: 'View OAuth agents' },
-        create: { name: 'Create', description: 'Create OAuth agents' },
-        update: { name: 'Update', description: 'Update OAuth agents' },
-        delete: { name: 'Delete', description: 'Delete OAuth agents' }
-      }
-    },
-
-    oauth_pipeline_stages: {
-      name: 'OAuth Pipeline Stages',
-      description: 'OAuth-based pipeline stage management',
-      actions: {
-        read: { name: 'View', description: 'View OAuth pipeline stages' },
-        create: { name: 'Create', description: 'Create OAuth pipeline stages' },
-        update: { name: 'Update', description: 'Update OAuth pipeline stages' },
-        delete: { name: 'Delete', description: 'Delete OAuth pipeline stages' }
-      }
-    },
-
-    oauth_pipelines: {
-      name: 'OAuth Pipelines',
-      description: 'OAuth-based pipeline management',
-      actions: {
-        read: { name: 'View', description: 'View OAuth pipelines' },
-        create: { name: 'Create', description: 'Create OAuth pipelines' },
-        update: { name: 'Update', description: 'Update OAuth pipelines' },
-        delete: { name: 'Delete', description: 'Delete OAuth pipelines' }
-      }
-    },
-
-    # Agent Management
-    agents: {
-      name: 'Agents',
-      description: 'Agent management and administration',
-      actions: {
-        read: { name: 'View', description: 'View agent information' },
-        create: { name: 'Create', description: 'Create new agents' },
-        update: { name: 'Update', description: 'Update agent information' },
-        delete: { name: 'Delete', description: 'Delete agents' }
-      }
-    },
-
-    agent_apikeys: {
-      name: 'Agent API Keys',
-      description: 'Agent API key management',
-      actions: {
-        read: { name: 'View', description: 'View agent API keys' },
-        create: { name: 'Create', description: 'Create agent API keys' },
-        update: { name: 'Update', description: 'Update agent API keys' },
-        delete: { name: 'Delete', description: 'Delete agent API keys' }
-      }
-    },
-
-    agent_folders: {
-      name: 'Agent Folders',
-      description: 'Agent folder management',
-      actions: {
-        read: { name: 'View', description: 'View agent folders' },
-        create: { name: 'Create', description: 'Create agent folders' },
-        update: { name: 'Update', description: 'Update agent folders' },
-        delete: { name: 'Delete', description: 'Delete agent folders' }
-      }
-    },
-
-    agent_shared_folders: {
-      name: 'Agent Shared Folders',
-      description: 'Shared agent folder management',
-      actions: {
-        read: { name: 'View', description: 'View shared agent folders' },
-        create: { name: 'Create', description: 'Create shared agent folders' },
-        update: { name: 'Update', description: 'Update shared agent folders' },
-        delete: { name: 'Delete', description: 'Delete shared agent folders' }
-      }
-    },
-
     # Installation Configuration (Admin Panel)
     installation_configs: {
       name: 'Installation Configs',
       description: 'System-wide configuration managed via admin panel',
       actions: {
-        manage: { name: 'Manage', description: 'View and update installation configurations' }
+        manage: { name: 'Manage', description: 'View and update installation configurations', system: true }
       }
     },
 
@@ -639,18 +559,6 @@ class ResourceActionsConfig
       }
     },
 
-    # Team Management
-    team_members: {
-      name: 'Team Members',
-      description: 'Team member management',
-      actions: {
-        read: { name: 'View', description: 'View team members' },
-        create: { name: 'Create', description: 'Create team members' },
-        update: { name: 'Update', description: 'Update team members' },
-        delete: { name: 'Delete', description: 'Delete team members' }
-      }
-    },
-
     # Pipeline Management
     pipeline_stages: {
       name: 'Pipeline Stages',
@@ -660,28 +568,6 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create pipeline stages' },
         update: { name: 'Update', description: 'Update pipeline stages' },
         delete: { name: 'Delete', description: 'Delete pipeline stages' }
-      }
-    },
-
-    live_reports: {
-      name: 'Live Reports',
-      description: 'Real-time reports and analytics',
-      actions: {
-        read: { name: 'View', description: 'View live reports' },
-        create: { name: 'Create', description: 'Create live reports' },
-        update: { name: 'Update', description: 'Update live reports' },
-        delete: { name: 'Delete', description: 'Delete live reports' }
-      }
-    },
-
-    summary_reports: {
-      name: 'Summary Reports',
-      description: 'Summary reports and analytics',
-      actions: {
-        read: { name: 'View', description: 'View summary reports' },
-        create: { name: 'Create', description: 'Create summary reports' },
-        update: { name: 'Update', description: 'Update summary reports' },
-        delete: { name: 'Delete', description: 'Delete summary reports' }
       }
     },
 
@@ -704,16 +590,6 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new custom filters' },
         update: { name: 'Update', description: 'Update filter criteria' },
         delete: { name: 'Delete', description: 'Delete custom filters' }
-      }
-    },
-
-    reports: {
-      name: 'Reports & Analytics',
-      description: 'Performance reporting and analytics dashboard',
-      actions: {
-        read: { name: 'View', description: 'View reports and analytics data' },
-        export: { name: 'Export', description: 'Export report data' },
-        create_custom: { name: 'Create Custom', description: 'Create custom reports' }
       }
     },
 
@@ -884,7 +760,8 @@ class ResourceActionsConfig
                     name: action_config[:name],
                     description: action_config[:description],
                     basic: info[:basic],
-                    implied_by: info[:implied_by]
+                    implied_by: info[:implied_by],
+                    system: action_config[:system] || false
                   }
                 ]
               end.to_h
@@ -903,7 +780,8 @@ class ResourceActionsConfig
             action_name: action(resource_key, action_key)[:name],
             description: action(resource_key, action_key)[:description],
             basic: info[:basic],
-            implied_by: info[:implied_by]
+            implied_by: info[:implied_by],
+            system: action(resource_key, action_key)[:system] || false
           }
         end
       }

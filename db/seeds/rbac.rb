@@ -88,8 +88,6 @@ agent_permissions = [
   'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete',
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
-  'oauth_pipelines.read', 'oauth_pipelines.create', 'oauth_pipelines.update', 'oauth_pipelines.delete',
-  'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
   'pipelines.read',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
   # accounts.update is administrative (Settings > Account) and deliberately
@@ -103,10 +101,10 @@ agent_permissions = [
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
   'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
   'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
-  # teams/team_members power the in-chat "Assign team" picker (GET /teams), so the
-  # read is operational and kept here; the Teams Settings screen split is EVO-1955.
+  # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
+  # operational and kept here; team_members enforcement consolidated into teams.*
+  # (EVO-2070), and the Teams Settings screen split is EVO-1955.
   'teams.read', 'teams.create', 'teams.update', 'teams.delete',
-  'team_members.read', 'team_members.create', 'team_members.update', 'team_members.delete',
   'inboxes.read'
   # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
   # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)
