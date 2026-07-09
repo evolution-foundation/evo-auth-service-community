@@ -2,8 +2,9 @@
 
 require 'rails_helper'
 
-# EVO-2070 RBAC catalog hygiene. Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 281 permission keys across 50 resources
+# EVO-2070 RBAC catalog hygiene (+ EVO-2072 agents→ai_agents consolidation).
+# Two guarantees are locked here:
+#   1) the trimmed catalog holds exactly 277 permission keys across 49 resources
 #      (the dead/duplicated resources are gone, the survivors stay). NOTE: the
 #      spec's 262/47 target assumed ai_tools, ai_folders and ai_mcp_servers were
 #      dead; the EVO-2070 audit found all three still enforced by live
@@ -14,12 +15,12 @@ require 'rails_helper'
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 281 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(281)
+    it 'exposes exactly 277 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(277)
     end
 
-    it 'exposes exactly 50 resources' do
-      expect(described_class.all_resources.size).to eq(50)
+    it 'exposes exactly 49 resources' do
+      expect(described_class.all_resources.size).to eq(49)
     end
 
     it 'dropped the dead/duplicated/consolidated resources' do
@@ -28,6 +29,7 @@ RSpec.describe ResourceActionsConfig do
         oauth_contacts oauth_agents oauth_pipelines oauth_pipeline_stages
         agent_apikeys agent_folders agent_shared_folders
         team_members live_reports summary_reports reports
+        agents
       ]
       expect(described_class::RESOURCES.keys & removed).to be_empty
     end
@@ -35,7 +37,7 @@ RSpec.describe ResourceActionsConfig do
     it 'kept the survivors that looked removable but are live' do
       # ai_tools/ai_folders/ai_mcp_servers stay: live core/processor enforcement
       # (see resource_actions_config.rb comments — the §A0 audit missed the core).
-      %i[oauth_applications ai_agent_processor ai_a2a_protocol agents ai_agents
+      %i[oauth_applications ai_agent_processor ai_a2a_protocol ai_agents
          ai_tools ai_folders ai_mcp_servers ai_custom_tools ai_custom_mcp_servers
          teams roles].each do |key|
         expect(described_class::RESOURCES).to have_key(key)

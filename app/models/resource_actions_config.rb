@@ -4,6 +4,18 @@
 # This serves as the single source of truth for RBAC permissions
 class ResourceActionsConfig
   RESOURCES = {
+    # Ubiquitous language (EVO-2072 — fixes FR12). This catalog is the single
+    # source of truth shared by every backend, so the naming lives here:
+    #   * `users`     = the human agent ("atendente") who operates the CRM and
+    #                   handles conversations. UI label: "Users" / "Usuários".
+    #   * `ai_agents` = the AI bot managed by evo-core. UI label: "AI Agents" /
+    #                   "Agentes de IA". A DIFFERENT resource — never conflate it
+    #                   with `users`.
+    #   * role `agent` (db/seeds/rbac.rb) = the *role identity* of the human
+    #                   agent, keyed 'agent'. NOT a catalog resource — do not
+    #                   rename its key, `Role.find_by(key: 'agent')` depends on it.
+    # The dead twin `agents` resource was consolidated into `ai_agents` (it only
+    # ever gated the CRM AgentsController, which proxies AI-agent CRUD).
     # User Management
     users: {
       name: 'Users',
@@ -93,6 +105,9 @@ class ResourceActionsConfig
     },
 
     # === EVO AI CORE SERVICE ===
+    # `ai_agents` = the AI bot (evo-core). Distinct from `users` (the human
+    # agent / "atendente") and from the seed role `agent`. See the ubiquitous
+    # language note at the top of RESOURCES (EVO-2072).
     ai_agents: {
       name: 'AI Agents',
       description: 'AI agent management and configuration',
@@ -452,18 +467,6 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new dashboard apps' },
         update: { name: 'Update', description: 'Update app configurations' },
         delete: { name: 'Delete', description: 'Delete dashboard apps' }
-      }
-    },
-
-    # Agent Management
-    agents: {
-      name: 'Agents',
-      description: 'Agent management and administration',
-      actions: {
-        read: { name: 'View', description: 'View agent information' },
-        create: { name: 'Create', description: 'Create new agents' },
-        update: { name: 'Update', description: 'Update agent information' },
-        delete: { name: 'Delete', description: 'Delete agents' }
       }
     },
 
