@@ -86,3 +86,20 @@ Thanks for helping make Evo CRM Auth Service better!
 ---
 
 © 2026 Evolution Foundation
+
+## Database migrations — version parity (EVO-2090)
+
+This service shares a single `schema_migrations` table with
+`evo-ai-crm-community` (both apps point at the same database). If the two ever
+create a migration with the same 14-digit version, Rails records it once and
+**skips** the other app's migration forever → missing DDL → boot crash.
+
+To make collisions impossible by construction, each app owns a **disjoint slice
+of the version space by parity**:
+
+- **auth (this repo): ODD versions** — timestamps ending in `1/3/5/7/9`
+- **CRM: EVEN versions** — timestamps ending in `0/2/4/6/8`
+
+When you generate a migration, bump the timestamp by 1 second if needed so its
+version is **odd**. Enforced by `spec/migration_version_parity_spec.rb`
+(migrations created before the convention are grandfathered by a cutoff date).
