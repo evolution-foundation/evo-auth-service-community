@@ -4,23 +4,44 @@ require 'rails_helper'
 
 # EVO-2070 RBAC catalog hygiene (+ EVO-2072 agents→ai_agents consolidation).
 # Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 277 permission keys across 49 resources
-#      (the dead/duplicated resources are gone, the survivors stay). NOTE: the
-#      spec's 262/47 target assumed ai_tools, ai_folders and ai_mcp_servers were
-#      dead; the EVO-2070 audit found all three still enforced by live
-#      core/processor routes (ai_tools 8 keys, ai_folders 6, ai_mcp_servers 5),
-#      so they stay — see the resource_actions_config.rb comments. And
+#   1) the trimmed catalog holds exactly 322 permission keys across 49 resources.
+#      277 came from the EVO-2070 hygiene pass; EVO-2127 then added one coarse
+#      `write` leaf to each resource that has a manageable (non-system) granular
+#      write (45 of 49) to back the role editor's read/write/delete groups →
+#      277 + 45 = 322. The 4 all-system/read-only resources (installation_configs,
+#      ai_agent_processor, ai_chat_sessions, ai_a2a_protocol) get no write leaf —
+#      a coarse write there would render an un-grantable checkbox. NOTE: the
+#      earlier 262/47 target assumed ai_tools,
+#      ai_folders and ai_mcp_servers were dead; the EVO-2070 audit found all three
+#      still enforced by live core/processor routes (ai_tools 8 keys, ai_folders
+#      6, ai_mcp_servers 5), so they stay — see the resource_actions_config.rb
+#      comments. And
 #   2) api_format propagates a `system` flag (default false) so the permissions
 #      screen (1.2) can hide system-managed keys from the role editor without
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 277 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(277)
+    it 'exposes exactly 322 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(322)
     end
 
     it 'exposes exactly 49 resources' do
       expect(described_class.all_resources.size).to eq(49)
+    end
+
+    it 'adds a manageable, non-system coarse write to resources with a granular write (EVO-2127)' do
+      expect(described_class.valid_permission?('ai_agents.write')).to be(true)
+      write = described_class.resource_actions(:ai_agents)[:write]
+      expect(write[:system]).to be_falsey # manageable in the role editor
+    end
+
+    it 'does NOT add a coarse write to all-system / read-only resources (EVO-2127)' do
+      # A coarse write on these would render an un-grantable checkbox that 403s a
+      # delegated admin (no granular write source to imply it from).
+      %i[installation_configs ai_agent_processor ai_chat_sessions ai_a2a_protocol].each do |key|
+        expect(described_class.resource_actions(key)).not_to have_key(:write), "#{key} must not get a coarse write"
+        expect(described_class.valid_permission?("#{key}.write")).to be(false)
+      end
     end
 
     it 'dropped the dead/duplicated/consolidated resources' do

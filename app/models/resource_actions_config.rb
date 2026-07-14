@@ -673,6 +673,60 @@ class ResourceActionsConfig
 
     }.freeze
 
+  # Backend mirror of the write-group classification in the frontend's
+  # permissionDomains.ts. Two pieces, both must stay in sync with the frontend
+  # (an action added on one side must be added on the other, or the two disagree
+  # on what a "write" is and a save 403s):
+  #   NON_WRITE_ACTIONS            -> mirrors READ_ACTIONS: non-mutating verbs that
+  #                                   are resource-independent. `read`/`delete`/the
+  #                                   injected `write` are listed so they never
+  #                                   classify as write.
+  #   STANDALONE_ACTIONS_BY_RESOURCE -> mirrors STANDALONE_ACTIONS: keys that render
+  #                                   on their own row for a SPECIFIC resource
+  #                                   (conversations.read_all, users.manage) and so
+  #                                   are neither read nor write there.
+  NON_WRITE_ACTIONS = %i[
+    read delete write
+    meta search filter available_for_pipeline attachments transcript
+    inbox_assistant active contactable_inboxes assignable_agents agent_bot
+    stats types permissions check_permission export
+    available categories config access_shared usage metrics
+  ].to_set.freeze
+
+  STANDALONE_ACTIONS_BY_RESOURCE = {
+    conversations: %i[read_all].to_set,
+    users: %i[manage].to_set
+  }.freeze
+
+  # A granular action is a manageable write when it mutates the resource AND is
+  # user-manageable: not system-managed, not a read (NON_WRITE_ACTIONS), and not a
+  # per-resource standalone (STANDALONE_ACTIONS_BY_RESOURCE). System actions are
+  # hidden from the role editor, so a coarse write standing only for them would
+  # render an un-grantable checkbox and 403 a delegated admin.
+  def self.manageable_write_actions(resource_key, actions)
+    standalone = STANDALONE_ACTIONS_BY_RESOURCE[resource_key.to_sym] || Set.new
+    actions.reject do |key, cfg|
+      NON_WRITE_ACTIONS.include?(key) || standalone.include?(key) || cfg[:system]
+    end.keys
+  end
+
+  # Coarse "write" bridge (EVO-2127): the role editor renders read/write/delete
+  # groups and now persists them. Inject a `write` leaf ONLY into resources that
+  # actually have a manageable granular write, so valid_permission?("<resource>.write")
+  # passes (no 422) exactly where the editor shows a Write group — and never on
+  # all-system or read-only resources (which would otherwise render a spurious,
+  # un-grantable Write checkbox that 403s delegated admins). The outer RESOURCES
+  # hash is frozen but the per-resource :actions hashes are not. Nothing enforces
+  # the coarse write yet (enforcement stays granular; collapsing keys is a follow-up).
+  RESOURCES.each do |resource_key, resource_config|
+    next unless manageable_write_actions(resource_key, resource_config[:actions]).any?
+
+    resource_config[:actions][:write] ||= {
+      name: 'Write',
+      description: 'Coarse write (covers create/update/… for this resource)'
+    }
+  end
+
   class << self
     # Get all resources
     def all_resources
@@ -687,6 +741,18 @@ class ResourceActionsConfig
     # Get all actions for a resource
     def resource_actions(resource_key)
       resource(resource_key)&.dig(:actions) || {}
+    end
+
+    # Per resource, the manageable granular writes (see manageable_write_actions:
+    # excludes read/delete/write, the read/standalone denylist, and system
+    # actions), so a read-only or all-system resource yields none — matching the
+    # resources that received a coarse write leaf. Drives the write => coarse-write
+    # implications in User::OPERATIONAL_IMPLICATIONS.
+    def write_actions_by_resource
+      RESOURCES.each_with_object({}) do |(resource_key, cfg), acc|
+        writes = manageable_write_actions(resource_key, cfg[:actions])
+        acc[resource_key.to_s] = writes.map(&:to_s) if writes.any?
+      end
     end
 
     # Get action configuration
@@ -736,11 +802,21 @@ class ResourceActionsConfig
     # revoking it on a role has no effect, so the UI must show it locked instead
     # of offering a checkbox that lies. User is the single source of truth; this
     # only reads its constants (at call time, so no load-order coupling).
+    # Reverse index implied_key => first source that implies it, built once from
+    # User::OPERATIONAL_IMPLICATIONS (frozen at load). api_format calls
+    # permission_lock_info for every catalog key; a linear `.find` over the now
+    # ~150-entry implications map made that O(keys × implications) per fetch.
+    # First-source-wins (matches the old `.find`) via ||=.
+    def implication_source_index
+      @implication_source_index ||= User::OPERATIONAL_IMPLICATIONS.each_with_object({}) do |(source, implied), idx|
+        implied.each { |key| idx[key] ||= source }
+      end.freeze
+    end
+
     def permission_lock_info(permission_key)
       return { basic: true, implied_by: nil } if User::BASIC_READ_PERMISSIONS.include?(permission_key)
 
-      source = User::OPERATIONAL_IMPLICATIONS.find { |_src, implied| implied.include?(permission_key) }
-      { basic: false, implied_by: source&.first }
+      { basic: false, implied_by: implication_source_index[permission_key] }
     end
 
     # Get formatted data for API responses

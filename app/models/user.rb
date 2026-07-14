@@ -73,9 +73,23 @@ class User < ApplicationRecord
   # granted to everyone via BASIC_READ_PERMISSIONS. The implied users.read is
   # OPERATIONAL only — the administrative gate (Settings > Agents) moved to
   # users.manage, so this does not re-open the admin panel.
+  # EVO-2127: holding any granular write of a resource implies its coarse
+  # `<resource>.write`. The role editor now saves the coarse write groups; this
+  # lets a non-super_admin who can already grant the granular writes also grant
+  # the coarse write, so bulk_update_permissions does not 403 (it requires the
+  # caller to hold every newly-granted key). Runtime-only (no save/backfill) and
+  # forward-only: write is a leaf, create never implies delete. Derived from the
+  # catalog so front (permissionDomains) and back cannot drift on which actions
+  # are writes. Referencing ResourceActionsConfig here forces its autoload; there
+  # is no cycle — the config reads User constants only at call time.
+  GENERATED_WRITE_IMPLICATIONS = ResourceActionsConfig.write_actions_by_resource
+    .each_with_object({}) do |(resource, actions), acc|
+      actions.each { |action| acc["#{resource}.#{action}"] = ["#{resource}.write"] }
+    end.freeze
+
   OPERATIONAL_IMPLICATIONS = {
     'conversations.read' => %w[users.read inboxes.read]
-  }.freeze
+  }.merge(GENERATED_WRITE_IMPLICATIONS).freeze
 
   devise :database_authenticatable,
          :registerable,

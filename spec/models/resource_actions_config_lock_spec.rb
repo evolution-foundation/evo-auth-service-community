@@ -31,17 +31,31 @@ RSpec.describe ResourceActionsConfig, '.api_format lock metadata' do
     end
   end
 
-  it 'flags operationally-implied keys with their source and not as basic' do
-    User::OPERATIONAL_IMPLICATIONS.each do |source, implied_keys|
+  it 'flags operationally-implied keys with their FIRST implying source and not as basic' do
+    # A key can be implied by more than one source — every granular write of a
+    # resource implies `<resource>.write` (EVO-2127) — and permission_lock_info
+    # reports the FIRST source in OPERATIONAL_IMPLICATIONS order. Assert exactly
+    # that, so a regression pointing implied_by at the wrong (even if valid)
+    # source is caught. Every implied key is a real catalog key, so nested() must
+    # resolve it — an implication to a non-catalog key is itself a bug and fails here.
+    User::OPERATIONAL_IMPLICATIONS.each do |_source, implied_keys|
       implied_keys.each do |key|
         next if User::BASIC_READ_PERMISSIONS.include?(key)
 
+        expected_source = User::OPERATIONAL_IMPLICATIONS.find { |_s, imp| imp.include?(key) }.first
         resource, action = key.split('.')
         entry = nested(resource.to_sym, action.to_sym)
-        expect(entry[:implied_by]).to eq(source)
+        expect(entry[:implied_by]).to eq(expected_source)
         expect(entry[:basic]).to be(false)
       end
     end
+  end
+
+  it 'implies <resource>.write from each granular write (EVO-2127)' do
+    entry = nested(:ai_agents, :write)
+    expect(entry[:implied_by]).to be_present
+    expect(entry[:implied_by]).to start_with('ai_agents.')
+    expect(entry[:basic]).to be(false)
   end
 
   it 'leaves ordinary managed permissions unlocked' do
