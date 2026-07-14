@@ -95,6 +95,36 @@ RSpec.describe User, type: :model do
       expect(user.all_permissions).to include('users.manage')
     end
   end
+
+  # EVO-2127: holding a granular write of a resource implies its coarse
+  # <resource>.write, so a delegated admin who can grant the granular writes can
+  # also grant the coarse write the role editor now sends (unblocks the 403 in
+  # roles_controller#bulk_update_permissions). Forward-only: no cascade to delete.
+  describe 'coarse write implication (EVO-2127)' do
+    let(:user) { build_user }
+
+    it 'implies ai_agents.write from ai_agents.create (AC4)' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.write')).to be(true)
+      expect(user.all_permissions).to include('ai_agents.write')
+    end
+
+    it 'does not imply write from a read-only grant (AC5)' do
+      assign(user, role_with('ai_agents.read'))
+      expect(user.has_permission?('ai_agents.write')).to be(false)
+      expect(user.all_permissions).not_to include('ai_agents.write')
+    end
+
+    it 'does not cascade write into delete (AC6)' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.delete')).to be(false)
+    end
+
+    it 'implies write only for the resource that holds the granular write' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('contacts.write')).to be(false)
+    end
+  end
 end
 
 RSpec.describe ResourceActionsConfig, type: :model do
