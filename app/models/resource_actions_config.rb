@@ -797,18 +797,22 @@ class ResourceActionsConfig
 
     # Lock metadata for a permission key. `basic` keys are held by every
     # authenticated user (User::BASIC_READ_PERMISSIONS); `implied_by` names the
-    # grant that carries this one operationally (User::OPERATIONAL_IMPLICATIONS).
+    # grant that carries this one operationally (User::LOCKING_IMPLICATIONS).
     # Either makes the permission NON-manageable in a role editor: granting or
     # revoking it on a role has no effect, so the UI must show it locked instead
     # of offering a checkbox that lies. User is the single source of truth; this
     # only reads its constants (at call time, so no load-order coupling).
+    #
+    # LOCKING_IMPLICATIONS, not OPERATIONAL_IMPLICATIONS: the latter also carries
+    # the generated `<granular write> => <resource>.write` map (EVO-2127), and
+    # `<resource>.write` is a real, editable grant — locking it would let the
+    # editor's Write checkbox add the key but never remove it. Lock is about what
+    # the admin CANNOT decide; the coarse write is precisely what they decide.
+    #
     # Reverse index implied_key => first source that implies it, built once from
-    # User::OPERATIONAL_IMPLICATIONS (frozen at load). api_format calls
-    # permission_lock_info for every catalog key; a linear `.find` over the now
-    # ~150-entry implications map made that O(keys × implications) per fetch.
-    # First-source-wins (matches the old `.find`) via ||=.
+    # the (frozen) constant. First-source-wins (matches the old `.find`) via ||=.
     def implication_source_index
-      @implication_source_index ||= User::OPERATIONAL_IMPLICATIONS.each_with_object({}) do |(source, implied), idx|
+      @implication_source_index ||= User::LOCKING_IMPLICATIONS.each_with_object({}) do |(source, implied), idx|
         implied.each { |key| idx[key] ||= source }
       end.freeze
     end

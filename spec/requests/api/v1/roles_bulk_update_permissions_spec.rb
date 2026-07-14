@@ -76,4 +76,54 @@ RSpec.describe 'PUT /api/v1/roles/:id/bulk_update_permissions (EVO-2127 coarse w
 
     expect(response).to have_http_status(:unprocessable_entity)
   end
+
+  # The coarse write has to come back OUT of the DB too. The editor's Write
+  # checkbox is the only way to revoke it, and it revokes by omitting the key from
+  # the payload — so a save without `ai_agents.write` must delete the row. This is
+  # what a locked (implied_by) coarse write would have silently prevented: the
+  # front drops locked keys from the group the checkbox controls, so the key would
+  # be added once and never removed again.
+  it 'revokes the coarse write when the payload omits it' do
+    role = role_with('ai_agents.read', 'ai_agents.create', 'ai_agents.write')
+
+    bulk_update(role, %w[ai_agents.read], delegated_admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(role.reload.permission_keys).to eq(['ai_agents.read'])
+    expect(role.permission_keys).not_to include('ai_agents.write')
+  end
+
+  # A delegated admin editing a PRE-EXISTING role: the editor re-sends the whole
+  # permission set, so every coarse write the role earns is a NEW key and lands in
+  # `granted`. The admin below writes to contacts, not to AI agents — but the role
+  # already holds ai_agents.create, so ai_agents.write confers nothing new on it
+  # and must not 403. Without the implied-by-target exemption, this admin could no
+  # longer save ANY role that writes outside their own scope.
+  it 'lets a delegated admin save a role whose coarse write they do not hold themselves' do
+    contacts_admin = build_user('Contacts Admin').tap do |u|
+      UserRole.create!(user: u, role: role_with('roles.bulk_update_permissions', 'contacts.create'))
+    end
+    legacy_role = role_with('ai_agents.read', 'ai_agents.create', 'contacts.create')
+
+    expect(contacts_admin.has_permission?('ai_agents.write')).to be(false) # the caller really lacks it
+
+    bulk_update(legacy_role, %w[ai_agents.read ai_agents.create ai_agents.write contacts.create contacts.write],
+                contacts_admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(legacy_role.reload.permission_keys).to include('ai_agents.write', 'contacts.write')
+  end
+
+  # The exemption is narrow: it only pardons a key the TARGET SET itself implies.
+  # Granting the granular write that would imply it is still a real escalation.
+  it 'still 403s a delegated admin granting a granular write they do not hold' do
+    contacts_admin = build_user('Contacts Admin 2').tap do |u|
+      UserRole.create!(user: u, role: role_with('roles.bulk_update_permissions', 'contacts.create'))
+    end
+
+    bulk_update(target_role, %w[ai_agents.read ai_agents.create ai_agents.write], contacts_admin)
+
+    expect(response).to have_http_status(:forbidden)
+    expect(target_role.reload.permission_keys).not_to include('ai_agents.create', 'ai_agents.write')
+  end
 end
