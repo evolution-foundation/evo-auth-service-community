@@ -125,6 +125,62 @@ RSpec.describe User, type: :model do
       expect(user.has_permission?('contacts.write')).to be(false)
     end
   end
+
+  # EVO-2124: the "Testar Agente" panel opens the session with ai_agents.write and
+  # then sends every message over POST /chat/{agent}/{session}, which the processor
+  # gates on ai_agent_processor.execute — a system key with no checkbox and no seed.
+  # Whoever can write the agent must therefore be able to run it, or the panel 403s
+  # on the first message for exactly the role an admin ticked "AI Agents" for.
+  describe 'agent execution implication (EVO-2124)' do
+    let(:user) { build_user }
+
+    it 'implies ai_agent_processor.execute from the coarse ai_agents.write' do
+      assign(user, role_with('ai_agents.write'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+      expect(user.all_permissions).to include('ai_agent_processor.execute')
+    end
+
+    it 'implies execute from a granular write too (implications do not chain)' do
+      # has_permission? only expands sources present in the role's EXPLICIT keys,
+      # so a legacy role holding just ai_agents.create must name execute directly —
+      # it can never reach it by hopping through the implied coarse ai_agents.write.
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+      expect(user.all_permissions).to include('ai_agent_processor.execute')
+    end
+
+    it 'still implies the coarse write from the granular one (EVO-2127 intact)' do
+      # The two implication maps collide on ai_agents.create as a source. A plain
+      # Hash#merge would drop the coarse write; this locks the concatenation.
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.write')).to be(true)
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+    end
+
+    it 'does NOT imply execute from a read-only grant' do
+      assign(user, role_with('ai_agents.read'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(false)
+      expect(user.all_permissions).not_to include('ai_agent_processor.execute')
+    end
+
+    it 'does NOT imply the other system actions of the processor' do
+      assign(user, role_with('ai_agents.write'))
+      expect(user.has_permission?('ai_agent_processor.read')).to be(false)
+      expect(user.has_permission?('ai_agent_processor.stream')).to be(false)
+    end
+
+    it 'does not leak execute to a write on an unrelated resource' do
+      assign(user, role_with('contacts.create'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(false)
+    end
+
+    it 'never persists the implied system key onto the role' do
+      role = role_with('ai_agents.write')
+      assign(user, role)
+      expect(role.role_permissions_actions.pluck(:permission_key))
+        .not_to include('ai_agent_processor.execute')
+    end
+  end
 end
 
 RSpec.describe ResourceActionsConfig, type: :model do

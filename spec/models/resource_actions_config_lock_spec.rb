@@ -63,7 +63,14 @@ RSpec.describe ResourceActionsConfig, '.api_format lock metadata' do
     expect(flat('ai_agents.write')[:implied_by]).to be_nil
 
     # ...while the runtime implication that kills the 403 stays in place.
-    expect(User::OPERATIONAL_IMPLICATIONS['ai_agents.create']).to eq(['ai_agents.write'])
+    #
+    # EVO-2124 added a SECOND implied key to the same source (ai_agents.<granular
+    # write> => ai_agent_processor.execute), so this asserts inclusion, not an
+    # exact list: the two maps collide on this source and are concatenated. An
+    # `eq` here would fail the moment another runtime implication is hung off a
+    # granular write — and, worse, a plain Hash#merge upstream would silently drop
+    # the coarse write instead. That is the regression this line guards.
+    expect(User::OPERATIONAL_IMPLICATIONS['ai_agents.create']).to include('ai_agents.write')
   end
 
   it 'locks no coarse write anywhere in the catalog' do
