@@ -87,19 +87,24 @@ class Api::V1::ResourceActionsController < Api::V1::BaseController
   private
 
   def check_authorization
-    # Verificar se usuário tem permissão para gerenciar configurações de recursos
     action_map = {
       'index' => 'resource_actions.read',
       'show' => 'resource_actions.read',
       'validate' => 'resource_actions.validate'
     }
-    
+
     required_permission = action_map[action_name]
     if required_permission
       resource_key, action_key = required_permission.split('.')
-      authorize_resource!(resource_key, action_key)
-    else
-      true # Para ações não mapeadas, permitir por enquanto
+      return authorize_resource!(resource_key, action_key)
     end
+
+    # Fail closed on unmapped actions (parity with users_controller / EVO-2026):
+    # read-only verbs stay permissive; anything else is denied unless it arrives
+    # through an already authorized service channel.
+    return true if request.get? || request.head?
+    return true if Current.service_authenticated == true
+
+    respond_forbidden("You don't have permission to perform this action")
   end
 end

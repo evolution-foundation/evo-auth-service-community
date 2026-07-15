@@ -170,7 +170,19 @@ class Api::V1::UsersController < Api::BaseController
     }
 
     required_permission = action_map[action_name]
-    return authorize_resource!('users', required_permission.split('.').last) if required_permission
+    if required_permission
+      authorize_resource!('users', required_permission.split('.').last)
+      # authorize_resource! renders on deny (truthy return) — performed? is the
+      # halt signal; a second authorize after a render would DoubleRenderError.
+      return false if performed?
+      # Administrative user management (creating/deleting agents, batch
+      # imports, role assignment) additionally requires users.manage — the
+      # endpoint-level mirror of the frontend Settings > Agents gate. Reads and
+      # self-service updates (no role CHANGE) stay on the fine keys alone.
+      return authorize_resource!('users', 'manage') if administrative_action?
+
+      return true
+    end
 
     # Fail closed: an action with no explicit permission mapping must never be
     # implicitly authorized when it can mutate state. Read-only verbs (GET/HEAD)
@@ -182,6 +194,18 @@ class Api::V1::UsersController < Api::BaseController
     return true if Current.service_authenticated == true
 
     respond_forbidden("You don't have permission to perform this action")
+  end
+
+  # Mutations that manage OTHER users (the Settings > Agents surface): create,
+  # destroy, batch import, and any update that CHANGES a role. The community
+  # frontend sends `role` on every user update, so an unchanged role must not
+  # trip the administrative gate (a users.update-only caller renaming a user
+  # would 403 otherwise).
+  def administrative_action?
+    return true if %w[create destroy bulk_create].include?(action_name)
+    return false unless action_name == 'update' && params[:role].present?
+
+    !User.find_by(id: params[:id])&.has_role?(params[:role])
   end
 
   def fetch_user
