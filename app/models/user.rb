@@ -103,25 +103,9 @@ class User < ApplicationRecord
       actions.each { |action| acc["#{resource}.#{action}"] = ["#{resource}.write"] }
     end.freeze
 
-  # EVO-2124: whoever can write an AI agent can RUN it. The "Testar Agente" panel
-  # creates the session over POST /sessions/{agent_id} (gated ai_agents.write) and
-  # then sends every message over POST /chat/{agent_id}/{session_id}, gated by
-  # ai_agent_processor.execute. That action is system: it renders no checkbox in
-  # the role editor and no seed grants it, so without this implication an agent
-  # (atendente) whose role has AI Agents checked creates the session and then 403s
-  # on the first message — the panel is half-open, which is the EVO-2124 bug.
-  #
-  # The sources are every key that means "can write this agent": the coarse
-  # ai_agents.write AND the granular writes it stands for. That set is exactly who
-  # passes the session-create gate (GENERATED_WRITE_IMPLICATIONS already expands a
-  # granular write into the coarse one), so execute lands on precisely the callers
-  # who can open a session — no wider. Listing the granular writes explicitly is
-  # required, not redundant: has_permission? expands only sources present in the
-  # role's EXPLICIT keys, so implications do NOT chain. A legacy role holding just
-  # ai_agents.create would never reach execute through ai_agents.write.
-  #
-  # Runtime-only, like GENERATED_WRITE_IMPLICATIONS: ai_agent_processor.execute is
-  # a system key and must never be persisted onto a role.
+  # Every "can write this agent" key implies ai_agent_processor.execute — a system
+  # key, runtime-only, never persisted. Granular writes are listed explicitly:
+  # implications don't chain (has_permission? expands only a role's explicit keys).
   AGENT_EXECUTION_IMPLICATIONS = (
     ResourceActionsConfig.write_actions_by_resource.fetch('ai_agents', []) + ['write']
   ).each_with_object({}) do |action, acc|
@@ -129,12 +113,9 @@ class User < ApplicationRecord
   end.freeze
 
   # Runtime implications (has_permission? / all_permissions). Superset of
-  # LOCKING_IMPLICATIONS; every locking implication is also a runtime one.
-  #
-  # The merge CONCATENATES on key collision instead of overwriting: the granular
-  # ai_agents writes are a source in both GENERATED_WRITE_IMPLICATIONS (=> coarse
-  # write) and AGENT_EXECUTION_IMPLICATIONS (=> execute), and a plain merge would
-  # drop the coarse write, silently undoing EVO-2127 for ai_agents.
+  # LOCKING_IMPLICATIONS. Block-form merge concatenates on key collision; a plain
+  # .merge would drop the coarse write from GENERATED_WRITE_IMPLICATIONS and
+  # silently undo EVO-2127.
   OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS
                              .merge(GENERATED_WRITE_IMPLICATIONS)
                              .merge(AGENT_EXECUTION_IMPLICATIONS) { |_key, existing, added| (existing + added).uniq }
