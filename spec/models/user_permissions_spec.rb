@@ -126,11 +126,6 @@ RSpec.describe User, type: :model do
     end
   end
 
-  # EVO-2124: the "Testar Agente" panel opens the session with ai_agents.write and
-  # then sends every message over POST /chat/{agent}/{session}, which the processor
-  # gates on ai_agent_processor.execute — a system key with no checkbox and no seed.
-  # Whoever can write the agent must therefore be able to run it, or the panel 403s
-  # on the first message for exactly the role an admin ticked "AI Agents" for.
   describe 'agent execution implication (EVO-2124)' do
     let(:user) { build_user }
 
@@ -141,9 +136,8 @@ RSpec.describe User, type: :model do
     end
 
     it 'implies execute from a granular write too (implications do not chain)' do
-      # has_permission? only expands sources present in the role's EXPLICIT keys,
-      # so a legacy role holding just ai_agents.create must name execute directly —
-      # it can never reach it by hopping through the implied coarse ai_agents.write.
+      # has_permission? expands only the role's EXPLICIT keys, so ai_agents.create
+      # must name execute directly — not via the implied coarse write.
       assign(user, role_with('ai_agents.create'))
       expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
       expect(user.all_permissions).to include('ai_agent_processor.execute')
