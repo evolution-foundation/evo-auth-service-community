@@ -103,9 +103,23 @@ class User < ApplicationRecord
       actions.each { |action| acc["#{resource}.#{action}"] = ["#{resource}.write"] }
     end.freeze
 
+  # Every "can write this agent" key implies ai_agent_processor.execute — a system
+  # key, runtime-only, never persisted. Granular writes are listed explicitly:
+  # implications don't chain (has_permission? expands only a role's explicit keys).
+  AGENT_EXECUTION_IMPLICATIONS = (
+    ResourceActionsConfig.write_actions_by_resource.fetch('ai_agents', []) + ['write']
+  ).each_with_object({}) do |action, acc|
+    acc["ai_agents.#{action}"] = ['ai_agent_processor.execute']
+  end.freeze
+
   # Runtime implications (has_permission? / all_permissions). Superset of
-  # LOCKING_IMPLICATIONS; every locking implication is also a runtime one.
-  OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS.merge(GENERATED_WRITE_IMPLICATIONS).freeze
+  # LOCKING_IMPLICATIONS. Block-form merge concatenates on key collision; a plain
+  # .merge would drop the coarse write from GENERATED_WRITE_IMPLICATIONS and
+  # silently undo EVO-2127.
+  OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS
+                             .merge(GENERATED_WRITE_IMPLICATIONS)
+                             .merge(AGENT_EXECUTION_IMPLICATIONS) { |_key, existing, added| (existing + added).uniq }
+                             .freeze
 
   devise :database_authenticatable,
          :registerable,
