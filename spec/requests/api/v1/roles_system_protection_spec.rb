@@ -2,11 +2,16 @@
 
 require 'rails_helper'
 
-# Story RBAC 2.4 (FR18/NFR4) — system roles are immutable and undeletable, and
-# custom roles with assigned users cannot be deleted. The guards already exist
-# (roles_controller#update/#destroy + Role#prevent_system_role_*); this spec
-# locks BOTH sides of each gate (grant AND deny) so a remapped or stuck gate
-# cannot pass silently.
+# Story RBAC 2.4 (FR18/NFR4) — a system role's IDENTITY is immutable (key/name)
+# and the role is undeletable; custom roles with assigned users cannot be
+# deleted either. The guards already exist (roles_controller#update/#destroy +
+# Role#prevent_system_role_*); this spec locks grant AND deny of each gate so a
+# remapped or stuck gate cannot pass silently.
+#
+# Known asymmetry (deliberate, pending PM ruling): bulk_update_permissions has
+# NO system guard here — a super_admin CAN retune a system role's permission
+# set (the licensing gem blocks the same operation on its side). FR18 names
+# key/name/delete only, so this spec does not cement either behavior.
 RSpec.describe 'Roles system protection', type: :request do
   let(:password) { 'Test123!@' }
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
