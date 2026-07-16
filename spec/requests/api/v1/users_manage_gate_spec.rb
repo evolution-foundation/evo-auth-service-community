@@ -20,6 +20,14 @@ RSpec.describe 'Users administrative gate (users.manage)', type: :request do
     role
   end
 
+  # A non-system role the TARGET holds — update_user_role destroys it on any
+  # role-bearing update, which is why such an update is administrative.
+  let(:custom_role) do
+    Role.create!(key: "custom-#{SecureRandom.hex(4)}", name: 'Custom Power', type: 'account').tap do |role|
+      role.role_permissions_actions.create!(permission_key: 'conversations.read')
+    end
+  end
+
   def build_user(name, role: nil)
     user = User.create!(
       name: name,
@@ -110,6 +118,35 @@ RSpec.describe 'Users administrative gate (users.manage)', type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(target_user.reload.name).to eq('Still Agent')
+    end
+
+    # update_user_role destroys EVERY non-system role before assigning, so a
+    # resubmitted system role still revokes a custom one — that is role
+    # management and must require users.manage, not just users.update.
+    it 'denies revoking a custom role by resubmitting a system role the target already holds' do
+      UserRole.create!(user: target_user, role: Role.find_by!(key: 'agent'))
+      UserRole.create!(user: target_user, role: custom_role)
+
+      patch "/api/v1/users/#{target_user.id}",
+            params: { name: 'Renamed', role: 'agent' },
+            headers: headers_for(delegated_user),
+            as: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(target_user.reload.roles.pluck(:key)).to include(custom_role.key)
+    end
+
+    it 'allows that same revocation for a caller holding users.manage' do
+      UserRole.create!(user: target_user, role: Role.find_by!(key: 'agent'))
+      UserRole.create!(user: target_user, role: custom_role)
+
+      patch "/api/v1/users/#{target_user.id}",
+            params: { name: 'Renamed', role: 'agent' },
+            headers: headers_for(admin_user),
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(target_user.reload.roles.pluck(:key)).not_to include(custom_role.key)
     end
 
     it 'assigns a role for a caller holding users.manage' do

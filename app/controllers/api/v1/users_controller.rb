@@ -155,8 +155,9 @@ class Api::V1::UsersController < Api::BaseController
     # conversations.read receives users.read operationally (see User model's
     # OPERATIONAL_IMPLICATIONS). Gating these endpoints on users.manage would
     # 403 the attendant dropdown in Conversations — rejected by design.
-    # The administrative gate (Settings > Agents menu/route) lives in the
-    # FRONTEND, keyed on users.manage; it is NOT enforced here.
+    # The administrative gate (Settings > Agents) is keyed on users.manage and
+    # IS enforced here, on top of the fine keys — see administrative_action?.
+    # The frontend gate remains, but is no longer the only one.
     action_map = {
       'index' => 'users.read',
       'show' => 'users.read',
@@ -197,15 +198,29 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   # Mutations that manage OTHER users (the Settings > Agents surface): create,
-  # destroy, batch import, and any update that CHANGES a role. The community
-  # frontend sends `role` on every user update, so an unchanged role must not
-  # trip the administrative gate (a users.update-only caller renaming a user
-  # would 403 otherwise).
+  # destroy, batch import, and any update that CHANGES the role set. The
+  # community frontend sends `role` on every user update, so an update that
+  # leaves the role set untouched must not trip the administrative gate (a
+  # users.update-only caller renaming a user would 403 otherwise).
   def administrative_action?
     return true if %w[create destroy bulk_create].include?(action_name)
     return false unless action_name == 'update' && params[:role].present?
 
-    !User.find_by(id: params[:id])&.has_role?(params[:role])
+    role_set_change?
+  end
+
+  # The question is not "is the submitted key one the target already holds?" but
+  # "will update_user_role change what the target holds?" — it destroys EVERY
+  # non-system role before assigning, so resubmitting a role the target already
+  # has still REVOKES any other non-system role. Both are role management.
+  def role_set_change?
+    target = @user || User.find_by(id: params[:id])
+    return true unless target&.has_role?(params[:role])
+
+    target.user_roles.joins(:role)
+          .where(roles: { system: false })
+          .where.not(roles: { key: params[:role] })
+          .exists?
   end
 
   def fetch_user
