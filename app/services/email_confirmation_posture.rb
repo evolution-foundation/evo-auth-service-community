@@ -50,7 +50,7 @@ module EmailConfirmationPosture
     return unless required? && !smtp_configured? && !alternative_mailer_configured?
 
     Rails.logger.warn(
-      '[auth] LOCKOUT: REQUIRE_EMAIL_CONFIRMATION força a barreira de confirmação, '       'mas nenhum mailer resolvível está configurado — novos cadastros NÃO conseguirão '       'logar. Configure SMTP (env ou painel admin) ou remova o override (a posture '       'derivada resolve sozinha). Se o SMTP vive só no installation_configs e o banco '       'estava fora neste boot, ignore este aviso.'
+      '[auth] LOCKOUT: REQUIRE_EMAIL_CONFIRMATION forces the confirmation barrier, '       'but no resolvable mailer is configured — new signups will NOT be able to log '       'in. Configure SMTP (env or admin panel) or remove the override (the derived '       'posture resolves on its own). If SMTP lives only in installation_configs and '       'the database was down at this boot, ignore this warning.'
     )
   end
 
