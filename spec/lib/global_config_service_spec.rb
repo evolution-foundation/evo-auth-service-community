@@ -44,11 +44,11 @@ RSpec.describe GlobalConfigService do
     end
 
     context 'when value exists only in runtime_configs' do
-      # Key EXCLUSIVA deste contexto: a key 'account' já existe no banco da
-      # suite cheia (criada fora da transação por outro spec/bootstrap) e o
-      # create! estourava RecordInvalid no SETUP — a prioridade
-      # runtime_configs > ENV ficava sem prova (EVO-2161). Key própria não
-      # depende do estado do banco nem apaga dados que outros specs leem.
+      # Context-exclusive key: the 'account' key already exists in the full
+      # suite's DB (created outside the example's transaction by another
+      # spec/bootstrap), so create! raised RecordInvalid in SETUP and the
+      # runtime_configs > ENV priority went unproven (EVO-2161). An own key
+      # depends on no DB state and deletes no data other specs read.
       let(:runtime_key) { "rspec-runtime-#{SecureRandom.hex(4)}" }
 
       before do
