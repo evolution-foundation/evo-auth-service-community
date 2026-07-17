@@ -37,4 +37,30 @@ module EmailConfirmationPosture
   def source
     ENV['REQUIRE_EMAIL_CONFIRMATION'].present? ? 'REQUIRE_EMAIL_CONFIRMATION (explicit override)' : 'SMTP_ADDRESS presence (derived)'
   end
+
+  # Boot observability (chamado pelo initializer; método p/ ser testável).
+  # Além do posture efetivo, DETECTA a config de lockout (EVO-2146): barreira
+  # FORÇADA por override explícito com SMTP ausente = todo cadastro novo fica
+  # trancado para sempre (o e-mail de confirmação nunca será entregue). A
+  # derivação nunca produz esse estado — só o override explícito consegue.
+  def log_boot_posture!
+    posture = required? ? 'required' : 'open'
+    Rails.logger.info("[auth] email-confirmation posture: #{posture} — source: #{source}")
+
+    return unless required? && !smtp_configured? && !alternative_mailer_configured?
+
+    Rails.logger.warn(
+      '[auth] LOCKOUT: REQUIRE_EMAIL_CONFIRMATION força a barreira de confirmação, '       'mas nenhum mailer resolvível está configurado — novos cadastros NÃO conseguirão '       'logar. Configure SMTP (env ou painel admin) ou remova o override (a posture '       'derivada resolve sozinha). Se o SMTP vive só no installation_configs e o banco '       'estava fora neste boot, ignore este aviso.'
+    )
+  end
+
+  # O posture deriva só de SMTP (contrato da EVO-2016), mas o warn de lockout não
+  # pode gritar quando um mailer ALTERNATIVO entrega (MAILER_TYPE resend/bms) —
+  # seria alarme falso permanente numa instalação saudável.
+  def alternative_mailer_configured?
+    mailer_type = GlobalConfigService.load('MAILER_TYPE', ENV.fetch('MAILER_TYPE', nil)).to_s.downcase
+    %w[resend bms].include?(mailer_type)
+  rescue StandardError
+    %w[resend bms].include?(ENV['MAILER_TYPE'].to_s.downcase)
+  end
 end

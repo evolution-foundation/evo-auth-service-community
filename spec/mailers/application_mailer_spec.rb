@@ -47,6 +47,38 @@ RSpec.describe ApplicationMailer do
       end
     end
 
+    context 'when SMTP_AUTHENTICATION is set but the username is absent (EVO-2146)' do
+      before do
+        allow(GlobalConfigService).to receive(:load).with('MAILER_TYPE', 'smtp').and_return('smtp')
+        allow(GlobalConfigService).to receive(:load).with('SMTP_ADDRESS', anything).and_return('mailpit')
+        allow(GlobalConfigService).to receive(:load).with('SMTP_PORT', anything).and_return('587')
+        allow(GlobalConfigService).to receive(:load).with('SMTP_USERNAME', anything).and_return(nil)
+        allow(GlobalConfigService).to receive(:load).with('SMTP_PASSWORD_SECRET', anything).and_return(nil)
+        allow(GlobalConfigService).to receive(:load).with('SMTP_ENABLE_STARTTLS_AUTO', anything).and_return('false')
+        # o seed do installation_configs traz 'login' por default — o cenário real
+        allow(GlobalConfigService).to receive(:load).with('SMTP_AUTHENTICATION', anything).and_return('login')
+        allow(GlobalConfigService).to receive(:load).with('SMTP_DOMAIN', anything).and_return(nil)
+        allow(GlobalConfigService).to receive(:load).with('SMTP_OPENSSL_VERIFY_MODE', anything).and_return(nil)
+        allow(GlobalConfigService).to receive(:load).with('MAILER_SENDER_EMAIL', anything).and_return('noreply@example.com')
+      end
+
+      it 'does NOT request SMTP-AUTH (the mail gem would raise client-side and no email would ever leave)' do
+        mail = UserMailer.two_factor_authentication_code(user, '123456').message
+        expect(mail.delivery_method.settings[:authentication]).to be_nil
+        expect(mail.delivery_method.settings[:address]).to eq('mailpit')
+      end
+
+      it 'also strips an :authentication INHERITED from the static boot settings' do
+        original = ApplicationMailer.smtp_settings
+        ApplicationMailer.smtp_settings = (original || {}).merge(authentication: :login)
+
+        mail = UserMailer.two_factor_authentication_code(user, '123456').message
+        expect(mail.delivery_method.settings[:authentication]).to be_nil
+      ensure
+        ApplicationMailer.smtp_settings = original
+      end
+    end
+
     context 'when MAILER_TYPE is smtp but SMTP_ADDRESS is absent' do
       before do
         allow(GlobalConfigService).to receive(:load).with('MAILER_TYPE', 'smtp').and_return('smtp')

@@ -54,6 +54,45 @@ RSpec.describe 'email-confirmation posture (EVO-2016)', type: :request do
     allow(RuntimeConfig).to receive(:account).and_return(nil)
   end
 
+  describe '.log_boot_posture! (EVO-2146 — lockout detectável no boot)' do
+    it 'warns LOUDLY when the barrier is forced without SMTP (lockout config)' do
+      set_posture_env(smtp: nil, explicit: 'true')
+      allow(EmailConfirmationPosture).to receive(:smtp_configured?).and_return(false)
+
+      expect(Rails.logger).to receive(:info).with(/posture: required/)
+      expect(Rails.logger).to receive(:warn).with(/LOCKOUT/)
+      EmailConfirmationPosture.log_boot_posture!
+    end
+
+    it 'does not warn when an ALTERNATIVE mailer delivers (MAILER_TYPE=resend/bms)' do
+      set_posture_env(smtp: nil, explicit: 'true')
+      allow(EmailConfirmationPosture).to receive(:smtp_configured?).and_return(false)
+      allow(EmailConfirmationPosture).to receive(:alternative_mailer_configured?).and_return(true)
+
+      expect(Rails.logger).to receive(:info).with(/posture: required/)
+      expect(Rails.logger).not_to receive(:warn)
+      EmailConfirmationPosture.log_boot_posture!
+    end
+
+    it 'does not warn when the barrier is required WITH SMTP (deliverable)' do
+      set_posture_env(smtp: 'smtp.example.com', explicit: nil)
+      allow(EmailConfirmationPosture).to receive(:smtp_configured?).and_return(true)
+
+      expect(Rails.logger).to receive(:info).with(/posture: required/)
+      expect(Rails.logger).not_to receive(:warn)
+      EmailConfirmationPosture.log_boot_posture!
+    end
+
+    it 'does not warn under the open posture (no SMTP, no override)' do
+      set_posture_env(smtp: nil, explicit: nil)
+      allow(EmailConfirmationPosture).to receive(:smtp_configured?).and_return(false)
+
+      expect(Rails.logger).to receive(:info).with(/posture: open/)
+      expect(Rails.logger).not_to receive(:warn)
+      EmailConfirmationPosture.log_boot_posture!
+    end
+  end
+
   describe 'derivation from SMTP_ADDRESS' do
     it 'requires confirmation when SMTP_ADDRESS is set (unconfirmed user who got the email is barred)' do
       set_posture_env(smtp: 'smtp.example.com')

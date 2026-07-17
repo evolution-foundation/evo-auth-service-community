@@ -51,8 +51,18 @@ class ApplicationMailer < ActionMailer::Base
       GlobalConfigService.load('SMTP_ENABLE_STARTTLS_AUTO', ENV.fetch('SMTP_ENABLE_STARTTLS_AUTO', true))
     )
 
+    # Só pede AUTH quando há credencial: o seed do installation_configs traz
+    # SMTP_AUTHENTICATION='login' por default, e com user_name vazio o mail gem
+    # levanta ArgumentError CLIENT-SIDE ("SMTP-AUTH requested but missing user
+    # name") — nenhum e-mail sai e o erro fica escondido no job (EVO-2146).
+    # O delete cobre o :authentication HERDADO do hash estático do initializer
+    # (ENV SMTP_AUTHENTICATION presente sem SMTP_USERNAME) — mesmo bug, outra porta.
     auth = GlobalConfigService.load('SMTP_AUTHENTICATION', ENV.fetch('SMTP_AUTHENTICATION', nil))
-    smtp[:authentication] = auth.to_sym if auth.present?
+    if smtp[:user_name].present?
+      smtp[:authentication] = auth.to_sym if auth.present?
+    else
+      smtp.delete(:authentication)
+    end
 
     domain = GlobalConfigService.load('SMTP_DOMAIN', ENV.fetch('SMTP_DOMAIN', nil))
     smtp[:domain] = domain if domain.present?
