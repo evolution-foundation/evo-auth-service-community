@@ -28,11 +28,19 @@ Rails.application.configure do
     ENV.fetch('ACTIVE_STORAGE_SERVICE', 'local')
   end.to_sym
 
+  # SSL/TLS posture. On by default (unchanged). Set FORCE_SSL=false to move TLS
+  # termination entirely to an external reverse proxy — required for a self-hosted
+  # box whose services talk plain HTTP over the internal Docker network (a forced
+  # http->https redirect would break service-to-service calls) and which may be
+  # reached over plain HTTP locally. Both flags share one switch on purpose:
+  # assume_ssl alone still marks cookies secure and generates https URLs.
+  ssl_enforced = ActiveModel::Type::Boolean.new.cast(ENV.fetch('FORCE_SSL', 'true'))
+
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  config.assume_ssl = true
+  config.assume_ssl = ssl_enforced
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
+  config.force_ssl = ssl_enforced
 
   # Skip http-to-https redirect for the default health check endpoint.
   # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
