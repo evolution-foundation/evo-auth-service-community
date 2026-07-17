@@ -54,7 +54,7 @@ RSpec.describe 'email-confirmation posture (EVO-2016)', type: :request do
     allow(RuntimeConfig).to receive(:account).and_return(nil)
   end
 
-  describe '.log_boot_posture! (EVO-2146 — lockout detectável no boot)' do
+  describe '.log_boot_posture! (EVO-2146 — lockout detectable at boot)' do
     it 'warns LOUDLY when the barrier is forced without SMTP (lockout config)' do
       set_posture_env(smtp: nil, explicit: 'true')
       allow(EmailConfirmationPosture).to receive(:smtp_configured?).and_return(false)

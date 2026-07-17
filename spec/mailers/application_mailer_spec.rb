@@ -55,7 +55,7 @@ RSpec.describe ApplicationMailer do
         allow(GlobalConfigService).to receive(:load).with('SMTP_USERNAME', anything).and_return(nil)
         allow(GlobalConfigService).to receive(:load).with('SMTP_PASSWORD_SECRET', anything).and_return(nil)
         allow(GlobalConfigService).to receive(:load).with('SMTP_ENABLE_STARTTLS_AUTO', anything).and_return('false')
-        # o seed do installation_configs traz 'login' por default — o cenário real
+        # the installation_configs seed ships 'login' by default — the real-world scenario
         allow(GlobalConfigService).to receive(:load).with('SMTP_AUTHENTICATION', anything).and_return('login')
         allow(GlobalConfigService).to receive(:load).with('SMTP_DOMAIN', anything).and_return(nil)
         allow(GlobalConfigService).to receive(:load).with('SMTP_OPENSSL_VERIFY_MODE', anything).and_return(nil)

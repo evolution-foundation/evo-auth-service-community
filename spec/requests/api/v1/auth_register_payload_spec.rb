@@ -2,15 +2,15 @@
 
 require 'rails_helper'
 
-# EVO-2146: o register aceitava só o payload FLAT ({name, email, password, ...});
-# o shape aninhado {user: {...}} caía num `user_params` INEXISTENTE no concern
-# (AuthHelper#create_user) => NameError => 500. Este guard trava os DOIS shapes.
+# EVO-2146: register accepted only the FLAT payload ({name, email, password, ...});
+# the nested {user: {...}} shape hit a NON-EXISTENT `user_params` in the concern
+# (AuthHelper#create_user) => NameError => 500. This guard locks BOTH shapes.
 RSpec.describe 'POST /api/v1/auth/register — payload shapes (EVO-2146)', type: :request do
   let(:password) { 'Test123!@' }
 
   around do |example|
     original = ENV['SMTP_ADDRESS']
-    ENV.delete('SMTP_ADDRESS') # posture aberta: sem e-mail de confirmação no teste
+    ENV.delete('SMTP_ADDRESS') # open posture: no confirmation email in the test
     example.run
   ensure
     original.nil? ? ENV.delete('SMTP_ADDRESS') : ENV['SMTP_ADDRESS'] = original
@@ -50,8 +50,9 @@ RSpec.describe 'POST /api/v1/auth/register — payload shapes (EVO-2146)', type:
   end
 
   it '422s via the ParameterMissing rescue when the flat payload has no name (falls into the nested branch)' do
-    # Sem `name` o branch flat não casa (exige name+password) e o código cai no
-    # else -> params.require(:user) -> ParameterMissing -> rescue -> 422.
+    # Without `name` the flat branch doesn't match (it requires name+password), so
+    # the code falls into the else -> params.require(:user) -> ParameterMissing ->
+    # rescue -> 422.
     post '/api/v1/auth/register', params: {
       email: "noname-#{SecureRandom.hex(4)}@example.com", password: password
     }
