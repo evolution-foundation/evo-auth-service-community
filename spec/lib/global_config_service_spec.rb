@@ -44,17 +44,24 @@ RSpec.describe GlobalConfigService do
     end
 
     context 'when value exists only in runtime_configs' do
+      # Key EXCLUSIVA deste contexto: a key 'account' já existe no banco da
+      # suite cheia (criada fora da transação por outro spec/bootstrap) e o
+      # create! estourava RecordInvalid no SETUP — a prioridade
+      # runtime_configs > ENV ficava sem prova (EVO-2161). Key própria não
+      # depende do estado do banco nem apaga dados que outros specs leem.
+      let(:runtime_key) { "rspec-runtime-#{SecureRandom.hex(4)}" }
+
       before do
-        RuntimeConfig.create!(key: 'account', value: '{"name":"test"}')
+        RuntimeConfig.create!(key: runtime_key, value: '{"name":"test"}')
       end
 
       it 'returns the runtime_config value' do
-        expect(described_class.load('account')).to eq('{"name":"test"}')
+        expect(described_class.load(runtime_key)).to eq('{"name":"test"}')
       end
 
       it 'takes priority over ENV' do
-        allow(ENV).to receive(:fetch).with('account', nil).and_return('env-val')
-        expect(described_class.load('account')).to eq('{"name":"test"}')
+        allow(ENV).to receive(:fetch).with(runtime_key, nil).and_return('env-val')
+        expect(described_class.load(runtime_key)).to eq('{"name":"test"}')
       end
     end
 
