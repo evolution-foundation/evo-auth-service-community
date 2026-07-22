@@ -65,6 +65,18 @@ namespace :rbac do
     missing = RbacGrantReconciler.missing_keys
     stale = RbacGrantReconciler.stale_keys
 
+    # account_owner carries the same seed-defined invariant but is NOT reconciled
+    # automatically (it is operator-editable). Report it so a catalog addition
+    # that needs a paired data migration is visible rather than silent — this is
+    # informational and never changes the exit status.
+    delegated_missing = RbacGrantReconciler.delegated_missing_keys
+    if delegated_missing.any?
+      puts "ℹ️  account_owner is missing #{delegated_missing.size} catalog permission(s): " \
+           "#{delegated_missing.join(', ')}"
+      puts "   It is not auto-reconciled (operator-editable). Ship a data migration " \
+           "if these should reach existing installations — see docs/rbac-admin-access.md."
+    end
+
     if missing.empty? && stale.empty?
       puts "✅ No drift: super_admin holds exactly the catalog (#{RbacGrantReconciler.catalog_keys.size} permissions)."
       next

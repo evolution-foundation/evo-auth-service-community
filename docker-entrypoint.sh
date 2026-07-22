@@ -42,8 +42,20 @@ if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
   # Idempotent and a no-op before bootstrap, so it never blocks boot: a failure
   # is reported but does not abort (a stale grant is degraded, not unsafe).
   echo "[evo-auth-entrypoint] Reconciling super_admin grants with the permission catalog..."
-  bundle exec rails rbac:reconcile_super_admin ||
-    echo "[evo-auth-entrypoint] WARNING: super_admin grant reconciliation failed; continuing boot." >&2
+  if ! bundle exec rails rbac:reconcile_super_admin; then
+    # Boot continues on purpose (a stale grant is degraded, not unsafe), but the
+    # failure must not read like a passing boot: the whole point of this card is
+    # that a drifted admin is invisible. Make the line unmissable in the log and
+    # name the command that repairs it.
+    echo "[evo-auth-entrypoint] ===============================================================" >&2
+    echo "[evo-auth-entrypoint] ERROR: super_admin grant reconciliation FAILED." >&2
+    echo "[evo-auth-entrypoint] The installation owner may be missing permissions added to the" >&2
+    echo "[evo-auth-entrypoint] catalog since this install was bootstrapped: the API will 403" >&2
+    echo "[evo-auth-entrypoint] them on the affected features and the UI will hide the controls." >&2
+    echo "[evo-auth-entrypoint] Repair with: bundle exec rails rbac:reconcile_super_admin" >&2
+    echo "[evo-auth-entrypoint] Diagnose with: bundle exec rails rbac:check_super_admin_drift" >&2
+    echo "[evo-auth-entrypoint] ===============================================================" >&2
+  fi
 else
   echo "[evo-auth-entrypoint] RUN_MIGRATIONS=${RUN_MIGRATIONS} — skipping migrations."
 fi

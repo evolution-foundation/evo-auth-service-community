@@ -23,6 +23,18 @@
 class RbacGrantReconciler
   ROLE_KEY = 'super_admin'
 
+  # The delegated-admin role carries the SAME seed-defined invariant as the
+  # installation owner — the whole catalog minus a short exclusion list — and so
+  # drifts on catalog growth in exactly the same way. It is deliberately NOT
+  # reconciled on boot: unlike super_admin it is editable in the role editor, so
+  # rewriting it every deploy would silently revert an operator's customisation.
+  # Existing installations therefore still need a paired data migration when the
+  # catalog grows. `delegated_missing_keys` exists so that gap is *reported*
+  # instead of silent (see docs/rbac-admin-access.md and the runbook).
+  # Mirrors `account_owner_exclusive` in db/seeds/rbac.rb — keep the two in sync.
+  DELEGATED_ROLE_KEY = 'account_owner'
+  DELEGATED_EXCLUSIVES = %w[accounts.stats installation_configs.manage].freeze
+
   class << self
     def role
       Role.find_by(key: ROLE_KEY)
@@ -58,9 +70,36 @@ class RbacGrantReconciler
       missing_keys(target).any? || stale_keys(target).any?
     end
 
+    def delegated_role
+      Role.find_by(key: DELEGATED_ROLE_KEY)
+    end
+
+    # Report-only counterpart of `missing_keys` for account_owner. Never written
+    # back automatically — see the DELEGATED_ROLE_KEY note above.
+    def delegated_missing_keys
+      target = delegated_role
+      return [] unless target
+
+      (catalog_keys - DELEGATED_EXCLUSIVES) - current_keys(target)
+    end
+
     # Idempotent: safe to run on every boot. Returns a summary hash; a no-op
     # (including "role does not exist yet", i.e. pre-bootstrap) reports zeroes
     # instead of raising, so it can never block a container from starting.
+    #
+    # The insert goes through `insert_all` with ON CONFLICT DO NOTHING rather
+    # than a create! per key. Two replicas booting at the same time compute the
+    # same `added` set and race: with create!, the loser hits the unique index
+    # (`index_role_perms_actions_unique`), the exception unwinds the whole
+    # transaction, and EVERY other grant in the batch is rolled back too — the
+    # boot self-heal would leave the installation exactly as drifted as it found
+    # it. Conflicts are the expected outcome of a race here, not an error, so
+    # they are skipped instead of raised.
+    #
+    # `insert_all` skips model validations. That is safe (and the point) because
+    # every key comes from `catalog_keys`, which is what RolePermissionsAction's
+    # permission_key validation checks against anyway. Timestamps are passed
+    # explicitly so the rows do not depend on the column defaults.
     def reconcile!
       target = role
       return { role: nil, added: 0, removed: 0 } unless target
@@ -69,8 +108,16 @@ class RbacGrantReconciler
       removed = stale_keys(target)
 
       ActiveRecord::Base.transaction do
-        added.each { |key| target.role_permissions_actions.create!(permission_key: key) }
-        target.role_permissions_actions.where(permission_key: removed).destroy_all if removed.any?
+        if added.any?
+          now = Time.current
+          RolePermissionsAction.insert_all(
+            added.map do |key|
+              { role_id: target.id, permission_key: key, created_at: now, updated_at: now }
+            end,
+            unique_by: %i[role_id permission_key]
+          )
+        end
+        target.role_permissions_actions.where(permission_key: removed).delete_all if removed.any?
       end
 
       { role: target.key, added: added.size, removed: removed.size }

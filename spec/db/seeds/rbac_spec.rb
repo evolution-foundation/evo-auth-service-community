@@ -86,20 +86,45 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
   # `can()` is data-driven, so the admin can do exactly what the seed granted.
   # If a new catalog entry ever fails to reach super_admin, the backend 403s the
   # admin on the new feature and the frontend hides the control — silently.
-  # This example is the tripwire; RbacGrantReconciler is the runtime repair.
-  describe 'super_admin grant set == full permission catalog' do
-    it 'holds every catalog permission (no capability lost when the catalog grows)' do
-      missing = ResourceActionsConfig.all_permission_keys - super_admin_permissions
+  # These examples are the tripwire; RbacGrantReconciler is the runtime repair.
+  #
+  # They deliberately drive the seed through a STUBBED catalog instead of
+  # comparing the seeded grants against `all_permission_keys`. Asserting
+  # `all_permission_keys - super_admin_permissions == []` reads like a guard but
+  # is a tautology: the seed derives super_admin's grants from that very method,
+  # so the two sides are the same expression and the example cannot fail — it
+  # stays green even when the catalog grows, which is precisely the scenario it
+  # was meant to catch. Stubbing gives the assertion an INDEPENDENT oracle: a
+  # known five-key catalog, against which the seed's *policy* (super_admin takes
+  # the catalog whole; account_owner takes it minus exactly the two documented
+  # exclusives) is a real, falsifiable claim. Introduce a `super_admin_exclusive`
+  # filter in the seed and these fail.
+  #
+  # The stub uses real catalog keys because RolePermissionsAction validates
+  # permission_key against ResourceActionsConfig — a fabricated key would be
+  # rejected at create! and mask the assertion.
+  describe 'super_admin grant set == full permission catalog (seed policy)' do
+    STUBBED_CATALOG = %w[
+      contacts.read
+      contacts.create
+      users.manage
+      accounts.stats
+      installation_configs.manage
+    ].freeze
 
-      expect(missing).to be_empty,
-                         "super_admin is missing #{missing.size} catalog permission(s): #{missing.join(', ')}"
+    before do
+      allow(ResourceActionsConfig).to receive(:all_permission_keys).and_return(STUBBED_CATALOG)
+      Role.find_each { |role| role.role_permissions_actions.delete_all }
+      load Rails.root.join('db/seeds/rbac.rb')
     end
 
-    it 'holds no grant outside the catalog (no leftovers from removed resources)' do
-      stale = super_admin_permissions - ResourceActionsConfig.all_permission_keys
+    it 'grants super_admin the catalog WHOLE — no exclusion list of its own' do
+      expect(super_admin_permissions).to match_array(STUBBED_CATALOG)
+    end
 
-      expect(stale).to be_empty,
-                       "super_admin holds #{stale.size} permission(s) absent from the catalog: #{stale.join(', ')}"
+    it 'withholds from account_owner exactly the two documented exclusives' do
+      expect(account_owner_permissions)
+        .to match_array(STUBBED_CATALOG - %w[accounts.stats installation_configs.manage])
     end
 
     it 'is the only role holding the installation-level key' do
