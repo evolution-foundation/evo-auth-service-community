@@ -3,6 +3,12 @@
 require 'rails_helper'
 
 RSpec.describe Users::FilterService do
+  # Every assertion is scoped to the users the example itself created. The
+  # service resolves over the whole table, so asserting on the whole result
+  # made these specs depend on the table being empty — any user left behind by
+  # another spec (the bootstrap owner, for one) broke them in a full-suite run.
+  let(:created_ids) { [] }
+
   def make_user(name:, availability: :online, confirmed: true, created_at: Time.current)
     User.create!(
       name: name,
@@ -12,7 +18,7 @@ RSpec.describe Users::FilterService do
       availability: availability,
       confirmed_at: confirmed ? Time.current : nil,
       created_at: created_at
-    )
+    ).tap { |user| created_ids << user.id }
   end
 
   def assign_role(user, key)
@@ -30,16 +36,21 @@ RSpec.describe Users::FilterService do
   end
 
   def resolve(*filters)
-    described_class.new(filters).resolve.to_a
+    mine(described_class.new(filters).resolve)
+  end
+
+  # Narrows a resolved relation to this example's own fixtures.
+  def mine(relation)
+    relation.where(id: created_ids).to_a
   end
 
   describe 'no filters' do
     it 'returns every user unfiltered' do
-      make_user(name: 'Alice')
-      make_user(name: 'Bob')
+      alice = make_user(name: 'Alice')
+      bob = make_user(name: 'Bob')
 
-      expect(described_class.new(nil).resolve.count).to eq(2)
-      expect(described_class.new([]).resolve.count).to eq(2)
+      expect(mine(described_class.new(nil).resolve)).to contain_exactly(alice, bob)
+      expect(mine(described_class.new([]).resolve)).to contain_exactly(alice, bob)
     end
   end
 
@@ -48,14 +59,14 @@ RSpec.describe Users::FilterService do
     let!(:bob) { make_user(name: 'Bob Souza') }
 
     it 'matches name or email (case-insensitive)' do
-      expect(described_class.new(nil, 'SILVA').resolve).to contain_exactly(alice)
+      expect(mine(described_class.new(nil, 'SILVA').resolve)).to contain_exactly(alice)
     end
 
     it 'composes the search with filters (AND)' do
       assign_role(alice, 'agent')
       assign_role(bob, 'agent')
 
-      result = described_class.new([filter('role', 'equal_to', 'agent')], 'silva').resolve.to_a
+      result = mine(described_class.new([filter('role', 'equal_to', 'agent')], 'silva').resolve)
       expect(result).to contain_exactly(alice)
     end
   end
@@ -158,30 +169,30 @@ RSpec.describe Users::FilterService do
 
   describe 'robustness' do
     it 'ignores an unknown attribute_key (no leak, no crash)' do
-      make_user(name: 'X')
-      expect(described_class.new([filter('password', 'contains', 'x')]).resolve.count).to eq(1)
+      user = make_user(name: 'X')
+      expect(mine(described_class.new([filter('password', 'contains', 'x')]).resolve)).to contain_exactly(user)
     end
 
     it 'ignores a value-requiring filter with blank values' do
-      make_user(name: 'X')
-      expect(described_class.new([filter('name', 'contains', '')]).resolve.count).to eq(1)
+      user = make_user(name: 'X')
+      expect(mine(described_class.new([filter('name', 'contains', '')]).resolve)).to contain_exactly(user)
     end
 
     # An unparseable date used to reach Postgres as `DATE(created_at) = 'abc'`,
     # which raises PG::InvalidDatetimeFormat and turns the list into a 500.
     it 'ignores an unparseable created_at instead of blowing up the query' do
-      make_user(name: 'X')
+      user = make_user(name: 'X')
 
       expect { described_class.new([filter('created_at', 'equal_to', 'abc')]).resolve.load }
         .not_to raise_error
-      expect(described_class.new([filter('created_at', 'equal_to', 'abc')]).resolve.count).to eq(1)
+      expect(mine(described_class.new([filter('created_at', 'equal_to', 'abc')]).resolve)).to contain_exactly(user)
     end
 
     it 'treats ILIKE wildcards in the search term as literal characters' do
       literal = make_user(name: 'Discount 50% Off')
       make_user(name: 'Nothing To Do With It')
 
-      expect(described_class.new(nil, '50%').resolve).to contain_exactly(literal)
+      expect(mine(described_class.new(nil, '50%').resolve)).to contain_exactly(literal)
     end
 
     it 'treats ILIKE wildcards in a contains filter as literal characters' do
