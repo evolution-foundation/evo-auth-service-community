@@ -5,7 +5,7 @@
 Nothing in the stack short-circuits RBAC for the administrator:
 
 - **auth** — the resource gate (`PermissionCheckable#authorize_resource!` → `User#has_permission?`) and the `/permissions` endpoint the frontend consumes are row-based. There is no `super_admin` clause in either.
-- **frontend** — `can()` in `PermissionsContext` is purely data-driven (`permissionsArray.includes('resource.action')`). This is intentional and must stay that way: the backend grant set is the single source of truth, and a role short-circuit in the UI would show controls the API then 403s.
+- **frontend** — `can()` in `PermissionsContext` is purely data-driven (`permissionsArray.includes('resource.action')`). This is intentional and must stay that way: the backend grant set is the single source of truth, and a role short-circuit in the UI would show controls that the API would then 403.
 - **`super_admin` has everything only because `db/seeds/rbac.rb` grants it the whole catalog.**
 
 `super_admin` is the installation owner: the bootstrap user created by the setup wizard (`SetupBootstrapService`). Three things separate it from `account_owner`, none of them related to multi-tenancy:
