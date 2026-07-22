@@ -166,5 +166,57 @@ RSpec.describe Users::FilterService do
       make_user(name: 'X')
       expect(described_class.new([filter('name', 'contains', '')]).resolve.count).to eq(1)
     end
+
+    # An unparseable date used to reach Postgres as `DATE(created_at) = 'abc'`,
+    # which raises PG::InvalidDatetimeFormat and turns the list into a 500.
+    it 'ignores an unparseable created_at instead of blowing up the query' do
+      make_user(name: 'X')
+
+      expect { described_class.new([filter('created_at', 'equal_to', 'abc')]).resolve.load }
+        .not_to raise_error
+      expect(described_class.new([filter('created_at', 'equal_to', 'abc')]).resolve.count).to eq(1)
+    end
+
+    it 'treats ILIKE wildcards in the search term as literal characters' do
+      literal = make_user(name: 'Discount 50% Off')
+      make_user(name: 'Nothing To Do With It')
+
+      expect(described_class.new(nil, '50%').resolve).to contain_exactly(literal)
+    end
+
+    it 'treats ILIKE wildcards in a contains filter as literal characters' do
+      literal = make_user(name: 'a_b')
+      make_user(name: 'axb')
+
+      expect(resolve(filter('name', 'contains', 'a_b'))).to contain_exactly(literal)
+    end
+  end
+
+  describe 'created_at day matching' do
+    let!(:on_day) { make_user(name: 'OnDay', created_at: Time.utc(2026, 3, 10, 14, 30)) }
+    let!(:next_day) { make_user(name: 'NextDay', created_at: Time.utc(2026, 3, 11, 0, 15)) }
+
+    it 'equal_to matches the whole day, not just midnight' do
+      expect(resolve(filter('created_at', 'equal_to', '2026-03-10'))).to contain_exactly(on_day)
+    end
+
+    it 'not_equal_to excludes exactly that day' do
+      expect(resolve(filter('created_at', 'not_equal_to', '2026-03-10'))).to contain_exactly(next_day)
+    end
+  end
+
+  describe 'availability negation with NULL rows' do
+    # `availability` is nullable, so `NOT IN` alone would drop these users from
+    # both sides of the filter — they must show up under "is not online".
+    let!(:online) { make_user(name: 'On', availability: :online) }
+    let!(:unset) { make_user(name: 'Unset').tap { |user| user.update_column(:availability, nil) } }
+
+    it 'equal_to leaves the NULL row out' do
+      expect(resolve(filter('availability_status', 'equal_to', 'online'))).to contain_exactly(online)
+    end
+
+    it 'not_equal_to claims the NULL row' do
+      expect(resolve(filter('availability_status', 'not_equal_to', 'online'))).to contain_exactly(unset)
+    end
   end
 end

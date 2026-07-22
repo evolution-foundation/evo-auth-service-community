@@ -48,7 +48,14 @@ module Users
     end
 
     def apply_search(relation)
-      relation.where('users.name ILIKE :term OR users.email ILIKE :term', term: "%#{@search}%")
+      relation.where('users.name ILIKE :term OR users.email ILIKE :term', term: "%#{like_escape(@search)}%")
+    end
+
+    # `%` and `_` are wildcards in ILIKE. A user searching for "50%" or "a_b"
+    # means the literal characters, not "anything" — escape them so the search
+    # box cannot silently degrade into a full-table match.
+    def like_escape(value)
+      ActiveRecord::Base.sanitize_sql_like(value.to_s)
     end
 
     def normalize(filters)
@@ -90,8 +97,8 @@ module Users
       case operator
       when 'equal_to' then ["LOWER(#{column}) = LOWER(?)", [values.first]]
       when 'not_equal_to' then ["#{column} IS NULL OR LOWER(#{column}) <> LOWER(?)", [values.first]]
-      when 'contains' then ["#{column} ILIKE ?", ["%#{values.first}%"]]
-      when 'does_not_contain' then ["#{column} IS NULL OR #{column} NOT ILIKE ?", ["%#{values.first}%"]]
+      when 'contains' then ["#{column} ILIKE ?", ["%#{like_escape(values.first)}%"]]
+      when 'does_not_contain' then ["#{column} IS NULL OR #{column} NOT ILIKE ?", ["%#{like_escape(values.first)}%"]]
       when 'is_present' then ["#{column} IS NOT NULL", []]
       when 'is_not_present' then ["#{column} IS NULL", []]
       end
@@ -107,7 +114,15 @@ module Users
       ints = values.filter_map { |value| User.availabilities[value] }
       return nil if ints.empty?
 
-      operator == 'not_equal_to' ? ['users.availability NOT IN (?)', [ints]] : ['users.availability IN (?)', [ints]]
+      # `availability` is nullable (integer, default 0, no NOT NULL). A bare
+      # `NOT IN` evaluates to NULL for those rows, so they would fall out of
+      # BOTH "= online" and "<> online" — the negation must claim them, the way
+      # the text fragments already do with `IS NULL OR ...`.
+      if operator == 'not_equal_to'
+        ['users.availability IS NULL OR users.availability NOT IN (?)', [ints]]
+      else
+        ['users.availability IN (?)', [ints]]
+      end
     end
 
     def confirmed_fragment(operator, values)
@@ -120,11 +135,33 @@ module Users
       case operator
       when 'is_present' then ['users.created_at IS NOT NULL', []]
       when 'is_not_present' then ['users.created_at IS NULL', []]
-      when 'equal_to' then ['DATE(users.created_at) = ?', [values.first]]
-      when 'not_equal_to' then ['DATE(users.created_at) <> ?', [values.first]]
-      when 'contains' then ['users.created_at::text ILIKE ?', ["%#{values.first}%"]]
-      when 'does_not_contain' then ['users.created_at::text NOT ILIKE ?', ["%#{values.first}%"]]
+      when 'equal_to', 'not_equal_to' then created_at_day_fragment(operator, values.first)
+      when 'contains' then ['users.created_at::text ILIKE ?', ["%#{like_escape(values.first)}%"]]
+      when 'does_not_contain' then ['users.created_at::text NOT ILIKE ?', ["%#{like_escape(values.first)}%"]]
       end
+    end
+
+    # Matches a whole day as a half-open range instead of `DATE(created_at) = ?`.
+    # Two reasons: an unparseable value ("abc") reached Postgres as a date cast
+    # and blew the request up with a 500, and wrapping the column in DATE()
+    # makes any index on created_at unusable. The range is built in the app's
+    # Time.zone, so configuring a zone shifts the day boundaries with it.
+    def created_at_day_fragment(operator, value)
+      day = parse_day(value)
+      return nil if day.nil?
+
+      range = [day.beginning_of_day, day.next_day.beginning_of_day]
+      if operator == 'not_equal_to'
+        ['users.created_at IS NULL OR users.created_at < ? OR users.created_at >= ?', range]
+      else
+        ['users.created_at >= ? AND users.created_at < ?', range]
+      end
+    end
+
+    def parse_day(value)
+      Time.zone.parse(value.to_s)&.to_date
+    rescue ArgumentError
+      nil
     end
   end
 end
