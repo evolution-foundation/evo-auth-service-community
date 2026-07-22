@@ -74,11 +74,9 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def bulk_update_permissions
-    # The installation owner's grant set is an invariant, not a preference: it is
-    # reconciled against the whole catalog on every boot (RbacGrantReconciler,
-    # docker-entrypoint.sh). Accepting an edit here would return 200, persist it,
-    # and have the next deploy silently revert it — a control that lies to the
-    # operator. Reject it up front instead, with a message that says why.
+    # Reconciled against the whole catalog on every boot (RbacGrantReconciler),
+    # so accepting an edit here would return 200 and be reverted by the next
+    # deploy. Refuse it instead of persisting a lie.
     if @role.key == RbacGrantReconciler::ROLE_KEY
       return error_response(
         'FORBIDDEN',

@@ -87,13 +87,10 @@ RSpec.describe RbacGrantReconciler do
       expect(keys.size).to eq(keys.uniq.size)
     end
 
-    # Two replicas booting at once compute the same `added` set and race to
-    # insert it. The loser used to hit `index_role_perms_actions_unique`, and the
-    # exception unwound the whole transaction — so the self-heal left the
-    # installation exactly as drifted as it found it, for every key in the batch.
-    # The conflict is now skipped. Simulated deterministically: `missing_keys`
-    # reports a key the role already holds, which is precisely the state the
-    # loser of the race observes at INSERT time.
+    # Race between two booting replicas: the loser's insert conflicts on the
+    # unique index and must be skipped, not roll the batch back. Simulated by
+    # having `missing_keys` report a key the role already holds — the state the
+    # loser sees at INSERT time.
     it 'survives a concurrent boot that already inserted part of the batch' do
       super_admin.role_permissions_actions.find_by!(permission_key: 'users.manage').destroy
       already_won = 'installation_configs.manage'

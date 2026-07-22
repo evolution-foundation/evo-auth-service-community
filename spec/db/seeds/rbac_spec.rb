@@ -81,28 +81,15 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
   end
 
-  # Anti-drift invariant. Nothing bypasses RBAC for the installation owner: the
-  # resource gate and the /permissions endpoint are row-based and the frontend
-  # `can()` is data-driven, so the admin can do exactly what the seed granted.
-  # If a new catalog entry ever fails to reach super_admin, the backend 403s the
-  # admin on the new feature and the frontend hides the control — silently.
-  # These examples are the tripwire; RbacGrantReconciler is the runtime repair.
+  # Anti-drift guard for the installation owner (grant-backed, no bypass).
   #
-  # They deliberately drive the seed through a STUBBED catalog instead of
-  # comparing the seeded grants against `all_permission_keys`. Asserting
-  # `all_permission_keys - super_admin_permissions == []` reads like a guard but
-  # is a tautology: the seed derives super_admin's grants from that very method,
-  # so the two sides are the same expression and the example cannot fail — it
-  # stays green even when the catalog grows, which is precisely the scenario it
-  # was meant to catch. Stubbing gives the assertion an INDEPENDENT oracle: a
-  # known five-key catalog, against which the seed's *policy* (super_admin takes
-  # the catalog whole; account_owner takes it minus exactly the two documented
-  # exclusives) is a real, falsifiable claim. Introduce a `super_admin_exclusive`
-  # filter in the seed and these fail.
-  #
-  # The stub uses real catalog keys because RolePermissionsAction validates
-  # permission_key against ResourceActionsConfig — a fabricated key would be
-  # rejected at create! and mask the assertion.
+  # Stubbed catalog on purpose: asserting `all_permission_keys -
+  # super_admin_permissions == []` is a tautology — the seed derives the grants
+  # from that same method, so it stays green while the catalog grows, the exact
+  # scenario this guards. The stub is an independent oracle for the seed POLICY
+  # (super_admin takes the catalog whole; account_owner minus its two exclusives)
+  # and fails if the seed ever adds a super_admin exclusion. Real keys because
+  # RolePermissionsAction validates permission_key against the catalog.
   describe 'super_admin grant set == full permission catalog (seed policy)' do
     STUBBED_CATALOG = %w[
       contacts.read
