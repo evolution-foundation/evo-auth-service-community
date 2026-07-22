@@ -228,6 +228,7 @@ COVERAGE=true bundle exec rspec
 | Website | [evolutionfoundation.com.br](https://evolutionfoundation.com.br) |
 | Documentation | [docs.evolutionfoundation.com.br](https://docs.evolutionfoundation.com.br) |
 | Community | [evolutionfoundation.com.br/community](https://evolutionfoundation.com.br/community) |
+| Admin access model (RBAC) | [docs/rbac-admin-access.md](./docs/rbac-admin-access.md) |
 | Changelog | [CHANGELOG.md](./CHANGELOG.md) |
 | Contributing | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | Security | [SECURITY.md](./SECURITY.md) |

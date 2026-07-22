@@ -74,6 +74,18 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def bulk_update_permissions
+    # Reconciled against the whole catalog on every boot (RbacGrantReconciler),
+    # so accepting an edit here would return 200 and be reverted by the next
+    # deploy. Refuse it instead of persisting a lie.
+    if @role.key == RbacGrantReconciler::ROLE_KEY
+      return error_response(
+        'FORBIDDEN',
+        'The installation owner role holds the full permission catalog by invariant ' \
+        'and is reconciled on every boot; its permissions cannot be edited.',
+        status: :forbidden
+      )
+    end
+
     permission_keys = params[:permission_keys]
 
     unless permission_keys.is_a?(Array)

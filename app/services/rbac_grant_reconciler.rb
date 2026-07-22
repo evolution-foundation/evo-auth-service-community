@@ -1,0 +1,99 @@
+# frozen_string_literal: true
+
+# Converges the installation-owner role (`super_admin`) with the permission
+# catalog on every boot. The admin has no RBAC bypass anywhere, so a catalog
+# that grew since bootstrap silently strips capabilities from it — the full
+# model, invariant and rationale are in docs/rbac-admin-access.md.
+#
+# Scoped to `super_admin`: additive plus catalog-pruning, never touching roles
+# an operator customised in the role editor.
+class RbacGrantReconciler
+  ROLE_KEY = 'super_admin'
+
+  # Same seed invariant as super_admin, but reported only, never rewritten: this
+  # role IS editable in the role editor. Existing installations still need a
+  # paired data migration on catalog growth. Mirrors `account_owner_exclusive`
+  # in db/seeds/rbac.rb — keep in sync.
+  DELEGATED_ROLE_KEY = 'account_owner'
+  DELEGATED_EXCLUSIVES = %w[accounts.stats installation_configs.manage].freeze
+
+  class << self
+    def role
+      Role.find_by(key: ROLE_KEY)
+    end
+
+    def catalog_keys
+      ResourceActionsConfig.all_permission_keys.select do |key|
+        ResourceActionsConfig.valid_permission?(key)
+      end
+    end
+
+    def current_keys(target = role)
+      return [] unless target
+
+      target.role_permissions_actions.pluck(:permission_key)
+    end
+
+    # Catalog entries the role should hold but does not — the silent capability
+    # loss this class exists to prevent.
+    def missing_keys(target = role)
+      catalog_keys - current_keys(target)
+    end
+
+    # Grants that no longer exist in the catalog (removed resources/actions).
+    # They are inert at check time but keep dead keys visible in the role editor.
+    def stale_keys(target = role)
+      current_keys(target) - catalog_keys
+    end
+
+    def drifted?(target = role)
+      return false unless target
+
+      missing_keys(target).any? || stale_keys(target).any?
+    end
+
+    def delegated_role
+      Role.find_by(key: DELEGATED_ROLE_KEY)
+    end
+
+    # Report-only counterpart of `missing_keys` for account_owner.
+    def delegated_missing_keys
+      target = delegated_role
+      return [] unless target
+
+      (catalog_keys - DELEGATED_EXCLUSIVES) - current_keys(target)
+    end
+
+    # Idempotent, safe on every boot; a no-op before bootstrap reports zeroes
+    # instead of raising, so it never blocks a container from starting.
+    #
+    # insert_all + ON CONFLICT DO NOTHING, not create!-per-key: two replicas
+    # booting at once compute the same `added` set and race, and a unique-index
+    # violation from the loser would roll the whole batch back — leaving the
+    # install as drifted as it was found. Validations are skipped safely because
+    # every key comes from `catalog_keys`, which is what the model validates
+    # against anyway.
+    def reconcile!
+      target = role
+      return { role: nil, added: 0, removed: 0 } unless target
+
+      added = missing_keys(target)
+      removed = stale_keys(target)
+
+      ActiveRecord::Base.transaction do
+        if added.any?
+          now = Time.current
+          RolePermissionsAction.insert_all(
+            added.map do |key|
+              { role_id: target.id, permission_key: key, created_at: now, updated_at: now }
+            end,
+            unique_by: %i[role_id permission_key]
+          )
+        end
+        target.role_permissions_actions.where(permission_key: removed).delete_all if removed.any?
+      end
+
+      { role: target.key, added: added.size, removed: removed.size }
+    end
+  end
+end
