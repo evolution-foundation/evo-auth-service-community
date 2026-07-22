@@ -57,6 +57,11 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
+  # dashboard.read has no catalog resource ON PURPOSE (product decision, D2 of
+  # the RBAC audit): the dashboard is the landing page of every authenticated
+  # user, so the key lives only here and the frontend gate that reads it
+  # always passes. Do not "clean it up" — removing it hides the home screen
+  # from everyone.
   BASIC_READ_PERMISSIONS = %w[
     accounts.read labels.read dashboard.read teams.read
   ].freeze
@@ -68,9 +73,53 @@ class User < ApplicationRecord
   # granted to everyone via BASIC_READ_PERMISSIONS. The implied users.read is
   # OPERATIONAL only — the administrative gate (Settings > Agents) moved to
   # users.manage, so this does not re-open the admin panel.
-  OPERATIONAL_IMPLICATIONS = {
+  #
+  # These also LOCK the implied key in the role editor: the user holds it
+  # whatever the role says, so a checkbox for it would lie (see
+  # ResourceActionsConfig.permission_lock_info). Only implications with that
+  # property belong here — see GENERATED_WRITE_IMPLICATIONS.
+  LOCKING_IMPLICATIONS = {
     'conversations.read' => %w[users.read inboxes.read]
   }.freeze
+
+  # EVO-2127: holding any granular write of a resource implies its coarse
+  # `<resource>.write`. The role editor now saves the coarse write groups; this
+  # lets a non-super_admin who can already grant the granular writes also grant
+  # the coarse write, so bulk_update_permissions does not 403 (it requires the
+  # caller to hold every newly-granted key). Runtime-only (no save/backfill) and
+  # forward-only: write is a leaf, create never implies delete. Derived from the
+  # catalog so front (permissionDomains) and back cannot drift on which actions
+  # are writes. Referencing ResourceActionsConfig here forces its autoload; there
+  # is no cycle — the config reads User constants only at call time.
+  #
+  # Deliberately NOT in LOCKING_IMPLICATIONS: `<resource>.write` is a REAL,
+  # editable grant — the coarse key is what the Write checkbox decides, and it is
+  # the key that outlives the granular ones when enforcement migrates to it.
+  # Locking it would make the editor able to add it but never remove it: the
+  # front drops locked keys from the group the checkbox controls, so unchecking
+  # "Write" would leave `<resource>.write` behind in the role forever.
+  GENERATED_WRITE_IMPLICATIONS = ResourceActionsConfig.write_actions_by_resource
+    .each_with_object({}) do |(resource, actions), acc|
+      actions.each { |action| acc["#{resource}.#{action}"] = ["#{resource}.write"] }
+    end.freeze
+
+  # Every "can write this agent" key implies ai_agent_processor.execute — a system
+  # key, runtime-only, never persisted. Granular writes are listed explicitly:
+  # implications don't chain (has_permission? expands only a role's explicit keys).
+  AGENT_EXECUTION_IMPLICATIONS = (
+    ResourceActionsConfig.write_actions_by_resource.fetch('ai_agents', []) + ['write']
+  ).each_with_object({}) do |action, acc|
+    acc["ai_agents.#{action}"] = ['ai_agent_processor.execute']
+  end.freeze
+
+  # Runtime implications (has_permission? / all_permissions). Superset of
+  # LOCKING_IMPLICATIONS. Block-form merge concatenates on key collision; a plain
+  # .merge would drop the coarse write from GENERATED_WRITE_IMPLICATIONS and
+  # silently undo EVO-2127.
+  OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS
+                             .merge(GENERATED_WRITE_IMPLICATIONS)
+                             .merge(AGENT_EXECUTION_IMPLICATIONS) { |_key, existing, added| (existing + added).uniq }
+                             .freeze
 
   devise :database_authenticatable,
          :registerable,

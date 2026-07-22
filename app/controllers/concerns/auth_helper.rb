@@ -1,3 +1,5 @@
+require 'public_suffix'
+
 module AuthHelper
   extend ActiveSupport::Concern
 
@@ -5,11 +7,10 @@ module AuthHelper
     include AccountSerializerHelper if defined?(AccountSerializerHelper)
   end
 
-  # Feature flag (OPT-IN): exigir confirmação de e-mail no cadastro/login.
-  # Default OFF p/ não introduzir breaking change em instalações existentes.
-  # Ative com REQUIRE_EMAIL_CONFIRMATION=true (nosso docker liga; dev fica off).
+  # Derived from SMTP presence; REQUIRE_EMAIL_CONFIRMATION only overrides when
+  # explicitly set (see EmailConfirmationPosture).
   def require_email_confirmation?
-    ActiveModel::Type::Boolean.new.cast(ENV.fetch('REQUIRE_EMAIL_CONFIRMATION', false))
+    EmailConfirmationPosture.required?
   end
 
   OAUTH_CONFIG = {
@@ -119,6 +120,9 @@ module AuthHelper
   end
   
   def cookie_domain
+    # Override explicito por ambiente (recomendado em producao). Ex.: COOKIE_DOMAIN=.refletia.com.br
+    return ENV['COOKIE_DOMAIN'].presence if ENV['COOKIE_DOMAIN'].present?
+
     request_host = request.host
     
     # Em desenvolvimento com ngrok, NÃO definir domain para permitir cookies funcionarem
@@ -141,17 +145,13 @@ module AuthHelper
     # Verifica se o host é um IP ou localhost
     return nil if request_host =~ /\A\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ || request_host == 'localhost'
     
-    # Extrai o domínio principal para definir cookies entre subdomínios
-    domain_parts = request_host.split('.')
-    
-    # Para garantir que não definimos cookies para TLDs genéricos
-    if domain_parts.size >= 2
-      # Retorna os dois últimos segmentos do domínio (ex: example.com)
-      ".#{domain_parts[-2]}.#{domain_parts[-1]}"
-    else
-      # Fallback para o host completo se não conseguirmos determinar o domínio principal
-      request_host
-    end
+    # Extrai o dominio REGISTRAVEL para compartilhar o cookie entre subdominios.
+    # public_suffix cobre ccTLDs de 2o nivel (.com.br, .co.uk, .com.au...) e evita
+    # gerar Domain=.com.br (public suffix, rejeitado pelos navegadores). Retorna nil
+    # quando nao ha dominio registravel (public suffix puro, host de 1 rotulo, host
+    # invalido) -> caimos no host-only cookie abaixo.
+    registrable = PublicSuffix.domain(request_host)
+    registrable.present? ? ".#{registrable}" : request_host
   end
 
   def render_unauthorized(message = 'Unauthorized')
@@ -456,7 +456,12 @@ module AuthHelper
         @user = User.new(user_data)
       else
         begin
-          @user = User.new(user_params)
+          # A nested {user:{...}} payload hit a NON-EXISTENT `user_params` in this
+          # concern → NameError → 500 (EVO-2146). Strong params equivalent to the
+          # flat branch above.
+          @user = User.new(
+            params.require(:user).permit(:name, :email, :password, :password_confirmation)
+          )
         rescue ActionController::ParameterMissing => e
           Rails.logger.error "Parameter missing: #{e.message}"
           return error_response('VALIDATION_ERROR', e.message, status: :unprocessable_entity)
@@ -468,16 +473,26 @@ module AuthHelper
         @user.password_confirmation = params[:password_confirmation] || params[:password]
       end
       
+      # This flow owns confirmation-email delivery (manual send below) —
+      # without the skip, Devise's after_create would also send one.
+      @user.skip_confirmation_notification!
+
       if @user.save
-        # Só envia o e-mail de confirmação quando a barreira está LIGADA
-        # (REQUIRE_EMAIL_CONFIRMATION). Sem a flag, o cadastro segue como antes
-        # (sem exigir confirmação) — evita breaking change.
+        # Confirmation email only goes out when the barrier is on (posture
+        # derived from SMTP presence, or explicit override — see
+        # EmailConfirmationPosture).
         if require_email_confirmation? && !@user.confirmed?
           @user.send_confirmation_instructions(
             client_config: params[:config_name],
             redirect_url: params[:confirm_success_url] ||
               "#{ENV.fetch('FRONTEND_URL', 'http://localhost:5173')}/verificar-email"
           )
+        elsif !@user.confirmed?
+          # Devise's before_create stamps confirmation_sent_at even when no
+          # email goes out; clear it so accounts born under an open posture
+          # stay grandfathered (login barrier keys on confirmation_sent_at)
+          # if the posture flips to required later.
+          @user.update_column(:confirmation_sent_at, nil)
         end
         success_response(
           data: { user: UserSerializer.full(@user) },

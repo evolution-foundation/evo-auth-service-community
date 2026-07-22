@@ -728,6 +728,7 @@ DEPENDENCIES
   ostruct
   pg
   prometheus-client
+  public_suffix
   puma
   pundit
   rack-cors (= 2.0.0)

@@ -20,59 +20,13 @@ else
   puts "   ♻️ Role already exists: #{account_owner.name}"
 end
 
-# Get all permissions except Account Owner specific ones
+# Keys withheld from Account Owner (super_admin only). Every entry MUST exist
+# in ResourceActionsConfig — keys absent from the catalog are inert here (the
+# subtraction below can only remove keys the catalog produces) and just
+# mislead readers; ~50 such phantom leftovers from removed enterprise
+# resources (plans/features/audit_logs/...) were pruned.
 account_owner_exclusive = [
-  'accounts.suspend',
-  'accounts.activate',
-  'accounts.seed',
-  'accounts.reset_cache',
   'accounts.stats',
-  'dashboard.view_admin',
-  'dashboard.instance_status',
-  'dashboard.system_info',
-  'audit_logs.read',
-  'audit_logs.export',
-  'audit_logs.purge',
-  'audit_logs.filter',
-  'audit_logs.view_details',
-  'plans.read',
-  'plans.create',
-  'plans.update',
-  'plans.delete',
-  'plans.assign',
-  'plans.manage_features',
-  'plans.activate_deactivate',
-  'features.create',
-  'features.update',
-  'features.delete',
-  'features.stats',
-  'features.seed',
-  'features.types',
-  'roles.stats',
-  'roles.seed',
-  'roles.add_permission',
-  'roles.remove_permission',
-  'account_features.read',
-  'account_features.assign',
-  'account_features.remove',
-  'account_features.configure',
-  'account_plans.read',
-  'account_plans.assign',
-  'account_plans.change',
-  'plan_features.read',
-  'plan_features.assign',
-  'plan_features.remove',
-  'plan_features.configure',
-  'feature_types.read',
-  'feature_types.create',
-  'feature_types.update',
-  'feature_types.delete',
-  'resource_actions.sync',
-  'permissions.create',
-  'permissions.update',
-  'permissions.delete',
-  'permissions.assign',
-  'permissions.bulk_operations',
   # Installation-level configuration (SMTP, Storage, Social Login, OpenAI,
   # Channels, Inbound Email, Frontend Runtime). Reserved for the
   # super_admin role — the bootstrap user gets it and it is the only role
@@ -134,32 +88,29 @@ agent_permissions = [
   'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete',
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
-  'oauth_pipelines.read', 'oauth_pipelines.create', 'oauth_pipelines.update', 'oauth_pipelines.delete',
-  'oauth_pipeline_stages.read', 'oauth_pipeline_stages.create', 'oauth_pipeline_stages.update', 'oauth_pipeline_stages.delete',
   'pipelines.read',
   'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
-  'agents.read', 'agents.create', 'agents.update', 'agents.delete',
-  'oauth_agents.read', 'oauth_agents.create', 'oauth_agents.update', 'oauth_agents.delete',
-  'agent_bots.read', 'agent_bots.create', 'agent_bots.update', 'agent_bots.delete', 'agent_bots.avatar',
-  'agent_apikeys.read', 'agent_apikeys.create', 'agent_apikeys.update', 'agent_apikeys.delete',
-  'agent_folders.read', 'agent_folders.create', 'agent_folders.update', 'agent_folders.delete',
-  'agent_shared_folders.read', 'agent_shared_folders.create', 'agent_shared_folders.update', 'agent_shared_folders.delete',
-  'ai_chat_sessions.read', 'ai_chat_sessions.create', 'ai_chat_sessions.update', 'ai_chat_sessions.delete',
-  'accounts.read', 'accounts.update',
+  # accounts.update is administrative (Settings > Account) and deliberately
+  # NOT granted; PATCH /api/v1/account enforces it.
+  'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
-  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
-  'team_members.read', 'team_members.create', 'team_members.update', 'team_members.delete',
+  # Operational resources used inside conversations (quick-replies, labels, macros,
+  # templates, and team assignment) stay with the agent. EVO-1955 will split their
+  # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
   'labels.read', 'labels.create', 'labels.update', 'labels.delete',
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
   'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
   'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
-  'inboxes.read',
-  'channels.read',
-  'integrations.read',
-  'working_hours.read', 'working_hours.create', 'working_hours.update', 'working_hours.delete',
-  'segments.read',
-  'journeys.read',
-  'campaigns.read'
+  # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
+  # operational and kept here; team_members enforcement consolidated into teams.*
+  # (EVO-2070), and the Teams Settings screen split is EVO-1955.
+  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
+  'inboxes.read'
+  # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
+  # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)
+  # are intentionally NOT granted to the default agent. The frontend routes/menu and
+  # the CRM controllers gate by these keys, so omitting them hides the screens and
+  # 403s the endpoints.
 ]
 
 agent.role_permissions_actions.destroy_all

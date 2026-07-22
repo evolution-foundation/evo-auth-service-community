@@ -98,7 +98,22 @@ class Api::V1::RolesController < Api::V1::BaseController
 
       granted = target_set - current_set
       revoked = current_set - target_set
-      diffs   = granted | revoked
+
+      # A key that another key in the SAME target set already implies at runtime
+      # carries no authority of its own: the role's users hold it either way
+      # (User#has_permission? expands the implication), so writing it to the role
+      # grants nothing new and dropping it takes nothing away. Neither is an
+      # escalation, so neither may trip this gate.
+      #
+      # EVO-2127: every granular write implies `<resource>.write`, and the role
+      # editor now saves the coarse key alongside the granular ones. Without this
+      # exemption, an admin editing ANY pre-existing role would 403 on the first
+      # save for every resource that role writes to but he does not — the coarse
+      # keys are all new, so they all land in `granted`. The exemption retires
+      # itself: once enforcement moves to the coarse key and the granular ones are
+      # dropped, nothing implies `<resource>.write` and the gate bites again.
+      implied_by_target = target_set.flat_map { |key| User::OPERATIONAL_IMPLICATIONS.fetch(key, []) }.to_set
+      diffs = (granted | revoked) - implied_by_target
 
       unauthorized = diffs.reject { |k| caller_perms.include?(k) }
       if unauthorized.any?

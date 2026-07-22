@@ -16,7 +16,8 @@ class SetupController < ActionController::Base
     ctx = Licensing::Runtime.context
 
     unless ctx
-      render json: { status: 'inactive', instance_id: nil }
+      render json: { status: 'inactive', instance_id: nil,
+                     extra_setup_steps: EvoExtensionPoints::ExtraSetupSteps.enabled? }
       return
     end
 
@@ -37,7 +38,11 @@ class SetupController < ActionController::Base
     resp = {
       status:      bootstrapped ? 'active' : 'inactive',
       licensed:    licensed,
-      instance_id: resolve_instance_id(ctx)
+      instance_id: resolve_instance_id(ctx),
+      # Tells the Setup wizard whether a registered consumer contributes extra
+      # steps after the account step. Community default is false → single-step
+      # wizard. Backed by the :extra_setup_steps extension point.
+      extra_setup_steps: EvoExtensionPoints::ExtraSetupSteps.enabled?
     }
 
     if licensed
@@ -162,7 +167,8 @@ class SetupController < ActionController::Base
       last_name:  bp[:last_name],
       email:      bp[:email],
       password:   bp[:password],
-      client_ip:  request.remote_ip
+      client_ip:  request.remote_ip,
+      extension_payload: extension_payload_param
     )
 
     render json: { status: 'ok', message: 'Installation completed successfully', survey_token: result[:survey_token] }, status: :created
@@ -219,6 +225,21 @@ class SetupController < ActionController::Base
 
   def bootstrap_params
     params.permit(:first_name, :last_name, :email, :password, :password_confirmation)
+  end
+
+  # Opaque bag forwarded verbatim to the :after_bootstrap extension point. The
+  # community assigns NO meaning to its contents; a registered consumer (the
+  # enterprise overlay) validates and interprets it. Absent -> {} (no-op hook).
+  #
+  # Only a nested object is meaningful: a scalar or array (or an absent value)
+  # yields {} so this public, unauthenticated endpoint never 500s on a malformed
+  # payload (`"x".to_h`/`[1].to_h` would raise). The community drops it either
+  # way since it assigns the bag no meaning.
+  def extension_payload_param
+    raw = params[:extension_payload]
+    return {} unless raw.respond_to?(:permit!) || raw.is_a?(Hash)
+
+    raw.respond_to?(:permit!) ? raw.permit!.to_h : raw.to_h
   end
 
   def survey_params

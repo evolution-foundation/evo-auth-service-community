@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - N/A
 
+## [v1.0.0-rc7] - 2026-07-04
+
+**CRM Community family release cut.** Ships the 16 commits accumulated on `develop` since the rc6 tag: the `.com.br` refresh-cookie fix (EVO-1964), four RBAC migrations, setup-wizard whitelabel branding capture, and per-PR CI images for the review environment (EVO-1998). Numbering note: this repo's standalone `v1.0.0-rc6` tag (2026-06-12) predates the family cut and is superseded, so the CRM Community rc6 family ships this service as `v1.0.0-rc7` — cut from the head of `develop`.
+
+### Added
+
+- **RBAC — operational read vs. administrative gate split** (`6b5117b`, migration `20260622120000`) — separates operational read permissions from the administrative gate and grants the split permissions to existing roles (plus account-scoped roles), so agents keep day-to-day read access without inheriting admin-panel entry points.
+- **EVO-1771 — B14 CRM Lead Capture resources: `crm_forms` + `chat_pages`** (`eb5c983`, #48, migration `20260622210000`) — new RBAC resources backfilled onto existing roles, supporting the Lead Capture feature (forms and chat pages) in the CRM.
+- **EVO-1557 — `conversations.import` permission** (`b11a0e6`, #49, migration `20260623130000`) — new RBAC permission backfilled onto existing roles for the conversation import feature.
+- **Setup wizard — whitelabel branding capture** (`6d9ad3b`, `6ebc3a8`) — the `/setup` flow now captures the installation brand (title/color) and persists it in the whitelabel config, and `/setup/status` exposes a whitelabel flag so the wizard knows whether to show the branding step.
+- **EVO-1998 — per-PR CI images for the review environment** (`572fa80`, `7216008`) — `docker-publish.yml` builds `:pr-<N>` (+ `:sha-<sha7>`) images on internal pull requests targeting `main`/`develop`, feeding the PR review environment. Gated to internal PRs only (forks have no secrets); branch/tag multi-arch builds are unchanged.
+
+### Changed
+
+- **`COOKIE_DOMAIN` becomes an optional override** (`94448a6`, `b5fba7e`, EVO-1964) — the refresh-cookie domain is now derived automatically via `public_suffix` (see Fixed below); setting `COOKIE_DOMAIN` is only needed to force a specific value. `public_suffix` is declared explicitly in the Gemfile (it already shipped transitively via `mail`) and the dead cookie-domain fallback was removed.
+- **Setup — hardened `enterprise_admin` grant logging** (`8d26410`) — clearer install-time logging around the bootstrap enterprise-admin grant.
+
+### Fixed
+
+- **EVO-1964 — refresh cookie broken on `.com.br`-style domains** (`94448a6`) — `cookie_domain` produced `Domain=.com.br` under second-level ccTLDs, a public suffix rejected by every browser, so the `_evo_rt` cookie was never stored: `/auth/refresh` and `/auth/validate` returned 401 and the chat WebSocket closed with 440. The registrable domain is now extracted via `PublicSuffix.domain` (with a heuristic fallback for second-level ccTLDs), so a host like `*.cap.refletia.com.br` correctly yields `Domain=.refletia.com.br`. Regression spec in `spec/concerns/auth_helper_cookie_domain_spec.rb`.
+- **EVO-1938 — admin Settings resources revoked from the default `agent` role** (`dbdff71`, #51, migration `20260626130000`) — the stock `agent` role no longer carries admin Settings permissions; existing installations are corrected by the idempotent migration.
+- **Setup — brand fields coerced to `String`** (`868f203`) — non-string values in the branding payload no longer cause a 500 during setup.
+- **Cookie attribute name `samesite` → `same_site`** (`a8711c0`) — corrects the cookie attribute key for Rails compatibility so the SameSite policy is actually applied.
+
 ## [v1.0.0-rc6] - 2026-06-12
 
 **Republish + feature batch.** Republishes `:latest` from a fresh build (the rc5-named image at Docker Hub had been desynced — see Operator action below) **and** ships eight commits accumulated on `develop` since rc5 was tagged. Operators upgrading from rc5 should expect both new features and bugfixes; operators upgrading from a poisoned `:latest` get those plus the actual rc5 content they thought they already had.
@@ -51,14 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`bms_provider` URL construction** (`37c9097`, `fe084a5`) — BMS API URL is now read from runtime config and built dynamically per endpoint instead of hardcoded. Mail delivery via the BMS provider works against per-tenant BMS instances.
 - **Image `:latest` actually contains rc5+ content** (EVO-1404 republish) — fresh build of `v1.0.0-rc6` replaces the desynced `:latest`. Verified inside the container: `setup_gate.rb` is the observability-only version (no `UNAVAILABLE_BODY`); `init_schema.rb` contains `column_type_incompatible?` and the `Skipping FK ... type mismatch` log line.
-
-
-
-- N/A
-
-### Fixed
-
-- **EVO-1551 (round 2)** — fecha dois bypasses do mascaramento de PII de contato no `PATCH /api/v1/account`. (1) `enforce_admin_for_mask_pii_change` agora checa **mudança efetiva** (current vs incoming) em vez de mera presença da chave — agent não consegue mais derrubar `mask_contact_pii` mandando um body sem a chave. (2) `update` passa a fazer deep-merge em `settings` e `custom_attributes`; PATCH parcial deixou de apagar chaves irmãs (bug genérico de perda de dados). Specs novos em `spec/requests/api/v1/account_spec.rb` cobrem ambos os caminhos.
 
 ## [v1.0.0-rc5] - 2026-05-27
 
@@ -426,7 +442,9 @@ Thanks to all contributors who made this release possible:
 
 **Note**: This changelog follows the [Keep a Changelog](https://keepachangelog.com/) format. Each release includes detailed information about new features, changes, deprecations, removals, fixes, and security updates.
 
-[Unreleased]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc5...HEAD
+[Unreleased]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc7...HEAD
+[v1.0.0-rc7]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc6...v1.0.0-rc7
+[v1.0.0-rc6]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc5...v1.0.0-rc6
 [v1.0.0-rc5]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc4...v1.0.0-rc5
 [v1.0.0-rc4]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc3...v1.0.0-rc4
 [v1.0.0-rc3]: https://github.com/evolution-foundation/evo-auth-service-community/compare/v1.0.0-rc2...v1.0.0-rc3

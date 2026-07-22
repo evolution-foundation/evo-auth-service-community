@@ -95,6 +95,86 @@ RSpec.describe User, type: :model do
       expect(user.all_permissions).to include('users.manage')
     end
   end
+
+  # EVO-2127: holding a granular write of a resource implies its coarse
+  # <resource>.write, so a delegated admin who can grant the granular writes can
+  # also grant the coarse write the role editor now sends (unblocks the 403 in
+  # roles_controller#bulk_update_permissions). Forward-only: no cascade to delete.
+  describe 'coarse write implication (EVO-2127)' do
+    let(:user) { build_user }
+
+    it 'implies ai_agents.write from ai_agents.create (AC4)' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.write')).to be(true)
+      expect(user.all_permissions).to include('ai_agents.write')
+    end
+
+    it 'does not imply write from a read-only grant (AC5)' do
+      assign(user, role_with('ai_agents.read'))
+      expect(user.has_permission?('ai_agents.write')).to be(false)
+      expect(user.all_permissions).not_to include('ai_agents.write')
+    end
+
+    it 'does not cascade write into delete (AC6)' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.delete')).to be(false)
+    end
+
+    it 'implies write only for the resource that holds the granular write' do
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('contacts.write')).to be(false)
+    end
+  end
+
+  describe 'agent execution implication (EVO-2124)' do
+    let(:user) { build_user }
+
+    it 'implies ai_agent_processor.execute from the coarse ai_agents.write' do
+      assign(user, role_with('ai_agents.write'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+      expect(user.all_permissions).to include('ai_agent_processor.execute')
+    end
+
+    it 'implies execute from a granular write too (implications do not chain)' do
+      # has_permission? expands only the role's EXPLICIT keys, so ai_agents.create
+      # must name execute directly — not via the implied coarse write.
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+      expect(user.all_permissions).to include('ai_agent_processor.execute')
+    end
+
+    it 'still implies the coarse write from the granular one (EVO-2127 intact)' do
+      # The two implication maps collide on ai_agents.create as a source. A plain
+      # Hash#merge would drop the coarse write; this locks the concatenation.
+      assign(user, role_with('ai_agents.create'))
+      expect(user.has_permission?('ai_agents.write')).to be(true)
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(true)
+    end
+
+    it 'does NOT imply execute from a read-only grant' do
+      assign(user, role_with('ai_agents.read'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(false)
+      expect(user.all_permissions).not_to include('ai_agent_processor.execute')
+    end
+
+    it 'does NOT imply the other system actions of the processor' do
+      assign(user, role_with('ai_agents.write'))
+      expect(user.has_permission?('ai_agent_processor.read')).to be(false)
+      expect(user.has_permission?('ai_agent_processor.stream')).to be(false)
+    end
+
+    it 'does not leak execute to a write on an unrelated resource' do
+      assign(user, role_with('contacts.create'))
+      expect(user.has_permission?('ai_agent_processor.execute')).to be(false)
+    end
+
+    it 'never persists the implied system key onto the role' do
+      role = role_with('ai_agents.write')
+      assign(user, role)
+      expect(role.role_permissions_actions.pluck(:permission_key))
+        .not_to include('ai_agent_processor.execute')
+    end
+  end
 end
 
 RSpec.describe ResourceActionsConfig, type: :model do
