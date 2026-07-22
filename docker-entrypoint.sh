@@ -34,6 +34,16 @@ if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
     echo "[evo-auth-entrypoint] ERROR: migrations did not complete after 30 attempts; aborting boot." >&2
     exit 1
   fi
+  # The installation owner (super_admin) has no RBAC bypass anywhere: their
+  # access is entirely grant-backed. A catalog that grew since the install was
+  # bootstrapped would silently 403 them on the new feature and hide the control
+  # in the (data-driven) frontend. Converging the grant set here — after the
+  # schema is up to date — makes the invariant self-healing on every deploy.
+  # Idempotent and a no-op before bootstrap, so it never blocks boot: a failure
+  # is reported but does not abort (a stale grant is degraded, not unsafe).
+  echo "[evo-auth-entrypoint] Reconciling super_admin grants with the permission catalog..."
+  bundle exec rails rbac:reconcile_super_admin ||
+    echo "[evo-auth-entrypoint] WARNING: super_admin grant reconciliation failed; continuing boot." >&2
 else
   echo "[evo-auth-entrypoint] RUN_MIGRATIONS=${RUN_MIGRATIONS} — skipping migrations."
 fi

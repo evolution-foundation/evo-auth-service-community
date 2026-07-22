@@ -81,6 +81,36 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
   end
 
+  # Anti-drift invariant. Nothing bypasses RBAC for the installation owner: the
+  # resource gate and the /permissions endpoint are row-based and the frontend
+  # `can()` is data-driven, so the admin can do exactly what the seed granted.
+  # If a new catalog entry ever fails to reach super_admin, the backend 403s the
+  # admin on the new feature and the frontend hides the control — silently.
+  # This example is the tripwire; RbacGrantReconciler is the runtime repair.
+  describe 'super_admin grant set == full permission catalog' do
+    it 'holds every catalog permission (no capability lost when the catalog grows)' do
+      missing = ResourceActionsConfig.all_permission_keys - super_admin_permissions
+
+      expect(missing).to be_empty,
+                         "super_admin is missing #{missing.size} catalog permission(s): #{missing.join(', ')}"
+    end
+
+    it 'holds no grant outside the catalog (no leftovers from removed resources)' do
+      stale = super_admin_permissions - ResourceActionsConfig.all_permission_keys
+
+      expect(stale).to be_empty,
+                       "super_admin holds #{stale.size} permission(s) absent from the catalog: #{stale.join(', ')}"
+    end
+
+    it 'is the only role holding the installation-level key' do
+      installation_owners = Role.all.select do |role|
+        role.role_permissions_actions.exists?(permission_key: 'installation_configs.manage')
+      end
+
+      expect(installation_owners.map(&:key)).to eq(['super_admin'])
+    end
+  end
+
   describe 'super_admin role boundary' do
     it 'holds installation_configs.manage (the whole reason this role exists)' do
       expect(super_admin_permissions).to include('installation_configs.manage')
