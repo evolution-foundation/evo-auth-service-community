@@ -1,25 +1,12 @@
 # frozen_string_literal: true
 
-# Keeps the installation-owner role (`super_admin`) aligned with the permission
-# catalog.
+# Converges the installation-owner role (`super_admin`) with the permission
+# catalog on every boot. The admin has no RBAC bypass anywhere, so a catalog
+# that grew since bootstrap silently strips capabilities from it — the full
+# model, invariant and rationale are in docs/rbac-admin-access.md.
 #
-# Why this exists: nothing in the stack bypasses RBAC for the admin. The
-# resource gate (`PermissionCheckable#authorize_resource!` -> `User#has_permission?`)
-# and the `/permissions` endpoint the frontend consumes are both row-based, and
-# the frontend `can()` is purely data-driven. The admin therefore has full
-# access ONLY because the seed grants them the whole catalog. Every time the
-# catalog grows (a new resource/action), an already-bootstrapped installation
-# keeps the old grant set: the backend 403s the admin on the new feature and the
-# frontend hides the control — a silent capability loss with no configuration
-# error anywhere.
-#
-# Fresh installs are covered by db/seeds/rbac.rb; existing installations are
-# covered by running #reconcile! on every boot (see docker-entrypoint.sh) and by
-# the CI guard that fails when the seeded grant set diverges from the catalog.
-#
-# The reconciliation is deliberately scoped to `super_admin` and is additive
-# plus catalog-pruning: it never touches roles an operator may have customised
-# through the role editor.
+# Scoped to `super_admin`: additive plus catalog-pruning, never touching roles
+# an operator customised in the role editor.
 class RbacGrantReconciler
   ROLE_KEY = 'super_admin'
 
