@@ -74,16 +74,22 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def bulk_update_permissions
-    # Reconciled against the whole catalog on every boot (RbacGrantReconciler),
-    # so accepting an edit here would return 200 and be reverted by the next
-    # deploy. Refuse it instead of persisting a lie.
-    if @role.key == RbacGrantReconciler::ROLE_KEY
-      return error_response(
-        'FORBIDDEN',
-        'The installation owner role holds the full permission catalog by invariant ' \
-        'and is reconciled on every boot; its permissions cannot be edited.',
-        status: :forbidden
-      )
+    # EVO-2152 (PM ruling): a system role's permission set is immutable (FR18). The
+    # db:seed rewrites the base roles' permissions on every boot/deploy (destroy_all +
+    # recreate), so accepting an edit here would answer 200 and be silently reverted by
+    # the next restart. The licensing gem already 403s the same op; this closes the
+    # auth-side hole for EVERY system role, not just the installation owner. Viewing
+    # stays open — show/index are unchanged; immutable, not invisible.
+    if @role.system?
+      message =
+        if @role.key == RbacGrantReconciler::ROLE_KEY
+          'The installation owner role holds the full permission catalog by invariant ' \
+          'and is reconciled on every boot; its permissions cannot be edited.'
+        else
+          'Cannot modify the permission set of a system role. Duplicate it as a custom ' \
+          'role to change permissions.'
+        end
+      return error_response('FORBIDDEN', message, status: :forbidden)
     end
 
     permission_keys = params[:permission_keys]

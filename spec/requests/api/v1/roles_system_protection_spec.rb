@@ -8,10 +8,10 @@ require 'rails_helper'
 # Role#prevent_system_role_*); this spec locks grant AND deny of each gate so a
 # remapped or stuck gate cannot pass silently.
 #
-# Known asymmetry (deliberate, pending PM ruling): bulk_update_permissions has
-# NO system guard here — a super_admin CAN retune a system role's permission
-# set (the licensing gem blocks the same operation on its side). FR18 names
-# key/name/delete only, so this spec does not cement either behavior.
+# EVO-2152 (PM ruling — Option A): a system role's permission SET is immutable too
+# (folded into FR18). bulk_update_permissions now 403s for EVERY system role — not
+# just the installation owner — mirroring the licensing gem. Custom roles stay fully
+# editable. Viewing is never blocked (immutable, not invisible): show/index unchanged.
 RSpec.describe 'Roles system protection', type: :request do
   let(:password) { 'Test123!@' }
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
@@ -98,6 +98,32 @@ RSpec.describe 'Roles system protection', type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(Role.exists?(custom.id)).to be(false)
+    end
+  end
+
+  # EVO-2152: the permission set of a system role is immutable; a custom role's is not.
+  describe 'PUT /api/v1/roles/:id/bulk_update_permissions' do
+    it 'denies retuning a system role even for a super_admin (deny)' do
+      before_keys = system_role.reload.permission_keys
+
+      put "/api/v1/roles/#{system_role.id}/bulk_update_permissions",
+          params: { permission_keys: %w[ai_agents.read ai_agents.write] },
+          headers: headers_for(admin_user)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.body).to include('permission set of a system role')
+      expect(system_role.reload.permission_keys).to match_array(before_keys) # unchanged
+    end
+
+    it 'still lets a super_admin retune a CUSTOM role (grant — the guard is narrow)' do
+      custom = Role.create!(key: "custom-#{SecureRandom.hex(4)}", name: 'Custom', type: 'account')
+
+      put "/api/v1/roles/#{custom.id}/bulk_update_permissions",
+          params: { permission_keys: %w[ai_agents.read] },
+          headers: headers_for(admin_user)
+
+      expect(response).to have_http_status(:ok)
+      expect(custom.reload.permission_keys).to eq(%w[ai_agents.read])
     end
   end
 end
