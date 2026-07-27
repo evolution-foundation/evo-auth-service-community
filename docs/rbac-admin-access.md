@@ -28,11 +28,11 @@ Because there is no bypass, every capability of the admin depends on this holdin
 
 | Layer | Where | What it does |
 |---|---|---|
-| Fresh install | `db/seeds/rbac.rb` | Grants the whole catalog to `super_admin`. |
+| Seed | `db/seeds/rbac.rb` | Grants the whole catalog to `super_admin`, and the catalog minus `account_owner_exclusive` to `account_owner`. **Not fresh-install-only:** the grant blocks sit outside the `new_record?` branch, so every `rails db:seed` rewrites both sets (`destroy_all` + recreate) against the running image's catalog. Whether that happens on a given install is the deployment's call — this image does not seed on boot (`docker-entrypoint.sh` runs `db:migrate` + reconcile). The Evolution deployments do: `k8s/base/migrate-job.yaml` and `docker-compose.ecosystem.yml` both run `db:prepare && db:seed` on every deploy/boot. |
 | CI tripwire | `.github/workflows/test.yml` running `spec/db/seeds/rbac_spec.rb` — "super_admin grant set == full permission catalog (seed policy)" | Fails the build when the seed stops granting `super_admin` the catalog whole (an exclusion list of its own), when `account_owner`'s exclusions change, and when any role other than `super_admin` holds `installation_configs.manage`. Drives the seed through a stubbed catalog so the assertion has an oracle independent of `all_permission_keys` — comparing the seeded set back against that same method is a tautology that stays green while the catalog grows. |
 | Runtime repair | `RbacGrantReconciler` + `rails rbac:reconcile_super_admin` | Idempotent convergence: grants the missing catalog keys, drops grants the catalog no longer defines. Conflicts are skipped (`insert_all` + `ON CONFLICT DO NOTHING`) so two replicas booting at once cannot roll the whole batch back. Touches `super_admin` only. |
 | Deploy | `docker-entrypoint.sh` | Runs the reconcile task on every boot, right after `db:migrate`. No-op before bootstrap; a failure is logged as a prominent ERROR block naming the repair command, but does not abort the boot (a stale grant is degraded, not unsafe). Gated by `RUN_MIGRATIONS` — setting it to `false` disables the self-heal along with the migrations. |
-| Editing | `Api::V1::RolesController#bulk_update_permissions` | Rejects permission edits on `super_admin` with 403. Its grant set is an invariant, not a preference: accepting the edit would persist it, return 200, and let the next boot revert it silently. |
+| Editing | `Api::V1::RolesController#bulk_update_permissions` | Rejects permission edits on `super_admin` with 403. Its grant set is an invariant, not a preference: accepting the edit would persist it, return 200, and let the next boot revert it silently. Since EVO-2152 the same 403 covers **every `system: true` role** (`account_owner`, `agent`, …), for the same reason one level down: `db/seeds/rbac.rb` rewrites their permission sets (`destroy_all` + recreate) wherever the deploy runs `db:seed`. `super_admin` is additionally matched by key, so the EVO-2062 invariant does not depend on the flag. Viewing is untouched — `show`/`index` still return the full permission set. |
 
 ## Runbook
 
@@ -48,9 +48,11 @@ bundle exec rails rbac:reconcile_super_admin
 
 After adding a permission to `ResourceActionsConfig`:
 
-1. **Fresh installs** need nothing: `super_admin` and `account_owner` both pick the new key up from `all_permission_keys` the next time `db/seeds/rbac.rb` runs. Edit the seed only if a *non-admin* role (e.g. `agent`) should receive it too.
-2. **Existing installations** are covered by the boot reconciliation **for `super_admin` only**.
-3. **`account_owner` on existing installations needs a paired data migration — always.** It is the delegated-admin role most operators actually use, it holds the whole catalog minus two keys by seed policy, and it is *not* auto-reconciled (it is editable in the role editor, so rewriting it on every boot would revert operator customisations). Skip this step and every delegated admin silently loses the new feature: the API 403s them and the UI hides the control. Follow `GrantIntegrationsExecuteToAdminRoles` for the pattern.
+1. **Any install that re-runs `db:seed`** needs nothing for the two admin roles: `super_admin` and `account_owner` both pick the new key up from `all_permission_keys` the next time `db/seeds/rbac.rb` runs, because the seed rewrites their grant sets rather than only creating them. Edit the seed only if a *non-admin* role (e.g. `agent`) should receive it too.
+2. **`super_admin` is covered either way** — the boot reconciliation converges it on every image boot, seed or no seed.
+3. **`account_owner` needs a paired data migration on any install that does NOT re-seed.** It is the delegated-admin role most operators actually use, and it is the one role with no automatic safety net of its own: `RbacGrantReconciler` touches `super_admin` only and merely *reports* `account_owner`'s drift. Nor can an operator patch it by hand — since EVO-2152 the role editor answers 403 for every `system: true` role, and `account_owner` is one. Skip the migration on a non-seeding install and every delegated admin silently loses the new feature: the API 403s them and the UI hides the control. Follow `GrantIntegrationsExecuteToAdminRoles` for the pattern.
+
+   On the Evolution deployments the migrate job seeds on every deploy, so the migration is belt-and-suspenders there — write it anyway. It is what makes the key land on self-hosted boxes that migrate without seeding, and it costs nothing where the seed already did the work (the grant is idempotent).
 
 `rails rbac:check_super_admin_drift` reports `account_owner`'s missing catalog keys as an informational line (it never changes the exit status) so a forgotten step 3 is visible rather than silent.
 
