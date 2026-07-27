@@ -80,7 +80,12 @@ class Api::V1::RolesController < Api::V1::BaseController
     # the next restart. The licensing gem already 403s the same op; this closes the
     # auth-side hole for EVERY system role, not just the installation owner. Viewing
     # stays open — show/index are unchanged; immutable, not invisible.
-    if @role.system?
+    #
+    # The installation owner is matched by KEY as well, never by the flag alone:
+    # EVO-2062 guarded it unconditionally, and rows exist whose `system` is false
+    # (db/seeds/rbac.rb only sets it inside `new_record?`). Widening the gate to
+    # `system?` must not narrow that one — hence the `||`, not a replacement.
+    if @role.system? || @role.key == RbacGrantReconciler::ROLE_KEY
       message =
         if @role.key == RbacGrantReconciler::ROLE_KEY
           'The installation owner role holds the full permission catalog by invariant ' \
