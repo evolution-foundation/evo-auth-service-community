@@ -36,6 +36,15 @@ RSpec.describe 'Roles system protection', type: :request do
 
   let(:admin_user) { build_user('Admin User', role: admin_role) }
 
+  # Every `let` below resolves a SEEDED role by key, so the spec needs the RBAC
+  # seed loaded. It never had it: on a clean database all 7 examples died on
+  # `Couldn't find Role [key = 'super_admin']`, which is why the file sits in the
+  # `--exclude-pattern` of test.yml and why nothing it claims to lock was ever
+  # actually locked. Loading the seed per example (the convention the db/migrate
+  # specs already use — transactional fixtures roll it back) makes the file
+  # self-sufficient, so it can come off that list.
+  before { load Rails.root.join('db/seeds/rbac.rb') }
+
   before do
     allow(Licensing::Runtime).to receive(:context).and_return(
       instance_double(Licensing::RuntimeContext, active?: true, track_message: nil)
