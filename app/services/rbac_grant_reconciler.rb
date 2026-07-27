@@ -10,12 +10,9 @@
 class RbacGrantReconciler
   ROLE_KEY = 'super_admin'
 
-  # Same seed invariant as super_admin, but reported only, never rewritten by
-  # this class. Not because the role is editable — EVO-2152 made the editor 403
-  # every `system: true` role, and account_owner is one — but because report-only
-  # is the scope chosen here. So the role editor is NOT a way back from catalog
-  # drift: existing installations still need a paired data migration on catalog
-  # growth. Mirrors `account_owner_exclusive` in db/seeds/rbac.rb — keep in sync.
+  # Same seed invariant as super_admin, but reported only, never rewritten here. The
+  # role editor 403s it too (it is `system: true`), so catalog growth still needs a
+  # paired data migration. Mirrors `account_owner_exclusive` in db/seeds/rbac.rb.
   DELEGATED_ROLE_KEY = 'account_owner'
   DELEGATED_EXCLUSIVES = %w[accounts.stats installation_configs.manage].freeze
 

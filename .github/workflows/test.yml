@@ -63,12 +63,6 @@ jobs:
       # a repo ends up with no CI in the first place. They are excluded by name,
       # not silently: fixing one is a matter of deleting its entry here.
       #   TODO(EVO-2062 follow-up): unbreak these and shrink the list to zero.
-      #
-      # EVO-2152: `roles_system_protection` came off the list. It was red for one
-      # reason — it reads seeded roles by key and nothing seeded them — so it now
-      # loads db/seeds/rbac.rb per example. Keeping it excluded meant the FR18
-      # gates it exists to lock (system role: key/name immutable, undeletable,
-      # permission set immutable) were asserted nowhere the build could see.
       # `--order defined` keeps the run deterministic; the .rspec default of
       # random order surfaces cross-example leakage this suite still has.
       - name: RSpec

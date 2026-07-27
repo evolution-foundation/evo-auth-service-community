@@ -74,17 +74,9 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def bulk_update_permissions
-    # EVO-2152 (PM ruling): a system role's permission set is immutable (FR18). The
-    # db:seed rewrites the base roles' permissions on every boot/deploy (destroy_all +
-    # recreate), so accepting an edit here would answer 200 and be silently reverted by
-    # the next restart. The licensing gem already 403s the same op; this closes the
-    # auth-side hole for EVERY system role, not just the installation owner. Viewing
-    # stays open — show/index are unchanged; immutable, not invisible.
-    #
-    # The installation owner is matched by KEY as well, never by the flag alone:
-    # EVO-2062 guarded it unconditionally, and rows exist whose `system` is false
-    # (db/seeds/rbac.rb only sets it inside `new_record?`). Widening the gate to
-    # `system?` must not narrow that one — hence the `||`, not a replacement.
+    # A system role's permission set belongs to db/seeds/rbac.rb, which rewrites it on
+    # every run: an accepted edit would answer 200 and be reverted. The installation
+    # owner is matched by key as well, since its rows are not always `system: true`.
     if @role.system? || @role.key == RbacGrantReconciler::ROLE_KEY
       message =
         if @role.key == RbacGrantReconciler::ROLE_KEY

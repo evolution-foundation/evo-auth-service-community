@@ -8,10 +8,9 @@ require 'rails_helper'
 # Role#prevent_system_role_*); this spec locks grant AND deny of each gate so a
 # remapped or stuck gate cannot pass silently.
 #
-# EVO-2152 (PM ruling — Option A): a system role's permission SET is immutable too
-# (folded into FR18). bulk_update_permissions now 403s for EVERY system role — not
-# just the installation owner — mirroring the licensing gem. Custom roles stay fully
-# editable. Viewing is never blocked (immutable, not invisible): show/index unchanged.
+# Its permission SET is immutable too: bulk_update_permissions 403s every system
+# role, mirroring the licensing gem. Custom roles stay editable; viewing is never
+# blocked (show/index are not gated).
 RSpec.describe 'Roles system protection', type: :request do
   let(:password) { 'Test123!@' }
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
@@ -36,13 +35,8 @@ RSpec.describe 'Roles system protection', type: :request do
 
   let(:admin_user) { build_user('Admin User', role: admin_role) }
 
-  # Every `let` below resolves a SEEDED role by key, so the spec needs the RBAC
-  # seed loaded. It never had it: on a clean database all 7 examples died on
-  # `Couldn't find Role [key = 'super_admin']`, which is why the file sits in the
-  # `--exclude-pattern` of test.yml and why nothing it claims to lock was ever
-  # actually locked. Loading the seed per example (the convention the db/migrate
-  # specs already use — transactional fixtures roll it back) makes the file
-  # self-sufficient, so it can come off that list.
+  # The `let`s below resolve seeded roles by key. Transactional fixtures roll the
+  # seed back, as in the db/migrate specs.
   before { load Rails.root.join('db/seeds/rbac.rb') }
 
   before do
@@ -110,7 +104,7 @@ RSpec.describe 'Roles system protection', type: :request do
     end
   end
 
-  # EVO-2152: the permission set of a system role is immutable; a custom role's is not.
+  # A system role's permission set is immutable; a custom role's is not.
   describe 'PUT /api/v1/roles/:id/bulk_update_permissions' do
     it 'denies retuning a system role even for a super_admin (deny)' do
       before_keys = system_role.reload.permission_keys
