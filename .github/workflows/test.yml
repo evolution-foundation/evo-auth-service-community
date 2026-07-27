@@ -56,7 +56,7 @@ jobs:
       - name: Prepare database
         run: bundle exec rails db:create db:schema:load
 
-      # Six request specs are red on develop already (22 failures at the time of
+      # Request specs that are red on develop already (22 failures at the time of
       # writing, and `--order random` from .rspec makes the count wobble between
       # 18 and 22 — account_users_role_rbac is order-dependent). Gating on the
       # whole suite would mean merging this workflow already broken, which is how
@@ -68,4 +68,4 @@ jobs:
       - name: RSpec
         run: |
           bundle exec rspec --order defined --format progress \
-            --exclude-pattern "**/{users_manage_gate,roles_system_protection,account_users_role_rbac,account,setup_bootstrap,resource_actions_default_deny}_spec.rb"
+            --exclude-pattern "**/{users_manage_gate,account_users_role_rbac,account,setup_bootstrap,resource_actions_default_deny}_spec.rb"
