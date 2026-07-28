@@ -2,13 +2,9 @@
 
 require 'rails_helper'
 
-# Confirming the email must invalidate the token-validation cache.
-#
-# The cache holds the SERIALIZED user for 5 minutes, and that payload carries
-# `confirmed`/`confirmed_at`. Consumers downstream mirror the user from it, so
-# without invalidation someone who just confirmed keeps being seen as
-# unverified for up to 5 minutes — stale data served as truth, immediately
-# after the one action that changes it.
+# Confirming the email must invalidate the token-validation cache: it holds the
+# serialized user (with `confirmed`) for 5 minutes, so without invalidation
+# someone who just confirmed keeps being seen as unverified for up to 5 minutes.
 RSpec.describe 'confirmation invalidates the token-validation cache', type: :request do
   let(:password) { 'Test123!@' }
 
@@ -24,16 +20,14 @@ RSpec.describe 'confirmation invalidates the token-validation cache', type: :req
     user
   end
 
-  # `generate_confirmation_token!` devolve o resultado do save, não o token — o
-  # valor cru fica na coluna.
+  # `generate_confirmation_token!` returns the save result, not the token.
   def confirmation_token_for(user)
     user.send(:generate_confirmation_token!)
     user.reload.confirmation_token
   end
 
-  # `oauth_access_tokens.application_id` é NOT NULL neste schema, e o banco de
-  # teste não vem com nenhuma application semeada. O model é `OauthApplication`
-  # (application_class do Doorkeeper), não `Doorkeeper::Application`.
+  # `application_id` is NOT NULL here and the test DB seeds no application. The
+  # model is `OauthApplication`, not `Doorkeeper::Application`.
   def bearer_token_for(user)
     app = OauthApplication.first || OauthApplication.create!(
       name: 'Spec App', redirect_uri: 'urn:ietf:wg:oauth:2.0:oob', scopes: 'public'
@@ -66,8 +60,7 @@ RSpec.describe 'confirmation invalidates the token-validation cache', type: :req
     user = create_unconfirmed_user
     token = confirmation_token_for(user)
 
-    # Prime the cache the way a real consumer would: validate once BEFORE the
-    # confirmation, so the cached payload says `confirmed: false`.
+    # Prime the cache: validate once BEFORE confirming.
     access_token = bearer_token_for(user)
     post '/api/v1/auth/validate', headers: { 'Authorization' => "Bearer #{access_token.token}" }
     expect(response).to have_http_status(:ok)
