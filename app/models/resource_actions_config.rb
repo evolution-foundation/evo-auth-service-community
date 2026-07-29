@@ -155,6 +155,20 @@ class ResourceActionsConfig
       }
     },
 
+    # Integration credential vault (EVO-2250, epic 2): secrets for external
+    # tools and integrations (Dify, n8n, ElevenLabs, custom tool headers, MCP
+    # env vars). Distinct from ai_api_keys, which governs LLM provider keys.
+    ai_integration_credentials: {
+      name: 'Integration Credentials',
+      description: 'Credential vault for external tools and integrations',
+      actions: {
+        read: { name: 'View', description: 'View integration credentials (without revealing secrets)' },
+        create: { name: 'Create', description: 'Create new integration credentials' },
+        update: { name: 'Update', description: 'Update integration credential configurations' },
+        delete: { name: 'Delete', description: 'Delete integration credentials' }
+      }
+    },
+
     # Kept: the core-service (Go) enforces ai_folders in 14 mounted routes
     # (pkg/folder + pkg/folder_share, registered in cmd/api/main.go) and the
     # frontend consumes them via agentService (/folders CRUD + sharing). The
