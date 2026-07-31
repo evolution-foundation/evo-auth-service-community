@@ -31,13 +31,15 @@ RSpec.describe 'GET /api/v1/users — advanced filtering (EVO-1947)', type: :req
   let(:token) { AccessToken.create!(owner: admin_user, name: 'admin-token', scopes: 'default') }
   let(:headers) { { 'api_access_token' => token.token, 'Host' => 'localhost' } }
 
-  before do
-    User.create!(name: 'Alice Silva', email: "alice-#{SecureRandom.hex(3)}@example.com",
+  def make_user(name)
+    User.create!(name: name, email: "#{name.parameterize}-#{SecureRandom.hex(3)}@example.com",
                  password: password, password_confirmation: password, confirmed_at: Time.current)
-    User.create!(name: 'Bob Souza', email: "bob-#{SecureRandom.hex(3)}@example.com",
-                 password: password, password_confirmation: password, confirmed_at: Time.current)
-    admin_user
   end
+
+  let!(:alice) { make_user('Alice Silva') }
+  let!(:bob) { make_user('Bob Souza') }
+
+  before { admin_user }
 
   def response_names
     JSON.parse(response.body)['data'].map { |user| user['name'] }
@@ -66,5 +68,57 @@ RSpec.describe 'GET /api/v1/users — advanced filtering (EVO-1947)', type: :req
 
     expect(response).to have_http_status(:ok)
     expect(response_names).to include('Alice Silva', 'Bob Souza')
+  end
+
+  # EVO-1947 (rescope): the Users screen renders clickable sort headers, and
+  # `users#index` used to hardcode order_by_full_name and drop sort/order. The
+  # service spec covers the SQL; these cover the controller actually forwarding
+  # the params. The users table is not empty here, so each example asserts on
+  # the relative order of its own three fixtures, not on the whole page.
+  describe 'sort and order' do
+    let(:own_names) { ['Alice Silva', 'Bob Souza', 'Zadmin User'] }
+
+    def own_order
+      response_names.select { |name| own_names.include?(name) }
+    end
+
+    def list(params = {})
+      get '/api/v1/users', params: { 'per_page' => 100 }.merge(params), headers: headers
+    end
+
+    it 'defaults to name ascending when no sort is given' do
+      list
+
+      expect(response).to have_http_status(:ok)
+      expect(own_order).to eq(['Alice Silva', 'Bob Souza', 'Zadmin User'])
+    end
+
+    it 'honors sort=name with order=desc' do
+      list('sort' => 'name', 'order' => 'desc')
+
+      expect(response).to have_http_status(:ok)
+      expect(own_order).to eq(['Zadmin User', 'Bob Souza', 'Alice Silva'])
+    end
+
+    it 'honors sort=role, ordering by the role name and not by the user name' do
+      UserRole.assign_role_to_user(alice, Role.create!(key: "zeta-#{SecureRandom.hex(4)}", name: 'Zeta',
+                                                       type: 'account', system: false))
+      UserRole.assign_role_to_user(bob, Role.create!(key: "alpha-#{SecureRandom.hex(4)}", name: 'Alpha',
+                                                     type: 'account', system: false))
+
+      list('sort' => 'role', 'order' => 'asc')
+
+      # Alpha (Bob) < Reader (the admin's role) < Zeta (Alice) — the reverse of
+      # the name ordering, so a dropped sort param cannot pass this.
+      expect(response).to have_http_status(:ok)
+      expect(own_order).to eq(['Bob Souza', 'Zadmin User', 'Alice Silva'])
+    end
+
+    it 'falls back to name ascending for a sort key outside the whitelist' do
+      list('sort' => 'encrypted_password')
+
+      expect(response).to have_http_status(:ok)
+      expect(own_order).to eq(['Alice Silva', 'Bob Souza', 'Zadmin User'])
+    end
   end
 end
