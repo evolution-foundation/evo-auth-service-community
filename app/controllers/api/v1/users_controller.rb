@@ -5,7 +5,7 @@ class Api::V1::UsersController < Api::BaseController
   before_action :check_authorization
 
   def index
-    @users = users
+    @users = Users::FilterService.new(params[:filters], params[:q], params[:sort], params[:order]).resolve
 
     apply_pagination
 
@@ -237,10 +237,6 @@ class Api::V1::UsersController < Api::BaseController
 
   def new_user_params
     params.permit(:email, :name, :role, :availability, :password)
-  end
-
-  def users
-    @users ||= User.order_by_full_name.includes(:user_roles)
   end
 
   def permission_cache_key(user_id, permission_key)
