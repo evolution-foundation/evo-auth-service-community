@@ -2,11 +2,8 @@
 
 require 'rails_helper'
 
-# EVO-1947 (Fase A): GET /api/v1/users must honor the advanced-filter payload
-# the Users list screen sends in bracket format
-# (filters[0][attribute_key]=...&filters[0][filter_operator]=...). Before this
-# card the controller ignored it (@users = users). This request spec exercises
-# the real param shape end to end (parsing + auth gate + pagination).
+# Exercises the bracket param shape the Users list screen actually sends
+# (filters[0][attribute_key]=...) end to end: parsing, auth gate and pagination.
 RSpec.describe 'GET /api/v1/users — advanced filtering (EVO-1947)', type: :request do
   let(:password) { 'Test123!@' }
 
@@ -70,11 +67,9 @@ RSpec.describe 'GET /api/v1/users — advanced filtering (EVO-1947)', type: :req
     expect(response_names).to include('Alice Silva', 'Bob Souza')
   end
 
-  # EVO-1947 (rescope): the Users screen renders clickable sort headers, and
-  # `users#index` used to hardcode order_by_full_name and drop sort/order. The
-  # service spec covers the SQL; these cover the controller actually forwarding
-  # the params. The users table is not empty here, so each example asserts on
-  # the relative order of its own three fixtures, not on the whole page.
+  # The service spec covers the SQL; these cover the controller forwarding the
+  # params. The table is not empty, so each example asserts on the relative
+  # order of its own three fixtures.
   describe 'sort and order' do
     let(:own_names) { ['Alice Silva', 'Bob Souza', 'Zadmin User'] }
 

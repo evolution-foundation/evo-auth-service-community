@@ -1,24 +1,17 @@
 # frozen_string_literal: true
 
-# Applies the search term + advanced-filter payload sent by the Users list
-# screen (`GET /users?q=...&filters[i][attribute_key|filter_operator|values|query_operator]`)
-# to a User relation. Attribute keys are whitelisted (mapped to known columns or
-# the roles association) and every value goes through bind parameters, so user
-# input never reaches the SQL string — only the operator/column shape does.
-#
-# Mirrors the Contacts::FilterService contract from evo-ai-crm-community, scoped
-# down to the six attributes the Users screen exposes; `q` is a free-text search
-# across name/email and is AND-combined with the filters.
+# Applies the `q` + `filters[i][...]` payload the Users list screen sends to a
+# User relation. Attribute and sort keys are whitelisted and every value goes
+# through a bind parameter, so user input never reaches the SQL string — only
+# the operator/column shape does. Mirrors Contacts::FilterService.
 module Users
   class FilterService
     TEXT_ATTRIBUTES = %w[name email].freeze
     VALUE_OPERATORS = %w[equal_to not_equal_to contains does_not_contain].freeze
 
-    # Whitelisted sort key -> SQL expression. `role` uses a correlated subquery for
-    # the user's first role name, so a user with several roles is never duplicated
-    # in the paginated list. Unknown keys fall back to name, and name ASC is the
-    # default — this reproduces the previous order_by_full_name behaviour for every
-    # caller that passes no sort (dashboards, pickers, macros, account/agent lists).
+    # `role` is a correlated subquery, not a join, so a user with several roles is
+    # not duplicated in the paginated list. Unknown keys fall back to name ASC,
+    # which is what every caller that passes no sort used to get.
     SORT_COLUMNS = {
       'name' => 'LOWER(users.name)',
       'email' => 'LOWER(users.email)',
@@ -53,9 +46,9 @@ module Users
       conditions = []
       binds = []
 
-      # Mixed AND/OR leans on SQL's native precedence (AND binds before OR), same as
-      # Contacts::FilterService. Each fragment is parenthesised so a multi-value
-      # fragment's own internal OR can't leak past its connector.
+      # Mixed AND/OR leans on SQL's native precedence (AND binds before OR), same
+      # as Contacts::FilterService. Each fragment is parenthesised so its own
+      # internal OR can't leak past its connector.
       @filters.each_with_index do |filter, index|
         fragment, fragment_binds = build_fragment(filter)
         next if fragment.nil?
@@ -70,8 +63,7 @@ module Users
       relation.where(conditions.join(' '), *binds)
     end
 
-    # `users.id` is a deterministic tiebreaker so pagination stays stable when the
-    # primary sort column has ties (e.g. two users with the same name).
+    # `users.id` breaks ties so pagination stays stable across pages.
     def apply_sort(relation)
       column = SORT_COLUMNS[@sort.to_s] || SORT_COLUMNS['name']
       direction = @order.to_s.casecmp?('desc') ? 'DESC' : 'ASC'
@@ -82,9 +74,8 @@ module Users
       relation.where('users.name ILIKE :term OR users.email ILIKE :term', term: "%#{like_escape(@search)}%")
     end
 
-    # `%` and `_` are wildcards in ILIKE. A user searching for "50%" or "a_b"
-    # means the literal characters, not "anything" — escape them so the search
-    # box cannot silently degrade into a full-table match.
+    # `%` and `_` are ILIKE wildcards; unescaped, a search for "50%" degrades
+    # into a full-table match.
     def like_escape(value)
       ActiveRecord::Base.sanitize_sql_like(value.to_s)
     end
@@ -145,10 +136,9 @@ module Users
       ints = values.filter_map { |value| User.availabilities[value] }
       return nil if ints.empty?
 
-      # `availability` is nullable (integer, default 0, no NOT NULL). A bare
-      # `NOT IN` evaluates to NULL for those rows, so they would fall out of
-      # BOTH "= online" and "<> online" — the negation must claim them, the way
-      # the text fragments already do with `IS NULL OR ...`.
+      # `availability` is nullable, and a bare `NOT IN` is NULL for those rows —
+      # they would fall out of both sides of the filter, so the negation claims
+      # them the way the text fragments do.
       if operator == 'not_equal_to'
         ['users.availability IS NULL OR users.availability NOT IN (?)', [ints]]
       else
@@ -172,11 +162,9 @@ module Users
       end
     end
 
-    # Matches a whole day as a half-open range instead of `DATE(created_at) = ?`.
-    # Two reasons: an unparseable value ("abc") reached Postgres as a date cast
-    # and blew the request up with a 500, and wrapping the column in DATE()
-    # makes any index on created_at unusable. The range is built in the app's
-    # Time.zone, so configuring a zone shifts the day boundaries with it.
+    # A half-open range instead of `DATE(created_at) = ?`: it keeps an index on
+    # created_at usable, and an unparseable value is dropped here rather than
+    # reaching Postgres as a cast. Boundaries follow the app's Time.zone.
     def created_at_day_fragment(operator, value)
       day = parse_day(value)
       return nil if day.nil?

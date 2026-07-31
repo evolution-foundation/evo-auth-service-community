@@ -3,10 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe Users::FilterService do
-  # Every assertion is scoped to the users the example itself created. The
-  # service resolves over the whole table, so asserting on the whole result
-  # made these specs depend on the table being empty — any user left behind by
-  # another spec (the bootstrap owner, for one) broke them in a full-suite run.
+  # The service resolves over the whole table, so every assertion is scoped to
+  # the users the example itself created — otherwise a leftover row breaks them.
   let(:created_ids) { [] }
 
   def make_user(name:, availability: :online, confirmed: true, created_at: Time.current)
@@ -178,8 +176,6 @@ RSpec.describe Users::FilterService do
       expect(mine(described_class.new([filter('name', 'contains', '')]).resolve)).to contain_exactly(user)
     end
 
-    # An unparseable date used to reach Postgres as `DATE(created_at) = 'abc'`,
-    # which raises PG::InvalidDatetimeFormat and turns the list into a 500.
     it 'ignores an unparseable created_at instead of blowing up the query' do
       user = make_user(name: 'X')
 
@@ -217,8 +213,6 @@ RSpec.describe Users::FilterService do
   end
 
   describe 'availability negation with NULL rows' do
-    # `availability` is nullable, so `NOT IN` alone would drop these users from
-    # both sides of the filter — they must show up under "is not online".
     let!(:online) { make_user(name: 'On', availability: :online) }
     let!(:unset) { make_user(name: 'Unset').tap { |user| user.update_column(:availability, nil) } }
 
