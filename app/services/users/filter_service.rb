@@ -27,6 +27,9 @@ module Users
       conditions = []
       binds = []
 
+      # Mixed AND/OR leans on SQL's native precedence (AND binds before OR), same as
+      # Contacts::FilterService. Each fragment is parenthesised so a multi-value
+      # fragment's own internal OR can't leak past its connector.
       @filters.each_with_index do |filter, index|
         fragment, fragment_binds = build_fragment(filter)
         next if fragment.nil?
