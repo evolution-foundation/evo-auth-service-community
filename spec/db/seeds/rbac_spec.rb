@@ -81,6 +81,48 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
   end
 
+  # Anti-drift guard for the installation owner (grant-backed, no bypass).
+  #
+  # Stubbed catalog on purpose: asserting `all_permission_keys -
+  # super_admin_permissions == []` is a tautology — the seed derives the grants
+  # from that same method, so it stays green while the catalog grows, the exact
+  # scenario this guards. The stub is an independent oracle for the seed POLICY
+  # (super_admin takes the catalog whole; account_owner minus its two exclusives)
+  # and fails if the seed ever adds a super_admin exclusion. Real keys because
+  # RolePermissionsAction validates permission_key against the catalog.
+  describe 'super_admin grant set == full permission catalog (seed policy)' do
+    STUBBED_CATALOG = %w[
+      contacts.read
+      contacts.create
+      users.manage
+      accounts.stats
+      installation_configs.manage
+    ].freeze
+
+    before do
+      allow(ResourceActionsConfig).to receive(:all_permission_keys).and_return(STUBBED_CATALOG)
+      Role.find_each { |role| role.role_permissions_actions.delete_all }
+      load Rails.root.join('db/seeds/rbac.rb')
+    end
+
+    it 'grants super_admin the catalog WHOLE — no exclusion list of its own' do
+      expect(super_admin_permissions).to match_array(STUBBED_CATALOG)
+    end
+
+    it 'withholds from account_owner exactly the two documented exclusives' do
+      expect(account_owner_permissions)
+        .to match_array(STUBBED_CATALOG - %w[accounts.stats installation_configs.manage])
+    end
+
+    it 'is the only role holding the installation-level key' do
+      installation_owners = Role.all.select do |role|
+        role.role_permissions_actions.exists?(permission_key: 'installation_configs.manage')
+      end
+
+      expect(installation_owners.map(&:key)).to eq(['super_admin'])
+    end
+  end
+
   describe 'super_admin role boundary' do
     it 'holds installation_configs.manage (the whole reason this role exists)' do
       expect(super_admin_permissions).to include('installation_configs.manage')

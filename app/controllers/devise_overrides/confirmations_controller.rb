@@ -5,6 +5,11 @@ class DeviseOverrides::ConfirmationsController < DeviseTokenAuth::ConfirmationsC
     if @resource.errors.empty?
       yield @resource if block_given?
 
+      # The validation cache holds the serialized user (with `confirmed`) for 5
+      # minutes; without this, a consumer that validated just before the
+      # confirmation keeps reading stale data until the entry expires.
+      TokenValidationService.invalidate_cache_for_user(@resource)
+
       redirect_header_options = { account_confirmation_success: true }
       redirect_headers = build_redirect_headers(redirect_header_options)
 
