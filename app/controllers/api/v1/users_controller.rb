@@ -5,7 +5,7 @@ class Api::V1::UsersController < Api::BaseController
   before_action :check_authorization
 
   def index
-    @users = Users::FilterService.new(params[:filters], params[:q]).resolve
+    @users = Users::FilterService.new(params[:filters], params[:q], params[:sort], params[:order]).resolve
 
     apply_pagination
 

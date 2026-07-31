@@ -230,4 +230,42 @@ RSpec.describe Users::FilterService do
       expect(resolve(filter('availability_status', 'not_equal_to', 'online'))).to contain_exactly(unset)
     end
   end
+
+  describe 'sort (order by)' do
+    let!(:carol) { make_user(name: 'Carol', created_at: Time.utc(2020, 1, 1)) }
+    let!(:alice) { make_user(name: 'Alice', created_at: Time.utc(2022, 1, 1)) }
+    let!(:bob)   { make_user(name: 'Bob',   created_at: Time.utc(2021, 1, 1)) }
+
+    def sorted(sort, order)
+      mine(described_class.new(nil, nil, sort, order).resolve).map(&:name)
+    end
+
+    it 'defaults to name ascending when no sort is given (order_by_full_name parity)' do
+      expect(sorted(nil, nil)).to eq(%w[Alice Bob Carol])
+    end
+
+    it 'sorts by name descending' do
+      expect(sorted('name', 'desc')).to eq(%w[Carol Bob Alice])
+    end
+
+    it 'sorts by created_at descending (newest first)' do
+      expect(sorted('created_at', 'desc')).to eq(%w[Alice Bob Carol])
+    end
+
+    it 'sorts by role name through the join, first-role-by-name per user' do
+      assign_role(carol, 'admin')   # -> "Admin"
+      assign_role(bob, 'manager')   # -> "Manager"
+      assign_role(alice, 'zeta')    # -> "Zeta"
+
+      expect(sorted('role', 'asc')).to eq(%w[Carol Bob Alice])
+    end
+
+    it 'falls back to name ascending for an unknown sort key' do
+      expect(sorted('encrypted_password', 'asc')).to eq(%w[Alice Bob Carol])
+    end
+
+    it 'falls back to ascending for an unknown direction' do
+      expect(sorted('name', 'sideways')).to eq(%w[Alice Bob Carol])
+    end
+  end
 end

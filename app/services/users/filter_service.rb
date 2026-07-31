@@ -14,14 +14,40 @@ module Users
     TEXT_ATTRIBUTES = %w[name email].freeze
     VALUE_OPERATORS = %w[equal_to not_equal_to contains does_not_contain].freeze
 
-    def initialize(filters, search = nil)
+    # Whitelisted sort key -> SQL expression. `role` uses a correlated subquery for
+    # the user's first role name, so a user with several roles is never duplicated
+    # in the paginated list. Unknown keys fall back to name, and name ASC is the
+    # default — this reproduces the previous order_by_full_name behaviour for every
+    # caller that passes no sort (dashboards, pickers, macros, account/agent lists).
+    SORT_COLUMNS = {
+      'name' => 'LOWER(users.name)',
+      'email' => 'LOWER(users.email)',
+      'created_at' => 'users.created_at',
+      'role' => '(SELECT LOWER(r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id ' \
+                'WHERE ur.user_id = users.id ORDER BY r.name LIMIT 1)'
+    }.freeze
+
+    def initialize(filters, search = nil, sort = nil, order = nil)
       @filters = normalize(filters)
       @search = search.to_s.strip
+      @sort = sort
+      @order = order
     end
 
     def resolve
       relation = base_relation
       relation = apply_search(relation) if @search.present?
+      relation = apply_filters(relation)
+      apply_sort(relation)
+    end
+
+    private
+
+    def base_relation
+      User.includes(:user_roles)
+    end
+
+    def apply_filters(relation)
       return relation if @filters.empty?
 
       conditions = []
@@ -44,10 +70,12 @@ module Users
       relation.where(conditions.join(' '), *binds)
     end
 
-    private
-
-    def base_relation
-      User.order_by_full_name.includes(:user_roles)
+    # `users.id` is a deterministic tiebreaker so pagination stays stable when the
+    # primary sort column has ties (e.g. two users with the same name).
+    def apply_sort(relation)
+      column = SORT_COLUMNS[@sort.to_s] || SORT_COLUMNS['name']
+      direction = @order.to_s.casecmp?('desc') ? 'DESC' : 'ASC'
+      relation.reorder(Arel.sql("#{column} #{direction}, users.id ASC"))
     end
 
     def apply_search(relation)
