@@ -224,7 +224,7 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   def fetch_user
-    @user = users.find(params[:id])
+    @user = User.includes(:user_roles).find(params[:id])
   end
 
   def allowed_user_params
