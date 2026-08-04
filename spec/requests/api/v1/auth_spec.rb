@@ -117,3 +117,26 @@ RSpec.describe 'POST /api/v1/auth/login — MFA challenge guard (EVO-1104)', typ
     expect(body.dig('data', 'token')).to be_nil
   end
 end
+
+# Regression guard: GET /api/v1/auth/me must return a controlled 401 when no
+# credentials are presented. Previously the rescue_from ordering in
+# Api::BaseController placed StandardError after the specific token handlers,
+# so TokenValidationService::TokenNotFound bubbled up as 500 and left the CRM
+# frontend stuck on the loader instead of redirecting to /auth.
+RSpec.describe 'GET /api/v1/auth/me — unauthenticated 401 guard', type: :request do
+  it 'returns 401 (not 500) when no Authorization header is provided' do
+    get '/api/v1/auth/me'
+
+    expect(response).to have_http_status(:unauthorized)
+    body = JSON.parse(response.body)
+    expect(body.dig('error', 'code')).to eq('TOKEN_NOT_FOUND')
+  end
+
+  it 'returns 401 when an invalid Bearer token is provided' do
+    get '/api/v1/auth/me', headers: { 'Authorization' => 'Bearer definitely-not-a-token' }
+
+    expect(response).to have_http_status(:unauthorized)
+    body = JSON.parse(response.body)
+    expect(body.dig('error', 'code')).to eq('INVALID_TOKEN')
+  end
+end
