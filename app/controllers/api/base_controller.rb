@@ -9,17 +9,21 @@ class Api::BaseController < ApplicationController
   before_action :authenticate_request!
   before_action :set_current_user
 
+  # Order matters: Rails resolves rescue_from handlers in REVERSE declaration
+  # order, so the generic StandardError fallback must be declared FIRST for the
+  # specific handlers below to win. When this was inverted, TokenNotFound was
+  # swallowed by handle_internal_error and /api/v1/auth/me leaked as 500.
+  rescue_from StandardError, with: :handle_internal_error
+
   rescue_from TokenValidationService::InvalidToken, with: :render_invalid_token
   rescue_from TokenValidationService::ExpiredToken, with: :render_expired_token
   rescue_from TokenValidationService::TokenNotFound, with: :render_token_not_found
-  
-  # Global exception handlers for standardized error responses
+
   rescue_from ActiveRecord::RecordNotFound, with: :handle_record_not_found
   rescue_from ActiveRecord::RecordInvalid, with: :handle_record_invalid
   rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
   rescue_from Pundit::NotAuthorizedError, with: :handle_not_authorized
   rescue_from ActionController::ParameterMissing, with: :handle_parameter_missing
-  rescue_from StandardError, with: :handle_internal_error
   
   private
 
