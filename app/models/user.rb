@@ -112,6 +112,17 @@ class User < ApplicationRecord
     acc["ai_agents.#{action}"] = ['ai_agent_processor.execute']
   end.freeze
 
+  # Legacy write aliases (CRM-99): for CONSOLIDATED_WRITE_RESOURCES, whose granular
+  # create/update were removed from the catalog, keep an explicit
+  # <r>.create/<r>.update => <r>.write map. GENERATED_WRITE_IMPLICATIONS no longer
+  # emits these (write_actions_by_resource returns nothing once the granular keys
+  # leave the catalog), so a role still holding the removed grant would lose write
+  # access without this. The card's hard rule: no silent privilege revocation.
+  LEGACY_WRITE_ALIASES = ResourceActionsConfig::CONSOLIDATED_WRITE_RESOURCES
+                         .each_with_object({}) do |resource, acc|
+                           %w[create update].each { |a| acc["#{resource}.#{a}"] = ["#{resource}.write"] }
+                         end.freeze
+
   # Runtime implications (has_permission? / all_permissions). Superset of
   # LOCKING_IMPLICATIONS. Block-form merge concatenates on key collision; a plain
   # .merge would drop the coarse write from GENERATED_WRITE_IMPLICATIONS and
@@ -119,6 +130,7 @@ class User < ApplicationRecord
   OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS
                              .merge(GENERATED_WRITE_IMPLICATIONS)
                              .merge(AGENT_EXECUTION_IMPLICATIONS) { |_key, existing, added| (existing + added).uniq }
+                             .merge(LEGACY_WRITE_ALIASES) { |_key, existing, added| (existing + added).uniq }
                              .freeze
 
   devise :database_authenticatable,
