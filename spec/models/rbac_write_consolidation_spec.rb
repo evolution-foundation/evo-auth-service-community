@@ -19,6 +19,15 @@ RSpec.describe 'RBAC write consolidation (CRM-99)', type: :model do
     role
   end
 
+  # A role still holding a grant that has since LEFT the catalog (labels.create).
+  # RolePermissionsAction validates permission_key, so a legacy row is inserted
+  # skipping validation — exactly what a pre-consolidation DB already stores.
+  def role_with_legacy(*permission_keys)
+    role = Role.create!(key: "role-#{SecureRandom.hex(4)}", name: 'R', type: 'account', system: false)
+    permission_keys.each { |pk| role.role_permissions_actions.build(permission_key: pk).save!(validate: false) }
+    role
+  end
+
   def assign(user, role) = UserRole.assign_role_to_user(user, role)
 
   describe 'catalog' do
@@ -58,19 +67,19 @@ RSpec.describe 'RBAC write consolidation (CRM-99)', type: :model do
   describe 'legacy alias (no silent privilege revocation)' do
     it 'a role still holding the removed labels.create keeps satisfying labels.write' do
       user = build_user
-      assign(user, role_with('labels.create'))
+      assign(user, role_with_legacy('labels.create'))
       expect(user.has_permission?('labels.write')).to be(true)
     end
 
     it 'labels.update (legacy) also still satisfies write' do
       user = build_user
-      assign(user, role_with('labels.update'))
+      assign(user, role_with_legacy('labels.update'))
       expect(user.has_permission?('labels.write')).to be(true)
     end
 
     it 'all_permissions surfaces the implied write so the frontend agrees' do
       user = build_user
-      assign(user, role_with('teams.create'))
+      assign(user, role_with_legacy('teams.create'))
       expect(user.all_permissions).to include('teams.write')
     end
   end
