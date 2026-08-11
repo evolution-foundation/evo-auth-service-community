@@ -114,10 +114,11 @@ class User < ApplicationRecord
 
   # Legacy write aliases (CRM-99): for CONSOLIDATED_WRITE_RESOURCES, whose granular
   # create/update were removed from the catalog, keep an explicit
-  # <r>.create/<r>.update => <r>.write map. GENERATED_WRITE_IMPLICATIONS no longer
-  # emits these (write_actions_by_resource returns nothing once the granular keys
-  # leave the catalog), so a role still holding the removed grant would lose write
-  # access without this. The card's hard rule: no silent privilege revocation.
+  # <r>.create/<r>.update => <r>.write map. Safety net only: the actual transition
+  # is the ConsolidateWriteGrants data migration, which rewrites stored grants to
+  # <r>.write — the alias covers rows created between deploy and migrate. It does
+  # NOT cover the role editor (which filters by the live catalog), which is why
+  # the migration, not this map, is the mechanism.
   LEGACY_WRITE_ALIASES = ResourceActionsConfig::CONSOLIDATED_WRITE_RESOURCES
                          .each_with_object({}) do |resource, acc|
                            %w[create update].each { |a| acc["#{resource}.#{a}"] = ["#{resource}.write"] }
