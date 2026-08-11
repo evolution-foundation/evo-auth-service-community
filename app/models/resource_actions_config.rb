@@ -724,14 +724,29 @@ class ResourceActionsConfig
     end.keys
   end
 
+  # Resources whose granular create/update were COLLAPSED into the coarse `write`
+  # (CRM-99 — the "collapsing keys is a follow-up" flagged in EVO-2127, now done for
+  # these). For each, `write` becomes the first-class grant and create/update are
+  # removed from the catalog. A role still holding a removed <r>.create/<r>.update
+  # keeps satisfying <r>.write via User::LEGACY_WRITE_ALIASES — the card's hard rule
+  # of "no silent privilege revocation". Only resources with NO standalone verbs are
+  # in here (the stray-verb resources are a separate slice).
+  CONSOLIDATED_WRITE_RESOURCES = %i[
+    labels teams pipelines pipeline_stages products webhooks working_hours
+    dashboard_apps custom_attribute_definitions custom_filters canned_responses
+    message_templates crm_forms chat_pages csat_survey_responses
+    ai_api_keys ai_integration_credentials
+    google_authorizations microsoft_authorizations instagram_authorizations
+    twitter_authorizations whatsapp_authorizations
+  ].to_set.freeze
+
   # Coarse "write" bridge (EVO-2127): the role editor renders read/write/delete
-  # groups and now persists them. Inject a `write` leaf ONLY into resources that
-  # actually have a manageable granular write, so valid_permission?("<resource>.write")
-  # passes (no 422) exactly where the editor shows a Write group — and never on
-  # all-system or read-only resources (which would otherwise render a spurious,
-  # un-grantable Write checkbox that 403s delegated admins). The outer RESOURCES
-  # hash is frozen but the per-resource :actions hashes are not. Nothing enforces
-  # the coarse write yet (enforcement stays granular; collapsing keys is a follow-up).
+  # groups and persists them. Inject a `write` leaf into resources that have a
+  # manageable granular write, so valid_permission?("<resource>.write") passes
+  # exactly where the editor shows a Write group — never on all-system or read-only
+  # resources. Then, for CONSOLIDATED_WRITE_RESOURCES (CRM-99), remove the granular
+  # create/update: enforcement has migrated to the coarse write. The outer RESOURCES
+  # hash is frozen but the per-resource :actions hashes are not.
   RESOURCES.each do |resource_key, resource_config|
     next unless manageable_write_actions(resource_key, resource_config[:actions]).any?
 
@@ -739,6 +754,11 @@ class ResourceActionsConfig
       name: 'Write',
       description: 'Coarse write (covers create/update/… for this resource)'
     }
+
+    next unless CONSOLIDATED_WRITE_RESOURCES.include?(resource_key)
+
+    resource_config[:actions].delete(:create)
+    resource_config[:actions].delete(:update)
   end
 
   class << self

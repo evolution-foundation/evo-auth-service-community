@@ -112,6 +112,18 @@ class User < ApplicationRecord
     acc["ai_agents.#{action}"] = ['ai_agent_processor.execute']
   end.freeze
 
+  # Legacy write aliases (CRM-99): for CONSOLIDATED_WRITE_RESOURCES, whose granular
+  # create/update were removed from the catalog, keep an explicit
+  # <r>.create/<r>.update => <r>.write map. Safety net only: the actual transition
+  # is the ConsolidateWriteGrants data migration, which rewrites stored grants to
+  # <r>.write — the alias covers rows created between deploy and migrate. It does
+  # NOT cover the role editor (which filters by the live catalog), which is why
+  # the migration, not this map, is the mechanism.
+  LEGACY_WRITE_ALIASES = ResourceActionsConfig::CONSOLIDATED_WRITE_RESOURCES
+                         .each_with_object({}) do |resource, acc|
+                           %w[create update].each { |a| acc["#{resource}.#{a}"] = ["#{resource}.write"] }
+                         end.freeze
+
   # Runtime implications (has_permission? / all_permissions). Superset of
   # LOCKING_IMPLICATIONS. Block-form merge concatenates on key collision; a plain
   # .merge would drop the coarse write from GENERATED_WRITE_IMPLICATIONS and
@@ -119,6 +131,7 @@ class User < ApplicationRecord
   OPERATIONAL_IMPLICATIONS = LOCKING_IMPLICATIONS
                              .merge(GENERATED_WRITE_IMPLICATIONS)
                              .merge(AGENT_EXECUTION_IMPLICATIONS) { |_key, existing, added| (existing + added).uniq }
+                             .merge(LEGACY_WRITE_ALIASES) { |_key, existing, added| (existing + added).uniq }
                              .freeze
 
   devise :database_authenticatable,

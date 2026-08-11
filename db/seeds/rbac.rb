@@ -89,7 +89,7 @@ agent_permissions = [
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
   'pipelines.read',
-  'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
+  'pipeline_stages.read', 'pipeline_stages.write', 'pipeline_stages.delete',
   # accounts.update is administrative (Settings > Account) and deliberately
   # NOT granted; PATCH /api/v1/account enforces it.
   'accounts.read',
@@ -97,14 +97,14 @@ agent_permissions = [
   # Operational resources used inside conversations (quick-replies, labels, macros,
   # templates, and team assignment) stay with the agent. EVO-1955 will split their
   # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
-  'labels.read', 'labels.create', 'labels.update', 'labels.delete',
-  'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
-  'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
+  'labels.read', 'labels.write', 'labels.delete',
+  'canned_responses.read', 'canned_responses.write', 'canned_responses.delete',
+  'message_templates.read', 'message_templates.write', 'message_templates.delete',
   'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
   # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
   # operational and kept here; team_members enforcement consolidated into teams.*
   # (EVO-2070), and the Teams Settings screen split is EVO-1955.
-  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
+  'teams.read', 'teams.write', 'teams.delete',
   'inboxes.read'
   # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
   # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)

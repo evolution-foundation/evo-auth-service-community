@@ -4,12 +4,14 @@ require 'rails_helper'
 
 # EVO-2070 RBAC catalog hygiene (+ EVO-2072 agents→ai_agents consolidation).
 # Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 327 permission keys across 50 resources.
+#   1) the trimmed catalog holds exactly 283 permission keys across 50 resources.
 #      277 came from the EVO-2070 hygiene pass, plus the 4 granular actions of
 #      the integration credential vault (EVO-2250) = 281; EVO-2127 then adds one
 #      coarse `write` leaf to each resource that has a manageable (non-system)
 #      granular write (46 of 50) to back the role editor's read/write/delete
-#      groups → 281 + 46 = 327. The 4 all-system/read-only resources (installation_configs,
+#      groups → 281 + 46 = 327; CRM-99 slice 1 then removes the granular
+#      create/update pair from the 22 consolidated resources → 327 − 44 = 283.
+#      The 4 all-system/read-only resources (installation_configs,
 #      ai_agent_processor, ai_chat_sessions, ai_a2a_protocol) get no write leaf —
 #      a coarse write there would render an un-grantable checkbox. NOTE: the
 #      earlier 262/47 target assumed ai_tools,
@@ -22,8 +24,8 @@ require 'rails_helper'
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 327 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(327)
+    it 'exposes exactly 283 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(283)
     end
 
     it 'exposes exactly 50 resources' do
@@ -98,8 +100,10 @@ RSpec.describe ResourceActionsConfig do
     end
 
     it 'defaults ordinary managed keys to system:false' do
-      expect(nested(:labels, :create)[:system]).to be(false)
-      expect(flat('labels.create')[:system]).to be(false)
+      # macros.create: a granular write that survived the CRM-99 consolidation
+      # (labels.create left the catalog with slice 1).
+      expect(nested(:macros, :create)[:system]).to be(false)
+      expect(flat('macros.create')[:system]).to be(false)
     end
 
     it 'marks exactly the 15 expected system keys' do
