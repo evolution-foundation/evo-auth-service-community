@@ -160,12 +160,10 @@ class Api::V1::UsersController < Api::BaseController
     # The frontend gate remains, but is no longer the only one.
     action_map = {
       'index' => 'users.read',
-      'show' => 'users.read',
       'create' => 'users.create',
       'update' => 'users.update',
       'destroy' => 'users.delete',
       'bulk_create' => 'users.bulk_operations',
-      'permissions' => 'users.read',
       'check_permission' => 'users.read',
       'role' => 'users.read'
     }
@@ -223,10 +221,8 @@ class Api::V1::UsersController < Api::BaseController
           .exists?
   end
 
-  # `users` (a scope with ordering/includes, used by #index) was dropped in the
-  # EVO-1947 refactor, but fetch_user still called it — NameError 500 on every
-  # guarded action (incl. check_permission, which the CRM hits per screen → 403
-  # cascade). A single lookup by id needs neither ordering nor includes.
+  # A single lookup by id needs neither the ordering nor the includes the
+  # #index scope carries.
   def fetch_user
     @user = User.find(params[:id])
   end
