@@ -7,6 +7,9 @@ require 'rails_helper'
 # endpoint, mirroring the frontend Settings > Agents gate. Reads and
 # self-service updates stay on the fine operational keys alone.
 RSpec.describe 'Users administrative gate (users.manage)', type: :request do
+  # Roles come from data migrations, which a schema-loaded database never runs.
+  before { load Rails.root.join('db/seeds/rbac.rb') }
+
   let(:password) { 'Test123!@' }
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
 

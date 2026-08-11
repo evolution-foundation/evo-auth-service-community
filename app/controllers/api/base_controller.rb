@@ -1,4 +1,8 @@
 class Api::BaseController < ApplicationController
+  # Rescuable matches in reverse declaration order, so a catch-all only stays a
+  # fallback while every specific handler is declared after it.
+  rescue_from StandardError, with: :handle_internal_error
+
   include Pundit::Authorization
   include PermissionCheckable
   include ApiResponseHelper
@@ -19,8 +23,7 @@ class Api::BaseController < ApplicationController
   rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
   rescue_from Pundit::NotAuthorizedError, with: :handle_not_authorized
   rescue_from ActionController::ParameterMissing, with: :handle_parameter_missing
-  rescue_from StandardError, with: :handle_internal_error
-  
+
   private
 
   def authenticate_request!

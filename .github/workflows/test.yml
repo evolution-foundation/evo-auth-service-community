@@ -56,16 +56,14 @@ jobs:
       - name: Prepare database
         run: bundle exec rails db:create db:schema:load
 
-      # Request specs that are red on develop already (22 failures at the time of
-      # writing, and `--order random` from .rspec makes the count wobble between
-      # 18 and 22 — account_users_role_rbac is order-dependent). Gating on the
-      # whole suite would mean merging this workflow already broken, which is how
-      # a repo ends up with no CI in the first place. They are excluded by name,
-      # not silently: fixing one is a matter of deleting its entry here.
+      # Request specs that are red on develop already. Gating on the whole suite
+      # would mean merging this workflow already broken, which is how a repo ends
+      # up with no CI in the first place. They are excluded by name, not silently:
+      # fixing one is a matter of deleting its entry here.
       #   TODO(EVO-2062 follow-up): unbreak these and shrink the list to zero.
       # `--order defined` keeps the run deterministic; the .rspec default of
       # random order surfaces cross-example leakage this suite still has.
       - name: RSpec
         run: |
           bundle exec rspec --order defined --format progress \
-            --exclude-pattern "**/{users_manage_gate,account_users_role_rbac,account,setup_bootstrap,resource_actions_default_deny}_spec.rb"
+            --exclude-pattern "**/{account,setup_bootstrap,resource_actions_default_deny}_spec.rb"

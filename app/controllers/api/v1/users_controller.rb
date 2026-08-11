@@ -1,8 +1,10 @@
 class Api::V1::UsersController < Api::BaseController
   AUTHZ_CACHE_TTL = 60.seconds
 
-  before_action :fetch_user, except: [:create, :index, :bulk_create]
+  # Authorization first, or the lookup leaks an id's existence to a caller
+  # without users.read.
   before_action :check_authorization
+  before_action :fetch_user, except: [:create, :index, :bulk_create]
 
   def index
     @users = Users::FilterService.new(params[:filters], params[:q], params[:sort], params[:order]).resolve
@@ -104,30 +106,26 @@ class Api::V1::UsersController < Api::BaseController
 
     return error_response('VALIDATION_ERROR', 'Permission key is required', status: :bad_request) if permission_key.blank?
 
-    target_user = @user || current_user
-
     has_permission = Rails.cache.fetch(
-      permission_cache_key(target_user.id, permission_key),
+      permission_cache_key(@user.id, permission_key),
       expires_in: AUTHZ_CACHE_TTL
     ) do
-      target_user.has_permission?(permission_key)
+      @user.has_permission?(permission_key)
     end
 
     success_response(data: {
       permission_key: permission_key,
       has_permission: has_permission,
-      role: target_user.role_data
+      role: @user.role_data
     }, message: has_permission ? 'Permission granted' : 'Permission denied')
   end
 
   def role
-    target_user = @user || current_user
-
     role_data = Rails.cache.fetch(
-      role_cache_key(target_user.id),
+      role_cache_key(@user.id),
       expires_in: AUTHZ_CACHE_TTL
     ) do
-      target_user.role_data
+      @user.role_data
     end
 
     success_response(
@@ -160,12 +158,10 @@ class Api::V1::UsersController < Api::BaseController
     # The frontend gate remains, but is no longer the only one.
     action_map = {
       'index' => 'users.read',
-      'show' => 'users.read',
       'create' => 'users.create',
       'update' => 'users.update',
       'destroy' => 'users.delete',
       'bulk_create' => 'users.bulk_operations',
-      'permissions' => 'users.read',
       'check_permission' => 'users.read',
       'role' => 'users.read'
     }
@@ -223,8 +219,9 @@ class Api::V1::UsersController < Api::BaseController
           .exists?
   end
 
+  # A lookup by id needs neither the ordering nor the includes of the #index scope.
   def fetch_user
-    @user = users.find(params[:id])
+    @user = User.find(params[:id])
   end
 
   def allowed_user_params
