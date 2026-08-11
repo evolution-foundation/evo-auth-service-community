@@ -6,6 +6,11 @@ require 'rails_helper'
 # no longer holds), and GET /api/v1/users/:id/role enforces users.read (it was
 # absent from the authorization map, falling through open).
 RSpec.describe 'Account update and users role RBAC', type: :request do
+  # db:schema:load leaves `roles` empty — the system roles are created by data
+  # migrations, which a schema-loaded database never runs. Without this the
+  # spec dies on Role.find_by! before reaching the controller.
+  before { load Rails.root.join('db/seeds/rbac.rb') }
+
   let(:password) { 'Test123!@' }
   let(:agent_role) { Role.find_by!(key: 'agent') }
   let(:admin_role) { Role.find_by!(key: 'super_admin') }
