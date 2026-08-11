@@ -61,11 +61,6 @@ jobs:
       # up with no CI in the first place. They are excluded by name, not silently:
       # fixing one is a matter of deleting its entry here.
       #   TODO(EVO-2062 follow-up): unbreak these and shrink the list to zero.
-      # users_manage_gate and account_users_role_rbac left the list: they were red
-      # because they call Role.find_by! against a schema-loaded database, where no
-      # data migration ever created the system roles. They now seed db/seeds/rbac.rb
-      # like roles_system_protection_spec already did. Keeping them out is what let
-      # the fetch_user NameError merge green, so they belong in the gate.
       # `--order defined` keeps the run deterministic; the .rspec default of
       # random order surfaces cross-example leakage this suite still has.
       - name: RSpec

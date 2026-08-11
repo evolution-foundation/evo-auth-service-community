@@ -7,9 +7,7 @@ require 'rails_helper'
 # endpoint, mirroring the frontend Settings > Agents gate. Reads and
 # self-service updates stay on the fine operational keys alone.
 RSpec.describe 'Users administrative gate (users.manage)', type: :request do
-  # db:schema:load leaves `roles` empty — the system roles are created by data
-  # migrations, which a schema-loaded database never runs. Without this the
-  # spec dies on Role.find_by! before reaching the controller.
+  # Roles come from data migrations, which a schema-loaded database never runs.
   before { load Rails.root.join('db/seeds/rbac.rb') }
 
   let(:password) { 'Test123!@' }

@@ -2,19 +2,10 @@
 
 require 'rails_helper'
 
-# Regression guard for Api::V1::UsersController#fetch_user, the before_action
-# that loads @user for every member action. It called a `users` helper that had
-# already been deleted, so update/destroy/check_permission/role raised NameError
-# and answered 500 — and the CRM, which calls check_permission on every screen,
-# 403'd across the board behind a fail-close gateway.
-#
-# The RBAC specs cover WHO may call these routes. This one covers that the
-# target user is resolved at all, on the route the CRM actually hits: asserting
-# the answer describes the user in the path, not the caller, fails both on a
-# NameError and on a silent fallback to current_user.
+# The member actions must answer for the user in the path, not the caller. The
+# RBAC specs cover who may call them; these cover that the target resolves.
 RSpec.describe 'UsersController fetch_user target resolution', type: :request do
-  # db:schema:load leaves `roles` empty — the system roles are created by data
-  # migrations, which a schema-loaded database never runs.
+  # Roles come from data migrations, which a schema-loaded database never runs.
   before { load Rails.root.join('db/seeds/rbac.rb') }
 
   let(:password) { 'Test123!@' }
@@ -52,9 +43,6 @@ RSpec.describe 'UsersController fetch_user target resolution', type: :request do
       expect(response.parsed_body.dig('data', 'role', 'key')).to eq('super_admin')
     end
 
-    # The caller (agent) does not hold users.manage and the target (super_admin)
-    # does: one shared example would pass on the caller's own grants, so the two
-    # verdicts are asserted against each other.
     it 'resolves the target grant rather than the caller grant' do
       post "/api/v1/users/#{admin_user.id}/check_permission",
            params: { permission_key: 'users.manage' },
