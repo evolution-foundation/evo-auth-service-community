@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20260811120000_consolidate_write_grants.rb')
+require Rails.root.join('db/migrate/20260811120001_consolidate_write_grants.rb')
 
 # Spec for the CRM-99 slice-1 data-migration that rewrites stored granular
 # create/update grants of the 22 consolidated resources onto the coarse write.
