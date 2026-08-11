@@ -106,10 +106,12 @@ RSpec.describe ConsolidateWriteGrants do
     end
 
     it 'matches the slice-1 snapshot of the catalog constant' do
-      # If a later slice grows CONSOLIDATED_WRITE_RESOURCES, this migration must
-      # NOT change — the new resources get their own paired migration.
       expect(described_class::RESOURCES.map(&:to_sym))
-        .to match_array(ResourceActionsConfig::CONSOLIDATED_WRITE_RESOURCES.to_a)
+        .to match_array(ResourceActionsConfig::CONSOLIDATED_WRITE_RESOURCES.to_a),
+            'CONSOLIDATED_WRITE_RESOURCES changed (new consolidation slice?): do ' \
+            'NOT edit ConsolidateWriteGrants — it is a frozen slice-1 snapshot. ' \
+            'Create the new slice\'s own paired data migration and update this ' \
+            'snapshot check alongside it.'
     end
   end
 
