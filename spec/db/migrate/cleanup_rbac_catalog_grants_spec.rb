@@ -68,7 +68,7 @@ RSpec.describe CleanupRbacCatalogGrants do
       expect(keys(role)).to contain_exactly('teams.read')
     end
 
-    it 'collapses the three team_members mutations onto a single teams.update' do
+    it 'collapses the three team_members mutations onto a single teams.write' do
       role = make_role
       grant_raw(role, 'team_members.create')
       grant_raw(role, 'team_members.update')
@@ -76,7 +76,7 @@ RSpec.describe CleanupRbacCatalogGrants do
 
       expect { migration.up }.not_to raise_error
 
-      expect(keys(role)).to contain_exactly('teams.update')
+      expect(keys(role)).to contain_exactly('teams.write')
     end
 
     it 'preserves surviving grants kept by the audit (ai_tools/ai_folders/ai_mcp_servers)' do
@@ -106,7 +106,7 @@ RSpec.describe CleanupRbacCatalogGrants do
         migration.up
       end.not_to raise_error
 
-      expect(keys(role)).to contain_exactly('teams.update')
+      expect(keys(role)).to contain_exactly('teams.write')
     end
   end
 
@@ -124,7 +124,7 @@ RSpec.describe CleanupRbacCatalogGrants do
       migration.up
 
       account_owner = Role.find_by!(key: 'account_owner')
-      expect(keys(account_owner)).to include('teams.read', 'teams.update', 'roles.read')
+      expect(keys(account_owner)).to include('teams.read', 'teams.write', 'roles.read')
       # No stale/consolidated keys leaked back in.
       expect(keys(account_owner)).not_to include('team_members.read', 'permissions.read', 'channels.read')
     end

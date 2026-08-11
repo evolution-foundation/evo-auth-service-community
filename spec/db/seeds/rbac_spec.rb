@@ -41,7 +41,7 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
 
     it 'keeps the related stage-level permissions for the kanban experience' do
-      %w[pipeline_stages.read pipeline_stages.create pipeline_stages.update pipeline_stages.delete].each do |key|
+      %w[pipeline_stages.read pipeline_stages.write pipeline_stages.delete].each do |key|
         expect(agent_permissions).to include(key)
       end
     end

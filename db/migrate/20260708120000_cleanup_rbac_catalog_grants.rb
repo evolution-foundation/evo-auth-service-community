@@ -18,11 +18,11 @@
 #      is on (role_id, permission_key), so for a role that already holds the
 #      target key we DELETE the stale row instead of updating it into a
 #      duplicate; roles missing the target get an in-place UPDATE. Several old
-#      keys collapse onto teams.update — processing the renames in order keeps
+#      keys collapse onto teams.write — processing the renames in order keeps
 #      each step consistent with the rows the previous step produced.
 #   2) Delete grants for the fully removed resources, matched by key prefix.
 #
-# super_admin/account_owner keep every real capability: teams.read/teams.update
+# super_admin/account_owner keep every real capability: teams.read/teams.write
 # and roles.read all survive in the catalog, so the consolidation only trades
 # names, never access. The removed prefixes gate nothing that is still routed.
 #
@@ -35,12 +35,16 @@ class CleanupRbacCatalogGrants < ActiveRecord::Migration[7.1]
 
   # Keys whose resource was consolidated into a survivor. team_members is a
   # team-composition concern nested under teams (reads -> teams.read, mutations
-  # -> teams.update); permissions was a single read that folds into roles.read.
+  # -> teams.write); permissions was a single read that folds into roles.read.
+  # The mutation target is teams.write (not teams.update): CRM-99 consolidated
+  # create/update into the coarse write, so landing on teams.update here would
+  # materialize a grant that is legacy the moment it is born. Installs that ran
+  # the original teams.update version are rewritten by ConsolidateWriteGrants.
   KEY_RENAMES = {
     'team_members.read'   => 'teams.read',
-    'team_members.create' => 'teams.update',
-    'team_members.update' => 'teams.update',
-    'team_members.delete' => 'teams.update',
+    'team_members.create' => 'teams.write',
+    'team_members.update' => 'teams.write',
+    'team_members.delete' => 'teams.write',
     'permissions.read'    => 'roles.read'
   }.freeze
 

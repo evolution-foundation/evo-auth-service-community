@@ -81,10 +81,11 @@ RSpec.describe ResourceActionsConfig, '.api_format lock metadata' do
   end
 
   it 'leaves ordinary managed permissions unlocked' do
-    entry = nested(:labels, :create)
+    # macros.create survived the CRM-99 consolidation (labels.create did not).
+    entry = nested(:macros, :create)
     expect(entry[:basic]).to be(false)
     expect(entry[:implied_by]).to be_nil
-    expect(flat('labels.create')[:basic]).to be(false)
-    expect(flat('labels.create')[:implied_by]).to be_nil
+    expect(flat('macros.create')[:basic]).to be(false)
+    expect(flat('macros.create')[:implied_by]).to be_nil
   end
 end
