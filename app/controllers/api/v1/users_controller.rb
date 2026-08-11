@@ -223,8 +223,12 @@ class Api::V1::UsersController < Api::BaseController
           .exists?
   end
 
+  # `users` (a scope with ordering/includes, used by #index) was dropped in the
+  # EVO-1947 refactor, but fetch_user still called it — NameError 500 on every
+  # guarded action (incl. check_permission, which the CRM hits per screen → 403
+  # cascade). A single lookup by id needs neither ordering nor includes.
   def fetch_user
-    @user = users.find(params[:id])
+    @user = User.find(params[:id])
   end
 
   def allowed_user_params
