@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20260815120000_add_ai_credentials_permissions_to_existing_roles.rb')
+require Rails.root.join('db/migrate/20260815120001_add_ai_credentials_permissions_to_existing_roles.rb')
 
 # The catalog gained ai_integration_credentials.* with no data migration, so on a
 # bootstrapped installation no role holds those keys and the screen ships dark.
