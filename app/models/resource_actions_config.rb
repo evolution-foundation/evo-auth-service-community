@@ -618,6 +618,19 @@ class ResourceActionsConfig
       }
     },
 
+    # Card (deal/lead) writes inside a pipeline, gated separately from editing the
+    # pipeline itself: moving a card, pulling a conversation in, and editing card
+    # fields are the salesperson's routine, whereas pipelines.update is the manager's
+    # power to reshape/archive the funnel. A single `update` action covers every card
+    # write (PipelineItemsController::WRITE_ACTIONS); reads stay on pipelines.read.
+    pipeline_items: {
+      name: 'Pipeline Cards',
+      description: 'Create, move between stages and edit cards inside a pipeline',
+      actions: {
+        update: { name: 'Manage cards', description: 'Create, move and edit pipeline cards' }
+      }
+    },
+
     crm_forms: {
       name: 'Lead Capture Forms',
       description: 'Public lead-capture form builder (form -> pipeline)',
