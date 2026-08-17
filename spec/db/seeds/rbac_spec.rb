@@ -137,8 +137,9 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
   # RBAC permission split (tech-spec rbac-granular-inbox-permissions).
   # users.read / inboxes.read were removed from BASIC_READ_PERMISSIONS, so the
   # seeded roles must now grant them explicitly. conversations.read_all is the
-  # opt-in that preserves "see all inboxes" for the default roles. users.manage
-  # is the administrative gate and must NOT reach the agent role.
+  # see-all-inboxes grant; it is SECURE-BY-DEFAULT withheld from the agent (which
+  # then sees only its member inboxes), while account_owner/super_admin keep it.
+  # users.manage is the administrative gate and must NOT reach the agent role.
   describe 'agent role — RBAC split (operational reads, no admin gate)' do
     it 'explicitly grants users.read (operational read for the Conversations screen)' do
       expect(agent_permissions).to include('users.read')
@@ -148,8 +149,10 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).to include('inboxes.read')
     end
 
-    it 'grants conversations.read_all so agents keep seeing every inbox by default' do
-      expect(agent_permissions).to include('conversations.read_all')
+    it 'does NOT grant conversations.read_all (secure-by-default: agent sees only its member inboxes)' do
+      # Without read_all, User#assigned_inboxes returns only the agent's inbox_members
+      # (none => sees nothing until assigned). account_owner/super_admin keep read_all.
+      expect(agent_permissions).not_to include('conversations.read_all')
     end
 
     it 'does NOT grant users.manage (agents never see the administrative panel)' do

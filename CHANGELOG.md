@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- N/A
+- **CRM-181 — agent role is secure-by-default for inbox visibility** (migration `20260817120003`) — the default `agent` seed no longer grants `conversations.read_all`, so an agent sees only the inboxes it is a member of (`User#assigned_inboxes`); `account_owner`/`super_admin` keep full visibility via their `read_all` grant + `administrator?`. A data-migration revokes the key from the EXISTING system `agent` role on upgrade (custom roles untouched); rollback is forward-only (re-granting would escalate privilege).
+
+  **Operator action (required, in this order):** revoking `read_all` only reveals conversations an agent is *assigned* to. An agent user with **zero** `inbox_members` will see an **empty** conversation/inbox list afterwards, with no auto-recovery (the `inbox_members.empty? -> Inbox.all` degrade was removed on purpose — see evo-ai-crm-community `app/models/user.rb#assigned_inboxes`). **Populate `inbox_members` for the agents that need visibility BEFORE this migration reaches the environment.** On `up` the migration counts and logs how many agent-role users currently have zero `inbox_members`, so the blast radius is visible in the deploy log.
 
 ### Fixed
 
