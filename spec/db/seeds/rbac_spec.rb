@@ -40,23 +40,37 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).not_to include('pipelines.delete')
     end
 
-    it 'keeps the related stage-level permissions for the kanban experience' do
-      %w[pipeline_stages.read pipeline_stages.create pipeline_stages.update pipeline_stages.delete].each do |key|
+    it 'keeps stage read/create/update for the kanban experience but NOT the destructive stage delete' do
+      %w[pipeline_stages.read pipeline_stages.create pipeline_stages.update].each do |key|
         expect(agent_permissions).to include(key)
       end
+      expect(agent_permissions).not_to include('pipeline_stages.delete')
     end
   end
 
   describe 'agent role sanity-check for adjacent areas (regression guard)' do
-    it 'keeps conversations CRUD (otherwise agents cannot do their job)' do
-      %w[conversations.read conversations.create conversations.update conversations.delete].each do |key|
+    it 'keeps conversations read/create/update but NOT the destructive delete (least-privilege)' do
+      %w[conversations.read conversations.create conversations.update].each do |key|
         expect(agent_permissions).to include(key)
       end
+      # Closing/resolving a conversation is conversations.toggle_status (kept), not delete.
+      expect(agent_permissions).to include('conversations.toggle_status')
+      expect(agent_permissions).not_to include('conversations.delete')
     end
 
-    it 'keeps contacts CRUD (agents need to manage contacts)' do
-      %w[contacts.read contacts.create contacts.update contacts.delete].each do |key|
+    it 'keeps contacts read/create/update but NOT the destructive delete (least-privilege)' do
+      %w[contacts.read contacts.create contacts.update].each do |key|
         expect(agent_permissions).to include(key)
+      end
+      expect(agent_permissions).not_to include('contacts.delete')
+    end
+
+    it 'grants only teams.read — the agent must not create/update/delete teams or manage members' do
+      # teams.update also gates team_members (add/remove members). Creating, renaming
+      # and deleting teams is a manager/settings action, not attendance.
+      expect(agent_permissions).to include('teams.read')
+      %w[teams.create teams.update teams.delete].each do |key|
+        expect(agent_permissions).not_to include(key)
       end
     end
 

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- N/A
+- **CRM-182 — least-privilege agent role: revoke destructive/admin keys** (migration `20260817120005`) — the default `agent` seed no longer grants `conversations.delete`, `contacts.delete` (also gates contact merge + Contact bulk-delete), `pipeline_stages.delete`, or `teams.create/update/delete` (team + member management via `team_members`). Attendance keeps `conversations.toggle_status`, `teams.read`, and the create/update actions. A data-migration revokes the keys from the EXISTING system `agent` role on upgrade (custom roles untouched); rollback is forward-only (re-granting would escalate privilege). The 403/200 enforcement is proven end-to-end in evo-ai-crm-community (`spec/requests/api/v1/agent_destructive_ops_rbac_spec.rb`).
 
 ### Fixed
 
