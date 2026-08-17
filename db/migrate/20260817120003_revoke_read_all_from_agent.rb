@@ -57,10 +57,15 @@ class RevokeReadAllFromAgent < ActiveRecord::Migration[7.1]
   # Best-effort operational telemetry: how many agent-role users will lose their
   # conversation list because they have no inbox membership yet. inbox_members is
   # a CRM table living in the same shared database; guarded so a pure-auth install
-  # (or any query hiccup) never fails the migration.
+  # (or any query hiccup) never fails the migration. Every path says something —
+  # silence would read as "nothing to worry about" when it means "not assessed".
   def log_agents_without_inbox_membership(role)
     conn = ActiveRecord::Base.connection
-    return unless conn.table_exists?(:user_roles) && conn.table_exists?(:inbox_members)
+    unless conn.table_exists?(:user_roles) && conn.table_exists?(:inbox_members)
+      say 'CRM-181: inbox_members is not present in this database — blast radius NOT assessed. ' \
+          'Verify inbox memberships from the CRM side before relying on this deploy.', true
+      return
+    end
 
     role_id = conn.quote(role.id)
     total = conn.select_value(<<~SQL.squish).to_i

@@ -84,6 +84,17 @@ RSpec.describe RevokeReadAllFromAgent do
       expect { migration.up }.not_to raise_error
     end
 
+    it 'announces that the blast radius was NOT assessed when inbox_members is absent' do
+      # The auth schema carries no inbox table, so this is the path a pure-auth
+      # install takes. Staying silent here would read as "nothing to worry about".
+      agent = Role.find_by!(key: 'agent')
+      to_pre_fix_state(agent)
+
+      expect(migration).to receive(:say).with(/blast radius NOT assessed/, true)
+
+      migration.up
+    end
+
     it 'is a no-op when the agent role is absent' do
       Role.where(key: 'agent').destroy_all
 
