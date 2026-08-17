@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CRM-182 — least-privilege agent role: revoke destructive/admin keys** (migration `20260817120005`) — the default `agent` seed no longer grants `conversations.delete`, `contacts.delete` (also gates contact merge + Contact bulk-delete), `pipeline_stages.delete`, or `teams.create/update/delete` (team + member management via `team_members`). Attendance keeps `conversations.toggle_status`, `teams.read`, and the create/update actions. A data-migration revokes the keys from the EXISTING system `agent` role on upgrade (custom roles untouched); rollback is forward-only (re-granting would escalate privilege). The 403/200 enforcement is proven end-to-end in evo-ai-crm-community (`spec/requests/api/v1/agent_destructive_ops_rbac_spec.rb`).
 
+- **CRM-181 — agent role is secure-by-default for inbox visibility** (migration `20260817120003`) — the default `agent` seed no longer grants `conversations.read_all`, so an agent sees only the inboxes it is a member of (`User#assigned_inboxes`); `account_owner`/`super_admin` keep full visibility via their `read_all` grant + `administrator?`. A data-migration revokes the key from the EXISTING system `agent` role on upgrade (custom roles untouched); rollback is forward-only (re-granting would escalate privilege).
+
+  **Operator action (required, in this order):** revoking `read_all` only reveals conversations an agent is *assigned* to. An agent user with **zero** `inbox_members` will see an **empty** conversation/inbox list afterwards, with no auto-recovery (the `inbox_members.empty? -> Inbox.all` degrade was removed on purpose — see evo-ai-crm-community `app/models/user.rb#assigned_inboxes`). **Populate `inbox_members` for the agents that need visibility BEFORE this migration reaches the environment.** On `up` the migration counts and logs how many agent-role users currently have zero `inbox_members`, so the blast radius is visible in the deploy log.
+
 ### Fixed
 
 - N/A
