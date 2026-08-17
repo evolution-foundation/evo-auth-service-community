@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- N/A
+- **CRM-190 — least-privilege agent: revoke shared-asset deletes** (migration `20260817120007`) — follow-up to CRM-182 for four keys outside its enumerated list. The default `agent` seed no longer grants `labels.delete`, `macros.delete`, `canned_responses.delete`, or `message_templates.delete` — deleting a shared, account-wide asset (a deleted label drops off every conversation) is a manager action, not attendance. `read`/`create`/`update` and `macros.execute` stay. A data-migration revokes the keys from the EXISTING system `agent` role on upgrade (custom roles untouched); rollback is forward-only (re-granting would escalate privilege). The 403/200 enforcement is proven end-to-end in evo-ai-crm-community (`spec/requests/api/v1/agent_shared_asset_deletes_rbac_spec.rb`).
 
 ### Fixed
 
