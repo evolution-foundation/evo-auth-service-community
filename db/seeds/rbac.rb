@@ -99,8 +99,11 @@ agent_permissions = [
   # The destructive delete of each is NOT granted: deleting a shared asset affects
   # the whole account (e.g. deleting a label removes it from every conversation),
   # which is a manager/settings action, not attendance (CRM-190). macros.execute
-  # stays — running a macro is attendance. EVO-1955 will split the remaining
-  # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
+  # stays — running a macro is attendance. A macro an agent CREATES is forced to
+  # `personal` (CRM Macro#set_visibility), so it is not shared: the CRM lets its
+  # owner delete it without macros.delete (MacrosController#authorize_destroy!).
+  # EVO-1955 will split the remaining use-vs-manage gating so agents keep chat
+  # usage but lose the Settings screens.
   'labels.read', 'labels.create', 'labels.update',
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update',
   'message_templates.read', 'message_templates.create', 'message_templates.update',

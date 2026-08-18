@@ -15,6 +15,11 @@
 # unlike CRM-182's contacts.delete/teams.update). read/create/update and
 # macros.execute stay — creating, editing and running are attendance.
 #
+# macros.delete carries a CRM-side carve-out: Macro#set_visibility forces `personal`
+# for every non-admin, so a macro an agent creates belongs to that agent alone and
+# its owner may delete it without the key (MacrosController#authorize_destroy!).
+# Revoking the key here removes only the power to delete GLOBAL, shared macros.
+#
 # Why a data-migration and not seed-only: db/seeds/rbac.rb `destroy_all`s and
 # recreates the agent role from the trimmed array on every run, and db:seed runs on
 # every deploy. But an install that runs `db:migrate` WITHOUT `db:seed` would keep
