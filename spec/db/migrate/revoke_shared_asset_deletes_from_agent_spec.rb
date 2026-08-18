@@ -38,17 +38,19 @@ RSpec.describe RevokeSharedAssetDeletesFromAgent do
       )
     end
 
-    it 'keeps read/create/update for each asset and macros.execute' do
+    it 'keeps the operational keys of each asset (this migration only revokes deletes)' do
       agent = Role.find_by!(key: 'agent')
       to_pre_fix_state(agent)
 
       migration.up
 
+      # macros/message_templates create+update left the seed with CRM-70; what
+      # the seed still grants must survive this migration untouched.
       expect(keys(agent)).to include(
         'labels.read', 'labels.create', 'labels.update',
         'canned_responses.read', 'canned_responses.create', 'canned_responses.update',
-        'message_templates.read', 'message_templates.create', 'message_templates.update',
-        'macros.read', 'macros.create', 'macros.update', 'macros.execute'
+        'message_templates.read',
+        'macros.read', 'macros.execute'
       )
     end
 

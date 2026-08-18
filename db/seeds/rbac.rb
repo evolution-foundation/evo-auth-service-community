@@ -102,24 +102,23 @@ agent_permissions = [
   # NOT granted; PATCH /api/v1/account enforces it.
   'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
-  # Operational resources used inside conversations (quick-replies, labels, macros,
-  # templates, and team assignment) stay with the agent for read/create/update.
-  # The destructive delete of each is NOT granted: deleting a shared asset affects
-  # the whole account (e.g. deleting a label removes it from every conversation),
-  # which is a manager/settings action, not attendance (CRM-190). macros.execute
-  # stays — running a macro is attendance. A macro an agent CREATES is forced to
-  # `personal` (CRM Macro#set_visibility), so it is not shared: the CRM lets its
-  # owner delete it without macros.delete (MacrosController#check_destroy_permission!).
-  # EVO-1955 will split the remaining use-vs-manage gating so agents keep chat
-  # usage but lose the Settings screens.
+  # Operational resources used inside conversations. Product decision (CRM-70,
+  # 2026-08-18): the agent MANAGES its own labels and canned responses, so those
+  # keep read/create/update. Macros and message templates are use-vs-manage:
+  # the agent keeps `read` (send a template) and `macros.execute` (run one) for
+  # the chat, while `create`/`update` and the Settings screen belong to
+  # `<resource>.manage`, granted to admin roles only. Deletes of every shared
+  # asset stay out (CRM-190). Personal macros an agent already owns keep working.
   'labels.read', 'labels.create', 'labels.update',
   'canned_responses.read', 'canned_responses.create', 'canned_responses.update',
-  'message_templates.read', 'message_templates.create', 'message_templates.update',
-  'macros.read', 'macros.create', 'macros.update', 'macros.execute',
+  'message_templates.read',
+  'macros.read', 'macros.execute',
   # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
   # operational and kept here (also in BASIC_READ_PERMISSIONS). Create/update/delete
   # are NOT granted: creating, renaming and deleting teams — and managing members via
   # team_members, gated by teams.update — is a manager/settings action, not attendance.
+  # The Settings screen itself is gated by teams.manage (CRM-70), which the agent
+  # does not hold: read alone cannot hide it, since teams.read is basic for everyone.
   'teams.read',
   'inboxes.read'
   # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
