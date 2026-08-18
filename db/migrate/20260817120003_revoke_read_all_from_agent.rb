@@ -71,14 +71,17 @@ class RevokeReadAllFromAgent < ActiveRecord::Migration[7.1]
     # Savepoint: on Postgres a failed statement aborts the whole transaction, so
     # without it the rescue below could not keep its promise — the revoke that
     # follows would die with PG::InFailedSqlTransaction (CRM-194).
+    # `requires_new: true` is load-bearing only under db:migrate (joinable ddl
+    # transaction); the spec's fixture transaction is non-joinable, so dropping it
+    # would keep the suite green and break production.
     total = conn.transaction(requires_new: true) do
-      conn.select_value(<<~SQL.squish).to_i
+      conn.select_value(<<~SQL.squish)
         SELECT COUNT(*) FROM users u
         JOIN user_roles ur ON ur.user_id = u.id
         WHERE ur.role_id = #{role_id}
           AND NOT EXISTS (SELECT 1 FROM inbox_members im WHERE im.user_id = u.id)
       SQL
-    end
+    end.to_i
 
     if total.positive?
       say "CRM-181: #{total} agent-role user(s) have ZERO inbox memberships and will " \
