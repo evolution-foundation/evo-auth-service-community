@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- N/A
+- **CRM-178 — `pipeline_items.update` card-write permission** (migration `20260817120009`) — new RBAC resource `pipeline_items` (single `update` action + coarse `write` leaf) and its grant to the default `agent` role, so moving/creating/editing pipeline cards gates on a dedicated key instead of the manager-level `pipelines.update`. Deploy together with the evo-ai-crm-community change that gates `PipelineItemsController` by `pipeline_items.update` (`PipelinePolicy#update_items?`). Catalog grows 327→329 keys / 50→51 resources.
 
 ### Changed
 

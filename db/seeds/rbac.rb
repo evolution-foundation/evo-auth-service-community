@@ -90,6 +90,10 @@ agent_permissions = [
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
   'pipelines.read',
+  # Card writes gate on pipeline_items.update (its own key), NOT pipelines.update —
+  # the agent moves/creates cards without the manager's power to reshape/archive the
+  # funnel. See PipelineItemsController + PipelinePolicy#update_items? in the CRM (CRM-178).
+  'pipeline_items.update',
   # pipeline_stages.delete is NOT granted: deleting a funnel stage is a destructive
   # restructuring of the shared pipeline, not attendance. Create/update stay for the
   # kanban experience.
