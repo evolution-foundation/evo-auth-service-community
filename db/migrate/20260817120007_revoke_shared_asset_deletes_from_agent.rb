@@ -17,7 +17,7 @@
 #
 # macros.delete carries a CRM-side carve-out: Macro#set_visibility forces `personal`
 # for every non-admin, so a macro an agent creates belongs to that agent alone and
-# its owner may delete it without the key (MacrosController#authorize_destroy!).
+# its owner may delete it without the key (MacrosController#check_destroy_permission!).
 # Revoking the key here removes only the power to delete GLOBAL, shared macros.
 #
 # Why a data-migration and not seed-only: db/seeds/rbac.rb `destroy_all`s and

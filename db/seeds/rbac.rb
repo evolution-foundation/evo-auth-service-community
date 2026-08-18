@@ -73,23 +73,27 @@ end
 agent_permissions = [
   # Operational reads previously inherited via BASIC_READ_PERMISSIONS. Now that
   # the split removed users.read/inboxes.read from BASIC, the agent role grants
-  # them explicitly. conversations.read_all preserves the current behavior of
-  # agents seeing every inbox (the per-inbox restriction is opt-in: it only
-  # applies to roles WITHOUT conversations.read_all). NOTE: users.manage is
-  # intentionally NOT granted — agents do not see the administrative panel.
+  # them explicitly. The agent is SECURE-BY-DEFAULT for inbox visibility: it does
+  # NOT get conversations.read_all, so it sees only the inboxes it is a member of
+  # (User#assigned_inboxes) — an agent with no membership sees nothing until it is
+  # assigned. account_owner/super_admin still see everything (read_all grant +
+  # administrator?). NOTE: users.manage is intentionally NOT granted — agents do
+  # not see the administrative panel.
   'users.read',
-  'conversations.read_all',
-  'conversations.read', 'conversations.create', 'conversations.update', 'conversations.delete',
+  'conversations.read', 'conversations.create', 'conversations.update',
   'conversations.meta', 'conversations.search', 'conversations.filter', 'conversations.available_for_pipeline',
   'conversations.mute', 'conversations.unmute', 'conversations.transcript', 'conversations.toggle_status',
   'conversations.toggle_priority', 'conversations.toggle_typing_status', 'conversations.update_last_seen',
   'conversations.unread', 'conversations.custom_attributes', 'conversations.attachments', 'conversations.inbox_assistant',
   'conversations.import',
-  'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete',
+  'contacts.read', 'contacts.create', 'contacts.update',
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
   'pipelines.read',
-  'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
+  # pipeline_stages.delete is NOT granted: deleting a funnel stage is a destructive
+  # restructuring of the shared pipeline, not attendance. Create/update stay for the
+  # kanban experience.
+  'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update',
   # accounts.update is administrative (Settings > Account) and deliberately
   # NOT granted; PATCH /api/v1/account enforces it.
   'accounts.read',
@@ -101,7 +105,7 @@ agent_permissions = [
   # which is a manager/settings action, not attendance (CRM-190). macros.execute
   # stays — running a macro is attendance. A macro an agent CREATES is forced to
   # `personal` (CRM Macro#set_visibility), so it is not shared: the CRM lets its
-  # owner delete it without macros.delete (MacrosController#authorize_destroy!).
+  # owner delete it without macros.delete (MacrosController#check_destroy_permission!).
   # EVO-1955 will split the remaining use-vs-manage gating so agents keep chat
   # usage but lose the Settings screens.
   'labels.read', 'labels.create', 'labels.update',
@@ -109,9 +113,10 @@ agent_permissions = [
   'message_templates.read', 'message_templates.create', 'message_templates.update',
   'macros.read', 'macros.create', 'macros.update', 'macros.execute',
   # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
-  # operational and kept here; team_members enforcement consolidated into teams.*
-  # (EVO-2070), and the Teams Settings screen split is EVO-1955.
-  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
+  # operational and kept here (also in BASIC_READ_PERMISSIONS). Create/update/delete
+  # are NOT granted: creating, renaming and deleting teams — and managing members via
+  # team_members, gated by teams.update — is a manager/settings action, not attendance.
+  'teams.read',
   'inboxes.read'
   # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
   # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)

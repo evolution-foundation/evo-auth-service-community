@@ -40,23 +40,37 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).not_to include('pipelines.delete')
     end
 
-    it 'keeps the related stage-level permissions for the kanban experience' do
-      %w[pipeline_stages.read pipeline_stages.create pipeline_stages.update pipeline_stages.delete].each do |key|
+    it 'keeps stage read/create/update for the kanban experience but NOT the destructive stage delete' do
+      %w[pipeline_stages.read pipeline_stages.create pipeline_stages.update].each do |key|
         expect(agent_permissions).to include(key)
       end
+      expect(agent_permissions).not_to include('pipeline_stages.delete')
     end
   end
 
   describe 'agent role sanity-check for adjacent areas (regression guard)' do
-    it 'keeps conversations CRUD (otherwise agents cannot do their job)' do
-      %w[conversations.read conversations.create conversations.update conversations.delete].each do |key|
+    it 'keeps conversations read/create/update but NOT the destructive delete (least-privilege)' do
+      %w[conversations.read conversations.create conversations.update].each do |key|
         expect(agent_permissions).to include(key)
       end
+      # Closing/resolving a conversation is conversations.toggle_status (kept), not delete.
+      expect(agent_permissions).to include('conversations.toggle_status')
+      expect(agent_permissions).not_to include('conversations.delete')
     end
 
-    it 'keeps contacts CRUD (agents need to manage contacts)' do
-      %w[contacts.read contacts.create contacts.update contacts.delete].each do |key|
+    it 'keeps contacts read/create/update but NOT the destructive delete (least-privilege)' do
+      %w[contacts.read contacts.create contacts.update].each do |key|
         expect(agent_permissions).to include(key)
+      end
+      expect(agent_permissions).not_to include('contacts.delete')
+    end
+
+    it 'grants only teams.read — the agent must not create/update/delete teams or manage members' do
+      # teams.update also gates team_members (add/remove members). Creating, renaming
+      # and deleting teams is a manager/settings action, not attendance.
+      expect(agent_permissions).to include('teams.read')
+      %w[teams.create teams.update teams.delete].each do |key|
+        expect(agent_permissions).not_to include(key)
       end
     end
 
@@ -151,8 +165,9 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
   # RBAC permission split (tech-spec rbac-granular-inbox-permissions).
   # users.read / inboxes.read were removed from BASIC_READ_PERMISSIONS, so the
   # seeded roles must now grant them explicitly. conversations.read_all is the
-  # opt-in that preserves "see all inboxes" for the default roles. users.manage
-  # is the administrative gate and must NOT reach the agent role.
+  # see-all-inboxes grant; it is SECURE-BY-DEFAULT withheld from the agent (which
+  # then sees only its member inboxes), while account_owner/super_admin keep it.
+  # users.manage is the administrative gate and must NOT reach the agent role.
   describe 'agent role — RBAC split (operational reads, no admin gate)' do
     it 'explicitly grants users.read (operational read for the Conversations screen)' do
       expect(agent_permissions).to include('users.read')
@@ -162,8 +177,10 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).to include('inboxes.read')
     end
 
-    it 'grants conversations.read_all so agents keep seeing every inbox by default' do
-      expect(agent_permissions).to include('conversations.read_all')
+    it 'does NOT grant conversations.read_all (secure-by-default: agent sees only its member inboxes)' do
+      # Without read_all, User#assigned_inboxes returns only the agent's inbox_members
+      # (none => sees nothing until assigned). account_owner/super_admin keep read_all.
+      expect(agent_permissions).not_to include('conversations.read_all')
     end
 
     it 'does NOT grant users.manage (agents never see the administrative panel)' do
