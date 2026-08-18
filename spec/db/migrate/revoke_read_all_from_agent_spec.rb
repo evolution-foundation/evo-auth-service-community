@@ -87,6 +87,8 @@ RSpec.describe RevokeReadAllFromAgent do
     it 'announces that the blast radius was NOT assessed when inbox_members is absent' do
       # The auth schema carries no inbox table, so this is the path a pure-auth
       # install takes. Staying silent here would read as "nothing to worry about".
+      # Depends on inbox_members NOT existing in the test database — the block
+      # below creates it per example and rolls it back.
       agent = Role.find_by!(key: 'agent')
       to_pre_fix_state(agent)
 
@@ -99,6 +101,120 @@ RSpec.describe RevokeReadAllFromAgent do
       Role.where(key: 'agent').destroy_all
 
       expect { migration.up }.not_to raise_error
+    end
+
+    # inbox_members is a CRM table that this schema never carries, so without a
+    # stand-in the count is skipped and the SQL never runs. Creating the table
+    # inside the example (rolled back with the transaction) makes the guard pass
+    # and pins the query against the CRM schema as mirrored here (a change on the
+    # CRM side only shows up once this mirror is updated — a cross-repo contract
+    # test is out of reach for this repo).
+    describe 'blast-radius telemetry against a real inbox_members table' do
+      let(:conn) { ActiveRecord::Base.connection }
+      let(:agent_role) { Role.find_by!(key: 'agent') }
+
+      before do
+        # Mirrors evo-ai-crm-community db/schema.rb:632-639. The auth schema never
+        # carries this table, so a leftover one is a leak, not a shared fixture:
+        # drop it instead of tolerating a shape nobody checked.
+        conn.drop_table(:inbox_members, if_exists: true)
+        conn.create_table(:inbox_members, id: :uuid) do |t|
+          t.uuid :user_id, null: false
+          t.uuid :inbox_id, null: false
+          t.datetime :created_at, precision: nil, null: false
+          t.datetime :updated_at, precision: nil, null: false
+          t.index %i[inbox_id user_id], unique: true
+        end
+        to_pre_fix_state(agent_role)
+      end
+
+      def build_agent(name)
+        user = User.create!(
+          name: name, email: "#{name.parameterize}-#{SecureRandom.hex(4)}@example.com",
+          password: 'Str0ng!Passw0rd', password_confirmation: 'Str0ng!Passw0rd', confirmed_at: Time.current
+        )
+        UserRole.create!(user: user, role: agent_role)
+        user
+      end
+
+      def add_membership(user)
+        conn.execute(<<~SQL.squish)
+          INSERT INTO inbox_members (id, user_id, inbox_id, created_at, updated_at)
+          VALUES (gen_random_uuid(), #{conn.quote(user.id)}, gen_random_uuid(), now(), now())
+        SQL
+      end
+
+      it 'counts the agent-role users with zero memberships and warns with the exact number' do
+        build_agent('Sem Inbox Um')
+        build_agent('Sem Inbox Dois')
+        add_membership(build_agent('Com Inbox'))
+
+        expect(migration).to receive(:say).with(/CRM-181: 2 agent-role user\(s\) have ZERO inbox memberships/, true)
+
+        migration.up
+      end
+
+      it 'says it is safe to revoke once every agent-role user holds a membership' do
+        add_membership(build_agent('Com Inbox'))
+
+        expect(migration).to receive(:say).with(/safe to revoke read_all/, true)
+        expect(migration).not_to receive(:say).with(/ZERO inbox memberships/, true)
+
+        migration.up
+      end
+
+      it 'does not count users outside the agent role' do
+        # A user without inbox_members but holding another role is out of scope.
+        owner = Role.find_by!(key: 'account_owner')
+        user = User.create!(
+          name: 'Dona', email: "dona-#{SecureRandom.hex(4)}@example.com",
+          password: 'Str0ng!Passw0rd', password_confirmation: 'Str0ng!Passw0rd', confirmed_at: Time.current
+        )
+        UserRole.create!(user: user, role: owner)
+        add_membership(build_agent('Com Inbox'))
+
+        expect(migration).to receive(:say).with(/safe to revoke read_all/, true)
+
+        migration.up
+      end
+
+      it 'still revokes read_all after counting' do
+        build_agent('Sem Inbox')
+
+        migration.up
+
+        expect(keys(agent_role)).not_to include('conversations.read_all')
+      end
+
+      # The CRM owns inbox_members: if it ever renames the column, the count must
+      # degrade to a warning and the revoke must still happen — the failed
+      # statement runs in a savepoint so it cannot abort the migration.
+      it 'warns and still revokes when the CRM column drifted' do
+        conn.rename_column(:inbox_members, :user_id, :member_id)
+        build_agent('Sem Inbox')
+
+        # The error class and the offending column are the operator's whole lead:
+        # a message that only says "could not count" sends nobody anywhere.
+        expect(migration).to receive(:say).with(
+          /could not count agents without inbox membership \(ActiveRecord::StatementInvalid: .*user_id.*\); revoking read_all anyway/m,
+          true
+        )
+
+        expect { migration.up }.not_to raise_error
+        expect(keys(agent_role)).not_to include('conversations.read_all')
+      end
+
+      # db:migrate runs `up` inside a JOINABLE transaction, where the count needs
+      # its own savepoint; the fixture transaction here is non-joinable, so it
+      # would get one even without `requires_new: true`. Reproducing the joinable
+      # shape is what makes dropping that flag fail here instead of in a deploy.
+      it 'warns and still revokes inside a joinable transaction (as db:migrate runs it)' do
+        conn.rename_column(:inbox_members, :user_id, :member_id)
+        build_agent('Sem Inbox')
+
+        expect { conn.transaction(requires_new: true) { migration.up } }.not_to raise_error
+        expect(keys(agent_role)).not_to include('conversations.read_all')
+      end
     end
   end
 
