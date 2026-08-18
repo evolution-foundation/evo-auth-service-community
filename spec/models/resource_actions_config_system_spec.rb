@@ -4,12 +4,13 @@ require 'rails_helper'
 
 # EVO-2070 RBAC catalog hygiene (+ EVO-2072 agents→ai_agents consolidation).
 # Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 327 permission keys across 50 resources.
+#   1) the trimmed catalog holds exactly 329 permission keys across 51 resources.
 #      277 came from the EVO-2070 hygiene pass, plus the 4 granular actions of
-#      the integration credential vault (EVO-2250) = 281; EVO-2127 then adds one
-#      coarse `write` leaf to each resource that has a manageable (non-system)
-#      granular write (46 of 50) to back the role editor's read/write/delete
-#      groups → 281 + 46 = 327. The 4 all-system/read-only resources (installation_configs,
+#      the integration credential vault (EVO-2250) = 281, plus pipeline_items.update
+#      (the dedicated pipeline-card write key — CRM-178) = 282; EVO-2127 then adds
+#      one coarse `write` leaf to each resource that has a manageable (non-system)
+#      granular write (47 of 51, now incl. pipeline_items) to back the role editor's
+#      read/write/delete groups → 282 + 47 = 329. The 4 all-system/read-only resources (installation_configs,
 #      ai_agent_processor, ai_chat_sessions, ai_a2a_protocol) get no write leaf —
 #      a coarse write there would render an un-grantable checkbox. NOTE: the
 #      earlier 262/47 target assumed ai_tools,
@@ -22,12 +23,12 @@ require 'rails_helper'
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 327 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(327)
+    it 'exposes exactly 329 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(329)
     end
 
-    it 'exposes exactly 50 resources' do
-      expect(described_class.all_resources.size).to eq(50)
+    it 'exposes exactly 51 resources' do
+      expect(described_class.all_resources.size).to eq(51)
     end
 
     it 'adds a manageable, non-system coarse write to resources with a granular write (EVO-2127)' do

@@ -34,7 +34,11 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).to include('pipelines.read')
     end
 
-    it 'does NOT include pipelines.update, .create, or .delete (destructive endpoints stay admin-only)' do
+    it 'grants pipeline_items.update (dedicated card-write key) but NOT the manager-level pipelines.update/.create/.delete' do
+      # Card writes (move/create/edit) gate on pipeline_items.update in the CRM
+      # (PipelinePolicy#update_items?); pipelines.update stays the manager power to
+      # reshape/archive the funnel and is deliberately withheld (CRM-178).
+      expect(agent_permissions).to include('pipeline_items.update')
       expect(agent_permissions).not_to include('pipelines.update')
       expect(agent_permissions).not_to include('pipelines.create')
       expect(agent_permissions).not_to include('pipelines.delete')
