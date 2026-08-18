@@ -99,12 +99,19 @@ agent_permissions = [
   'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
   # Operational resources used inside conversations (quick-replies, labels, macros,
-  # templates, and team assignment) stay with the agent. EVO-1955 will split their
-  # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
-  'labels.read', 'labels.create', 'labels.update', 'labels.delete',
-  'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
-  'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
-  'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
+  # templates, and team assignment) stay with the agent for read/create/update.
+  # The destructive delete of each is NOT granted: deleting a shared asset affects
+  # the whole account (e.g. deleting a label removes it from every conversation),
+  # which is a manager/settings action, not attendance (CRM-190). macros.execute
+  # stays — running a macro is attendance. A macro an agent CREATES is forced to
+  # `personal` (CRM Macro#set_visibility), so it is not shared: the CRM lets its
+  # owner delete it without macros.delete (MacrosController#check_destroy_permission!).
+  # EVO-1955 will split the remaining use-vs-manage gating so agents keep chat
+  # usage but lose the Settings screens.
+  'labels.read', 'labels.create', 'labels.update',
+  'canned_responses.read', 'canned_responses.create', 'canned_responses.update',
+  'message_templates.read', 'message_templates.create', 'message_templates.update',
+  'macros.read', 'macros.create', 'macros.update', 'macros.execute',
   # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
   # operational and kept here (also in BASIC_READ_PERMISSIONS). Create/update/delete
   # are NOT granted: creating, renaming and deleting teams — and managing members via

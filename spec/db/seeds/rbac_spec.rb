@@ -78,6 +78,20 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).not_to include('accounts.delete')
       expect(agent_permissions).not_to include('accounts.create')
     end
+
+    it 'keeps read/create/update + macros.execute for shared assets but NOT their destructive delete (CRM-190)' do
+      # Deleting a shared asset affects the whole account (e.g. deleting a label
+      # removes it from every conversation) — a manager action, not attendance.
+      %w[labels.read labels.create labels.update
+         canned_responses.read canned_responses.create canned_responses.update
+         message_templates.read message_templates.create message_templates.update
+         macros.read macros.create macros.update macros.execute].each do |key|
+        expect(agent_permissions).to include(key)
+      end
+      %w[labels.delete macros.delete canned_responses.delete message_templates.delete].each do |key|
+        expect(agent_permissions).not_to include(key)
+      end
+    end
   end
 
   # AC5 of EVO-1060: "No regression for account_owner or super_admin (they
