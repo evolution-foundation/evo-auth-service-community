@@ -15,7 +15,7 @@
 #
 # Operational resources used inside conversations (labels, canned_responses,
 # macros, message_templates) are deliberately NOT revoked — removing them would
-# break the chat. Their use-vs-manage split is the EVO-1955 follow-up.
+# break the chat. Their use-vs-manage split landed with CRM-70.
 #
 # Pattern mirrors GrantRbacSplitPermissionsToExistingRoles (20260622120001):
 # idempotent (exists-before-destroy), no-op when the table/role is absent.

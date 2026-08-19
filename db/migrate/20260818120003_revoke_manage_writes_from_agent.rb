@@ -4,7 +4,7 @@
 # templates. Product decision (2026-08-18): the attendance role USES them in the
 # chat (macros.read + macros.execute, message_templates.read) but does not MANAGE
 # them; create/update and the Settings screens now belong to `<resource>.manage`,
-# granted to admin roles only (GrantManageActionsToAdminRoles). Labels, canned
+# granted to admin and managing roles (GrantManageActionsToManagingRoles). Labels, canned
 # responses and teams are untouched here: the agent manages the first two by the
 # same decision, and teams write was already revoked (CRM-182).
 #
