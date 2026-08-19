@@ -354,7 +354,9 @@ class ResourceActionsConfig
         read: { name: 'View', description: 'View teams and member information' },
         create: { name: 'Create', description: 'Create new teams' },
         update: { name: 'Update', description: 'Update team information' },
-        delete: { name: 'Delete', description: 'Delete teams' }
+        delete: { name: 'Delete', description: 'Delete teams' },
+        # Settings screen access; the chat picker only needs read (CRM-70).
+        manage: { name: 'Manage', description: 'Administer teams via Settings' }
       }
     },
 
@@ -377,7 +379,9 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new macros' },
         update: { name: 'Update', description: 'Update macro configurations' },
         delete: { name: 'Delete', description: 'Delete macros' },
-        execute: { name: 'Execute', description: 'Execute macros on conversations' }
+        execute: { name: 'Execute', description: 'Execute macros on conversations' },
+        # Settings screen + create/update; running one from the chat only needs execute (CRM-70).
+        manage: { name: 'Manage', description: 'Administer macros via Settings' }
       }
     },
 
@@ -399,7 +403,9 @@ class ResourceActionsConfig
         read: { name: 'View', description: 'View global message templates' },
         create: { name: 'Create', description: 'Create global message templates' },
         update: { name: 'Update', description: 'Update global message templates' },
-        delete: { name: 'Delete', description: 'Delete global message templates' }
+        delete: { name: 'Delete', description: 'Delete global message templates' },
+        # Settings screen + create/update; sending one from the chat only needs read (CRM-70).
+        manage: { name: 'Manage', description: 'Administer message templates via Settings' }
       }
     },
 
@@ -722,7 +728,10 @@ class ResourceActionsConfig
 
   STANDALONE_ACTIONS_BY_RESOURCE = {
     conversations: %i[read_all].to_set,
-    users: %i[manage].to_set
+    users: %i[manage].to_set,
+    macros: %i[manage].to_set,
+    message_templates: %i[manage].to_set,
+    teams: %i[manage].to_set
   }.freeze
 
   # A granular action is a manageable write when it mutates the resource AND is

@@ -83,16 +83,29 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(agent_permissions).not_to include('accounts.create')
     end
 
-    it 'keeps read/create/update + macros.execute for shared assets but NOT their destructive delete (CRM-190)' do
+    it 'keeps read/create/update for labels and canned responses but NOT their destructive delete (CRM-190)' do
       # Deleting a shared asset affects the whole account (e.g. deleting a label
       # removes it from every conversation) — a manager action, not attendance.
+      # By product decision (CRM-70) the agent manages its own labels and canned
+      # responses, so create/update stay.
       %w[labels.read labels.create labels.update
-         canned_responses.read canned_responses.create canned_responses.update
-         message_templates.read message_templates.create message_templates.update
-         macros.read macros.create macros.update macros.execute].each do |key|
+         canned_responses.read canned_responses.create canned_responses.update].each do |key|
         expect(agent_permissions).to include(key)
       end
       %w[labels.delete macros.delete canned_responses.delete message_templates.delete].each do |key|
+        expect(agent_permissions).not_to include(key)
+      end
+    end
+
+    # CRM-70 use-vs-manage: the agent USES macros and templates in the chat but
+    # does not manage them — create/update and the Settings screen are `.manage`.
+    it 'keeps macros.read/execute and message_templates.read but not create/update nor manage' do
+      %w[macros.read macros.execute message_templates.read].each do |key|
+        expect(agent_permissions).to include(key)
+      end
+      %w[macros.create macros.update macros.manage
+         message_templates.create message_templates.update message_templates.manage
+         teams.manage].each do |key|
         expect(agent_permissions).not_to include(key)
       end
     end
@@ -195,8 +208,8 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
   # EVO-1938: administrative Settings resources must not reach the default agent.
   # The frontend routes/menu and the CRM controllers gate by these permission
   # keys, so granting them is exactly what let an attendant see/manage admin-only
-  # Settings screens. Operational resources used inside conversations stay (their
-  # use-vs-manage split is the EVO-1955 follow-up).
+  # Settings screens. Operational resources used inside conversations stay; the
+  # use-vs-manage split of macros/templates/teams landed with CRM-70.
   describe 'agent role — EVO-1938 administrative Settings exclusion' do
     # `agents` became `ai_agents` (EVO-2072 consolidated the dead twin); the guard
     # tracks the surviving resource — the attendant must not manage AI agents.
@@ -233,6 +246,13 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
 
     it 'account_owner receives conversations.read_all automatically' do
       expect(account_owner_permissions).to include('conversations.read_all')
+    end
+
+    it 'admin roles receive the CRM-70 manage keys automatically' do
+      %w[macros.manage message_templates.manage teams.manage].each do |key|
+        expect(account_owner_permissions).to include(key)
+        expect(super_admin_permissions).to include(key)
+      end
     end
 
     it 'super_admin holds users.manage and conversations.read_all' do
