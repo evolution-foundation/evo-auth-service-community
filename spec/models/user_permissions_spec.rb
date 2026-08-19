@@ -187,6 +187,14 @@ RSpec.describe ResourceActionsConfig, type: :model do
       expect(described_class.valid_permission?('conversations.read_all')).to be(true)
     end
 
+    # CRM-70 use-vs-manage: the CRM controllers and both frontends gate on these
+    # by name, so an off-catalog key would 403 every user at runtime.
+    it 'recognises the use-vs-manage keys (CRM-70)' do
+      %w[macros.manage message_templates.manage teams.manage].each do |key|
+        expect(described_class.valid_permission?(key)).to be(true)
+      end
+    end
+
     it 'still rejects a bogus key' do
       expect(described_class.valid_permission?('users.does_not_exist')).to be(false)
     end
