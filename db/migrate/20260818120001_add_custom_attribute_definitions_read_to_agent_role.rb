@@ -1,26 +1,17 @@
 # frozen_string_literal: true
 
-# Backfills `custom_attribute_definitions.read` to the `agent` role on
-# already-bootstrapped installations (CRM-166).
+# Backfills `custom_attribute_definitions.read` to the `agent` role (CRM-166).
 #
-# The agent role already WRITES custom attribute values
-# (conversations.custom_attributes, contacts.destroy_custom_attributes) but never
-# received the read on the DEFINITIONS, which is what
-# Api::V1::CustomAttributeDefinitionsController#index gates on in the CRM. The
-# 403 surfaced in the UI as "no custom attributes", so a contact's attributes were
-# only visible inside the edit form (which falls back to rendering raw keys).
-#
-# New installations pick this up from db/seeds/rbac.rb; existing ones run
-# `db:migrate` and not `db:seed`, so they need this data migration.
-#
-# Idempotent: SELECT-before-INSERT, no-op if the role is missing (not yet
-# bootstrapped — the seed covers it on first install).
+# The role already WRITES custom attribute values but held no read on the
+# DEFINITIONS, which Api::V1::CustomAttributeDefinitionsController#index gates on,
+# so the CRM rendered the 403 as "no custom attributes". Fresh installs pick the key
+# up from db/seeds/rbac.rb; already-bootstrapped ones run `db:migrate` without
+# `db:seed`, so they need this data migration.
 class AddCustomAttributeDefinitionsReadToAgentRole < ActiveRecord::Migration[7.1]
   PERMISSION_KEY = 'custom_attribute_definitions.read'
 
   def up
-    # Fresh installs hit this migration before init_schema (timestamp 9025…)
-    # has run, so `roles` may not exist yet — seed will cover it later.
+    # No-op on a database that is not bootstrapped yet — the seed covers it there.
     return unless ActiveRecord::Base.connection.table_exists?(:roles)
     return unless ActiveRecord::Base.connection.table_exists?(:role_permissions_actions)
 

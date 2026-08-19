@@ -279,12 +279,9 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
     end
   end
 
-  # CRM-166. The agent writes custom attribute VALUES but held no read on the
-  # DEFINITIONS, which is what the CRM's index endpoint gates on. The 403 reached
-  # the UI as "no custom attributes", so a contact's attributes only showed up
-  # inside the edit form. The write keys below are the evidence the omission was a
-  # gap and not a policy: granting the value writes without the definition read is
-  # not a coherent permission set.
+  # CRM-166. The value-write keys asserted below are the evidence the missing read
+  # was a gap and not a policy: writing values without reading the definitions that
+  # describe them is not a coherent permission set.
   describe 'custom_attribute_definitions.read — CRM-166' do
     it 'is a valid permission registered in ResourceActionsConfig' do
       expect(ResourceActionsConfig.valid_permission?('custom_attribute_definitions.read')).to be true

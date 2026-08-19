@@ -3,10 +3,8 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20260818120001_add_custom_attribute_definitions_read_to_agent_role.rb')
 
-# CRM-166. The agent role wrote custom attribute values but held no read on the
-# definitions, so the CRM's index endpoint 403'd and the read-only screens showed
-# "no attributes". This pins the backfill for bootstrapped installations, which
-# run `db:migrate` and never re-run the seed.
+# CRM-166. Pins the backfill for already-bootstrapped installations, which run
+# `db:migrate` and never re-run the seed.
 RSpec.describe AddCustomAttributeDefinitionsReadToAgentRole do
   let(:migration) { described_class.new }
   let(:key) { described_class::PERMISSION_KEY }
@@ -53,8 +51,8 @@ RSpec.describe AddCustomAttributeDefinitionsReadToAgentRole do
     end
 
     it 'is a no-op when the agent role is missing' do
-      # System roles abort `destroy` (before_destroy guard), which would leave the
-      # row in place and make this example vacuous — drop the flag first.
+      # System roles abort `destroy`, which would leave the row in place and make
+      # this example vacuous — drop the flag first.
       Role.find_by!(key: 'agent').update_column(:system, false)
       Role.find_by!(key: 'agent').destroy!
       expect(Role.find_by(key: 'agent')).to be_nil
