@@ -278,4 +278,35 @@ RSpec.describe 'db/seeds/rbac.rb', type: :model do
       expect(super_admin_permissions).to include('conversations.import')
     end
   end
+
+  # CRM-166. The value-write keys asserted below are the evidence the missing read
+  # was a gap and not a policy: writing values without reading the definitions that
+  # describe them is not a coherent permission set.
+  describe 'custom_attribute_definitions.read — CRM-166' do
+    it 'is a valid permission registered in ResourceActionsConfig' do
+      expect(ResourceActionsConfig.valid_permission?('custom_attribute_definitions.read')).to be true
+    end
+
+    it 'is granted to the agent role' do
+      expect(agent_permissions).to include('custom_attribute_definitions.read')
+    end
+
+    it 'pairs with the custom-attribute VALUE writes the agent already had' do
+      expect(agent_permissions).to include('conversations.custom_attributes')
+      expect(agent_permissions).to include('contacts.destroy_custom_attributes')
+    end
+
+    it 'does NOT grant create/update/delete (managing definitions stays administrative)' do
+      %w[
+        custom_attribute_definitions.create
+        custom_attribute_definitions.update
+        custom_attribute_definitions.delete
+      ].each { |key| expect(agent_permissions).not_to include(key) }
+    end
+
+    it 'is granted to account_owner and super_admin via all_permission_keys' do
+      expect(account_owner_permissions).to include('custom_attribute_definitions.read')
+      expect(super_admin_permissions).to include('custom_attribute_definitions.read')
+    end
+  end
 end
