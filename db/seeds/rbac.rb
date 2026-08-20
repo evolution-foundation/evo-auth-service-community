@@ -91,7 +91,8 @@ agent_permissions = [
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
   # CRM-166: the agent writes attribute VALUES but had no read on the definitions,
   # so GET /custom_attribute_definitions 403'd and read-only screens rendered "no
-  # attributes". Read only — this also exposes the Settings list screen to the agent.
+  # attributes". Read only: create/update/delete stay administrative, and the CRM Settings
+  # screen is gated on those, not on this key.
   'custom_attribute_definitions.read',
   'pipelines.read',
   # Card writes gate on pipeline_items.update (its own key), NOT pipelines.update —
