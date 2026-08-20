@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20260818120001_add_custom_attribute_definitions_read_to_agent_role.rb')
+require Rails.root.join('db/migrate/20260818120005_add_custom_attribute_definitions_read_to_agent_role.rb')
 
 # CRM-166. Pins the backfill for already-bootstrapped installations, which run
 # `db:migrate` and never re-run the seed.
