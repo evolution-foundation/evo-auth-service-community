@@ -15,13 +15,40 @@ set -e
 
 # Compare against "false" (not == "true") so that TRUE/1/typos still migrate —
 # the fail-safe default must never be silently disabled by a malformed value.
+#
+# CRM-216: only CREATE the database when it is not already there. `evo_app` is
+# NOCREATEDB by design (the live role behind RLS), and db:create cannot survive
+# that on its own: the privilege check raises PG::InsufficientPrivilege before
+# Postgres ever answers DuplicateDatabase, and CREATE DATABASE needs the
+# CREATEDB *role attribute*, not ownership.
+database_reachable() {
+  bundle exec rails db:version >/dev/null 2>&1
+}
+
 if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
-  echo "[evo-auth-entrypoint] Preparing database (db:create + db:migrate)..."
+  echo "[evo-auth-entrypoint] Preparing database..."
   n=0
+  reached=0
   until [ "$n" -ge 30 ]; do
-    if bundle exec rails db:create db:migrate; then
-      echo "[evo-auth-entrypoint] Migrations applied."
-      break
+    # Probe at most once: after the first success the database is known to be
+    # there, so re-probing each attempt only buys another Rails boot.
+    if [ "$reached" = 1 ] || database_reachable; then
+      reached=1
+      if bundle exec rails db:migrate; then
+        echo "[evo-auth-entrypoint] Migrations applied."
+        break
+      fi
+    else
+      # Either the server is still starting (what the 30 attempts are for) or
+      # this is a fresh install, where the role usually may create.
+      echo "[evo-auth-entrypoint] Database not reachable; attempting to create it..."
+      if bundle exec rails db:create; then
+        reached=1
+        if bundle exec rails db:migrate; then
+          echo "[evo-auth-entrypoint] Database created and migrations applied."
+          break
+        fi
+      fi
     fi
     n=$((n + 1))
     echo "[evo-auth-entrypoint] database unavailable or migrate failed — attempt ${n}/30; waiting 2s..."
@@ -32,6 +59,15 @@ if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
   # retry, instead of starting Puma against an outdated database.
   if [ "$n" -ge 30 ]; then
     echo "[evo-auth-entrypoint] ERROR: migrations did not complete after 30 attempts; aborting boot." >&2
+    # CRM-216: this failure read exactly like "Postgres is slow to start", so an
+    # operator had no way to know the create was refused on purpose.
+    if [ "$reached" = 0 ]; then
+      echo "[evo-auth-entrypoint] The database was never reachable. If the role is NOCREATEDB" >&2
+      echo "[evo-auth-entrypoint] (as evo_app is by design on the self-hosted box), this service" >&2
+      echo "[evo-auth-entrypoint] cannot create it: CREATE DATABASE needs the CREATEDB role" >&2
+      echo "[evo-auth-entrypoint] attribute, and changing the database owner does not grant it." >&2
+      echo "[evo-auth-entrypoint] Create the database out-of-band, then restart this service." >&2
+    fi
     exit 1
   fi
   # The installation owner (super_admin) has no RBAC bypass anywhere: their

@@ -5,7 +5,9 @@ on:
   pull_request:
     paths:
       - "Dockerfile"
-      - "bin/docker-entrypoint"
+      # The image entrypoint is docker-entrypoint.sh; bin/docker-entrypoint is
+      # deleted by the Dockerfile, so watching it triggered on nothing.
+      - "docker-entrypoint.sh"
       - "db/migrate/**"
       - "docker-compose.smoke-fresh.yml"
       - ".github/workflows/smoke-fresh.yml"
