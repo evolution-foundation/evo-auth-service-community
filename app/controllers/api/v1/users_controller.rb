@@ -134,18 +134,9 @@ class Api::V1::UsersController < Api::BaseController
     )
   end
 
-  # CRM-210: an admin sets another user's password directly, without the target
-  # having to receive an e-mail. Gated on users.reset_password (standalone key —
-  # `users.write` does not imply it) PLUS users.manage via administrative_action?.
-  #
-  # Three guards, in this order:
-  #   1. never on yourself — self-service has its own flow and this endpoint
-  #      would otherwise let a caller keep its own session alive while rotating;
-  #   2. never on a super_admin, unless the caller is one too (anti-escalation:
-  #      an account_owner must not take over the installation's top account);
-  #   3. the password still goes through the model's own complexity validation.
-  # On success every active token of the TARGET is revoked, so a stolen session
-  # cannot outlive the reset.
+  # CRM-210: admin sets another user's password. users.manage is required on top
+  # of users.reset_password via administrative_action?. Revoking the target's
+  # sessions is deliberate — a stolen one must not outlive the reset.
   def set_password
     password = params[:password].to_s
     confirmation = params[:password_confirmation].to_s
@@ -235,7 +226,7 @@ class Api::V1::UsersController < Api::BaseController
       'bulk_create' => 'users.bulk_operations',
       'check_permission' => 'users.read',
       'role' => 'users.read',
-      # CRM-210: own key, never implied by users.write (standalone in the catalog).
+      # CRM-210: standalone key, never implied by users.write.
       'set_password' => 'users.reset_password'
     }
 
@@ -272,9 +263,7 @@ class Api::V1::UsersController < Api::BaseController
   # leaves the role set untouched must not trip the administrative gate (a
   # users.update-only caller renaming a user would 403 otherwise).
   def administrative_action?
-    # CRM-210: setting someone else's password is administrative by nature — it
-    # requires users.manage on top of the fine users.reset_password key, same as
-    # creating or deleting an agent.
+    # CRM-210: set_password is administrative, like create/destroy.
     return true if %w[create destroy bulk_create set_password].include?(action_name)
     return false unless action_name == 'update' && params[:role].present?
 

@@ -2,11 +2,9 @@
 
 require 'rails_helper'
 
-# CRM-210 — an admin sets another user's password directly (no e-mail round
-# trip). Taking over an account is a bigger power than editing its profile, so
-# the endpoint is gated on TWO keys (users.reset_password, standalone in the
-# catalog, plus users.manage) and refuses three cases outright: yourself, a
-# super_admin you do not outrank, and a password the model rejects.
+# CRM-210 — the endpoint needs BOTH users.reset_password and users.manage, and
+# refuses three targets outright: yourself, a super_admin you do not outrank,
+# and a password the model rejects.
 RSpec.describe 'Users set_password (CRM-210)', type: :request do
   # Roles come from data migrations, which a schema-loaded database never runs.
   before { load Rails.root.join('db/seeds/rbac.rb') }
@@ -137,11 +135,8 @@ RSpec.describe 'Users set_password (CRM-210)', type: :request do
   end
 
   describe 'session invalidation' do
-    # Login sessions are Doorkeeper::AccessToken (AuthHelper#create_access_token);
-    # the app's own AccessToken is an integration API key (Access Tokenable's
-    # "Default"), NOT a session. Only the former dies with the reset — revoking
-    # a customer's API keys because an admin rotated their password would break
-    # integrations that have nothing to do with the login.
+    # Doorkeeper::AccessToken is a login session; the app's own AccessToken is an
+    # integration API key. Only the session dies with the reset.
     it "revokes the target's login sessions so a stolen one dies with the reset" do
       target = build_user('Session Target')
       # oauth_access_tokens.application_id is NOT NULL, so a session always

@@ -34,10 +34,8 @@ class ResourceActionsConfig
         remove_avatar: { name: 'Remove Avatar', description: 'Remove user profile avatar' },
         create_account_user: { name: 'Create Account User', description: 'Create account user associations' },
         manage: { name: 'Manage', description: 'Administer users via Settings (view/manage agents panel)' },
-        # CRM-210: setting another user's password directly. Deliberately its own
-        # key AND standalone (see STANDALONE_ACTIONS_BY_RESOURCE) — holding the
-        # coarse `users.write` must NOT confer it, because taking over an account
-        # is a bigger power than editing its profile.
+        # CRM-210: standalone (see STANDALONE_ACTIONS_BY_RESOURCE) so `users.write`
+        # never confers it — account takeover is granted on purpose, never implied.
         reset_password: { name: 'Reset Password', description: "Set another user's password directly (admin)" }
       }
     },
@@ -733,8 +731,7 @@ class ResourceActionsConfig
 
   STANDALONE_ACTIONS_BY_RESOURCE = {
     conversations: %i[read_all].to_set,
-    # CRM-210: reset_password is standalone so the coarse `users.write` never
-    # implies it — account takeover has to be granted on purpose.
+    # CRM-210: standalone so the coarse `users.write` never implies it.
     users: %i[manage reset_password].to_set,
     macros: %i[manage].to_set,
     message_templates: %i[manage].to_set,
