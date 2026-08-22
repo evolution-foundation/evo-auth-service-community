@@ -138,6 +138,17 @@ class Api::V1::UsersController < Api::BaseController
   # of users.reset_password via administrative_action?. Revoking the target's
   # sessions is deliberate — a stolen one must not outlive the reset.
   def set_password
+    # Target guards run BEFORE input validation: a caller who may not touch this
+    # user gets 403, not a 422 teaching it the password policy first.
+    if @user.id == current_user.id
+      return error_response('FORBIDDEN', 'Use the account settings flow to change your own password',
+                            status: :forbidden)
+    end
+
+    if target_outranks_caller?
+      return error_response('FORBIDDEN', "You cannot set a super_admin's password", status: :forbidden)
+    end
+
     password = params[:password].to_s
     confirmation = params[:password_confirmation].to_s
 
@@ -147,15 +158,6 @@ class Api::V1::UsersController < Api::BaseController
       return error_response('VALIDATION_ERROR', 'Password confirmation does not match',
                             details: [{ field: 'password_confirmation', message: 'does not match password' }],
                             status: :unprocessable_entity)
-    end
-
-    if @user.id == current_user.id
-      return error_response('FORBIDDEN', 'Use the account settings flow to change your own password',
-                            status: :forbidden)
-    end
-
-    if target_outranks_caller?
-      return error_response('FORBIDDEN', "You cannot set a super_admin's password", status: :forbidden)
     end
 
     @user.password = password

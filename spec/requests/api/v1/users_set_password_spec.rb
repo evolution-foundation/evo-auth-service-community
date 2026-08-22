@@ -125,6 +125,26 @@ RSpec.describe 'Users set_password (CRM-210)', type: :request do
       expect(target_user.reload.valid_password?(new_password)).to be(false)
     end
 
+    # The target guards come first: a caller that may not touch this user must
+    # get 403, not a 422 teaching it the password policy before the refusal.
+    it 'refuses your own card before looking at the password' do
+      admin = build_user('Self Admin', role: admin_role)
+
+      set_password_for(admin, admin, { password: '', password_confirmation: '' })
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it 'refuses a super_admin target before looking at the password' do
+      victim = build_user('Super Victim', role: admin_role)
+
+      set_password_for(victim, build_user('Full Admin', role: full_role),
+                       { password: 'weak', password_confirmation: 'other' })
+
+      expect(response).to have_http_status(:forbidden)
+      expect(victim.reload.valid_password?(password)).to be(true)
+    end
+
     # Admins do not get to bypass the model's complexity rule.
     it 'rejects a weak password' do
       set_password_for(target_user, build_user('Full Admin', role: full_role),
