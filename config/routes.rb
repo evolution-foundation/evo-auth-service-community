@@ -133,6 +133,10 @@ Rails.application.routes.draw do
         member do
           get :role
           post :check_permission
+          # CRM-210: admin sets another user's password directly. Distinct from
+          # the self-service flow (auth#forgot_password / auth#reset_password),
+          # which is token-based and needs no privileged caller.
+          post :set_password
         end
       end
 

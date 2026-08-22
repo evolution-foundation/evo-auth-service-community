@@ -134,7 +134,78 @@ class Api::V1::UsersController < Api::BaseController
     )
   end
 
+  # CRM-210: an admin sets another user's password directly, without the target
+  # having to receive an e-mail. Gated on users.reset_password (standalone key —
+  # `users.write` does not imply it) PLUS users.manage via administrative_action?.
+  #
+  # Three guards, in this order:
+  #   1. never on yourself — self-service has its own flow and this endpoint
+  #      would otherwise let a caller keep its own session alive while rotating;
+  #   2. never on a super_admin, unless the caller is one too (anti-escalation:
+  #      an account_owner must not take over the installation's top account);
+  #   3. the password still goes through the model's own complexity validation.
+  # On success every active token of the TARGET is revoked, so a stolen session
+  # cannot outlive the reset.
+  def set_password
+    password = params[:password].to_s
+    confirmation = params[:password_confirmation].to_s
+
+    return error_response('VALIDATION_ERROR', 'Password is required', status: :unprocessable_entity) if password.blank?
+
+    if password != confirmation
+      return error_response('VALIDATION_ERROR', 'Password confirmation does not match',
+                            details: [{ field: 'password_confirmation', message: 'does not match password' }],
+                            status: :unprocessable_entity)
+    end
+
+    if @user.id == current_user.id
+      return error_response('FORBIDDEN', 'Use the account settings flow to change your own password',
+                            status: :forbidden)
+    end
+
+    if target_outranks_caller?
+      return error_response('FORBIDDEN', "You cannot set a super_admin's password", status: :forbidden)
+    end
+
+    @user.password = password
+    @user.password_confirmation = confirmation
+
+    unless @user.save
+      # The model's password_complexity validation is what rejects weak input —
+      # this endpoint deliberately does not relax it for admins.
+      return error_response('VALIDATION_ERROR', @user.errors.full_messages.join(', '),
+                            status: :unprocessable_entity)
+    end
+
+    revoked = revoke_active_sessions_for(@user)
+
+    # Audit trail: who reset whose password, and how many sessions died with it.
+    Rails.logger.warn(
+      "[Users#set_password] actor=#{current_user.id} target=#{@user.id} revoked_tokens=#{revoked}"
+    )
+
+    success_response(
+      data: { success: true, revoked_sessions: revoked },
+      message: 'Password updated successfully. The user has been signed out of all sessions.'
+    )
+  end
+
   private
+
+  # Mirrors auth#reset_password: drop the cached validations first, then revoke,
+  # so a token cannot be served from cache after being revoked.
+  def revoke_active_sessions_for(user)
+    active = Doorkeeper::AccessToken.where(resource_owner_id: user.id, revoked_at: nil)
+    active.pluck(:token).each { |t| TokenValidationService.invalidate_cache_for_token(t) }
+    active.update_all(revoked_at: Time.current)
+  end
+
+  def target_outranks_caller?
+    target_super_admin = @user.roles.exists?(key: 'super_admin')
+    return false unless target_super_admin
+
+    !current_user.roles.exists?(key: 'super_admin')
+  end
 
   def update_user_role(role_key)
     system_role = Role.find_by(key: role_key)
@@ -163,7 +234,9 @@ class Api::V1::UsersController < Api::BaseController
       'destroy' => 'users.delete',
       'bulk_create' => 'users.bulk_operations',
       'check_permission' => 'users.read',
-      'role' => 'users.read'
+      'role' => 'users.read',
+      # CRM-210: own key, never implied by users.write (standalone in the catalog).
+      'set_password' => 'users.reset_password'
     }
 
     required_permission = action_map[action_name]
@@ -199,7 +272,10 @@ class Api::V1::UsersController < Api::BaseController
   # leaves the role set untouched must not trip the administrative gate (a
   # users.update-only caller renaming a user would 403 otherwise).
   def administrative_action?
-    return true if %w[create destroy bulk_create].include?(action_name)
+    # CRM-210: setting someone else's password is administrative by nature — it
+    # requires users.manage on top of the fine users.reset_password key, same as
+    # creating or deleting an agent.
+    return true if %w[create destroy bulk_create set_password].include?(action_name)
     return false unless action_name == 'update' && params[:role].present?
 
     role_set_change?
