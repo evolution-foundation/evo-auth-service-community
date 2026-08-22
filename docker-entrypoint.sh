@@ -15,21 +15,12 @@ set -e
 
 # Compare against "false" (not == "true") so that TRUE/1/typos still migrate —
 # the fail-safe default must never be silently disabled by a malformed value.
-# CRM-216: the database is only CREATED when it does not already exist.
 #
-# The self-hosted box connects as `evo_app`, which is NOCREATEDB *by design* —
-# it is the live role behind RLS. Running `db:create` unconditionally made
-# Postgres reject it with "permission denied to create database" on every one
-# of the 30 attempts, and the entrypoint aborted the boot. Since the whole
-# stack declares `depends_on: auth (service_healthy)`, that took the entire box
-# down: following the guide, no operator could install it.
-#
-# Note that `db:create` does NOT survive this on its own. Rails only converts
-# the failure into a harmless "already exists" when Postgres answers
-# PG::DuplicateDatabase; a NOCREATEDB role never gets that far, because the
-# privilege check comes first and raises PG::InsufficientPrivilege instead.
-# Changing the database owner does not help either: CREATE DATABASE requires
-# the CREATEDB *role attribute*, not ownership.
+# CRM-216: only CREATE the database when it is not already there. `evo_app` is
+# NOCREATEDB by design (the live role behind RLS), and db:create cannot survive
+# that on its own: the privilege check raises PG::InsufficientPrivilege before
+# Postgres ever answers DuplicateDatabase, and CREATE DATABASE needs the
+# CREATEDB *role attribute*, not ownership.
 database_reachable() {
   bundle exec rails db:version >/dev/null 2>&1
 }
@@ -37,22 +28,26 @@ database_reachable() {
 if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
   echo "[evo-auth-entrypoint] Preparing database..."
   n=0
+  reached=0
   until [ "$n" -ge 30 ]; do
-    if database_reachable; then
-      # The database is there: migrate only. Asking to create it here is what
-      # broke the self-hosted box, and it could never succeed anyway.
+    # Probe at most once: after the first success the database is known to be
+    # there, so re-probing each attempt only buys another Rails boot.
+    if [ "$reached" = 1 ] || database_reachable; then
+      reached=1
       if bundle exec rails db:migrate; then
         echo "[evo-auth-entrypoint] Migrations applied."
         break
       fi
     else
-      # Not reachable. Either the server is still starting (the reason this
-      # retry loop exists) or the database was never created — the fresh-install
-      # case, where the connecting role usually is allowed to create it.
+      # Either the server is still starting (what the 30 attempts are for) or
+      # this is a fresh install, where the role usually may create.
       echo "[evo-auth-entrypoint] Database not reachable; attempting to create it..."
-      if bundle exec rails db:create && bundle exec rails db:migrate; then
-        echo "[evo-auth-entrypoint] Database created and migrations applied."
-        break
+      if bundle exec rails db:create; then
+        reached=1
+        if bundle exec rails db:migrate; then
+          echo "[evo-auth-entrypoint] Database created and migrations applied."
+          break
+        fi
       fi
     fi
     n=$((n + 1))
@@ -64,10 +59,9 @@ if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
   # retry, instead of starting Puma against an outdated database.
   if [ "$n" -ge 30 ]; then
     echo "[evo-auth-entrypoint] ERROR: migrations did not complete after 30 attempts; aborting boot." >&2
-    # CRM-216: the failure that cost an entire box install was indistinguishable
-    # from "Postgres is slow to start". If we never reached the database, say what
-    # an operator can actually act on — the create may be refused on purpose.
-    if ! database_reachable; then
+    # CRM-216: this failure read exactly like "Postgres is slow to start", so an
+    # operator had no way to know the create was refused on purpose.
+    if [ "$reached" = 0 ]; then
       echo "[evo-auth-entrypoint] The database was never reachable. If the role is NOCREATEDB" >&2
       echo "[evo-auth-entrypoint] (as evo_app is by design on the self-hosted box), this service" >&2
       echo "[evo-auth-entrypoint] cannot create it: CREATE DATABASE needs the CREATEDB role" >&2

@@ -1,22 +1,20 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require 'spec_helper'
 require 'tmpdir'
+require 'fileutils'
 require 'open3'
 
-# CRM-216 — the entrypoint must not try to CREATE a database that already exists.
-#
-# The self-hosted box connects as `evo_app`, NOCREATEDB by design (it is the live
-# role behind RLS). `rails db:create db:migrate` ran unconditionally, Postgres
-# answered "permission denied to create database" on all 30 attempts, and the
-# boot aborted. Because the whole stack declares `depends_on: auth
-# (service_healthy)`, the entire box went down with it — following the guide, no
-# operator could install it.
-#
-# These specs run the real script with `bundle` stubbed, so each Postgres
-# behaviour can be reproduced without a database.
+# CRM-216 — the entrypoint must not CREATE a database that already exists: the
+# box connects as `evo_app`, NOCREATEDB by design, and the refused create aborted
+# the boot of the whole stack. Runs the real script with `bundle` stubbed, so
+# each Postgres behaviour is reproducible without a database.
 RSpec.describe 'docker-entrypoint.sh' do
-  ENTRYPOINT = Rails.root.join('docker-entrypoint.sh').to_s
+  # No Rails: this spec only shells out to bash, so it needs neither the app
+  # environment nor a test database.
+  def entrypoint
+    File.expand_path('../../docker-entrypoint.sh', __dir__)
+  end
 
   # Writes a fake `bundle` that logs every invocation and exits with the code
   # configured for the rails task being asked for.
@@ -49,7 +47,7 @@ RSpec.describe 'docker-entrypoint.sh' do
       # clearing it the script would skip everything and every example would
       # pass vacuously.
       full_env = { 'PATH' => "#{dir}:#{ENV.fetch('PATH')}", 'RUN_MIGRATIONS' => nil }.merge(env)
-      stdout, stderr, status = Open3.capture3(full_env, 'bash', ENTRYPOINT, 'true')
+      stdout, stderr, status = Open3.capture3(full_env, 'bash', entrypoint, 'true')
 
       calls = File.exist?(log) ? File.read(log).lines.map(&:strip) : []
       { calls: calls, stdout: stdout, stderr: stderr, status: status }
@@ -103,7 +101,7 @@ RSpec.describe 'docker-entrypoint.sh' do
 
         _out, _err, status = Open3.capture3(
           { 'PATH' => "#{dir}:#{ENV.fetch('PATH')}", 'RUN_MIGRATIONS' => nil },
-          'bash', ENTRYPOINT, 'true'
+          'bash', entrypoint, 'true'
         )
         calls = File.read(log).lines.map(&:strip)
 
