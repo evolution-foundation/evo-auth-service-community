@@ -25,8 +25,9 @@ require 'rails_helper'
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 332 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(332)
+    # 332 -> 333: CRM-210 added users.reset_password (standalone, no coarse write).
+    it 'exposes exactly 333 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(333)
     end
 
     it 'exposes exactly 51 resources' do

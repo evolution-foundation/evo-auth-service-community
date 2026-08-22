@@ -133,6 +133,8 @@ Rails.application.routes.draw do
         member do
           get :role
           post :check_permission
+          # CRM-210: admin-driven, unlike the token-based auth#reset_password.
+          post :set_password
         end
       end
 
