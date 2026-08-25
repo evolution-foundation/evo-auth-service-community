@@ -27,10 +27,9 @@ class SetupBootstrapService
       ensure_account_config
       user      = create_user
       assign_global_role(user)
-      # CRM-262: o estado volta em vez de ser descartado. O consumer (overlay
-      # enterprise) é fail-soft de propósito — levantar aqui reverteria o install
-      # inteiro —, então quando ele não completa, a única forma de o operador
-      # saber é esta resposta. Ver EvoExtensionPoints::AfterBootstrap 1.1.0.
+      # The consumer is fail-soft by design — raising here would roll the whole
+      # install back — so its return value is the only signal that it ran without
+      # finishing. See EvoExtensionPoints::AfterBootstrap 1.1.0.
       provisioning = EvoExtensionPoints::AfterBootstrap.run(user: user, payload: @extension_payload)
 
       survey_token = generate_survey_token(user)

@@ -171,12 +171,9 @@ class SetupController < ActionController::Base
       extension_payload: extension_payload_param
     )
 
-    # CRM-262: o admin foi criado e o install NÃO volta atrás — por isso segue 201
-    # nos dois caminhos. O que muda é dizer a verdade quando o provisionamento do
-    # consumer (overlay enterprise) não completou: antes a resposta era "ok" lisa,
-    # e o operador ficava com um box sem membership, sem primeira conta e sem
-    # papéis, sem nada na tela indicando isso. Mesma forma de degradação já usada
-    # nos passos de registro e ativação acima.
+    # Still 201 on both paths: the admin WAS created and the install does not roll
+    # back. Only the body changes, so a consumer that ran without finishing stops
+    # being reported as a flat "ok" — same degradation shape as #register/#activate.
     if result[:provisioning] == EvoExtensionPoints::AfterBootstrap::DEGRADED
       Rails.logger.warn '[Setup] Bootstrap provisioning incomplete — consumer reported :degraded'
       render json: {

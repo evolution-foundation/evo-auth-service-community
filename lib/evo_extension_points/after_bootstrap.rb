@@ -17,23 +17,10 @@ module EvoExtensionPoints
   # bootstrap transaction, so an exception from the consumer block rolls the
   # whole install back — atomic by design. The consumer owns any internal
   # fail-open/fail-closed policy.
-  # Return contract (1.1.0, CRM-262): the consumer MAY report whether it actually
-  # completed. Up to 1.0.0 this dispatcher discarded the block's return value and
-  # always answered nil, so a consumer that failed FAIL-SOFT — the enterprise
-  # overlay is deliberately fail-soft, since raising here would roll the whole
-  # install back — had no way to say so. /setup then answered "Installation
-  # completed successfully" over a box left without membership, without its first
-  # account and without roles.
   #
-  # Recognised returns:
-  #   :degraded — the consumer ran but could not finish; the caller should say so
-  #   anything else — treated as :ok, so a 1.0.0-era consumer (which returns
-  #                   whatever its last expression happened to be) keeps working
-  #                   exactly as before
-  #
-  # A community install with no consumer registered also gets :ok — nothing was
-  # pending, so nothing is degraded, and the community response stays identical
-  # to what it was before this change.
+  # Return contract (1.1.0): :degraded means the consumer ran but could not
+  # finish. Anything else is :ok — including a 1.0.0-era consumer's incidental
+  # return value and no consumer at all. See EXTENSION_POINTS.md section 4.
   module AfterBootstrap
     VERSION = '1.1.0'
 

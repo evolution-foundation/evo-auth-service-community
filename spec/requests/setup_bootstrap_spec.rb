@@ -69,8 +69,8 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     expect(User.count).to eq(1)
   end
 
-  # CRM-262: sem consumer, o community responde exatamente como antes — "ok".
-  # Nada estava pendente, então nada está degradado.
+  # With no consumer, nothing was pending, so nothing is degraded: the community
+  # response is byte-for-byte what it was before the 1.1.0 bump.
   it 'keeps answering a plain ok on a community install (no consumer)' do
     post '/setup/bootstrap', params: base_params
 
@@ -79,18 +79,15 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     expect(body['message']).to eq('Installation completed successfully')
   end
 
-  # CRM-262 — o consumer é fail-soft de propósito (levantar aqui reverteria o
-  # install inteiro), então uma falha dele sumia da resposta: /setup devolvia
-  # "Installation completed successfully" sobre um box sem membership, sem a
-  # primeira conta e sem papéis. O admin sobrevive e o wizard não roda de novo
-  # (User.count > 0), então o operador não tinha como saber que faltou algo.
+  # The consumer is fail-soft, so its failure used to vanish from the response.
+  # The admin survives and the wizard never runs again (User.count > 0), so this
+  # response is the operator's only chance to learn provisioning did not finish.
   describe 'when the consumer reports :degraded (CRM-262)' do
     before do
       EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| :degraded }
     end
 
-    # Segue 201: o admin FOI criado e o install não volta atrás. O que muda é
-    # dizer a verdade sobre o provisionamento.
+    # Still 201: the admin WAS created and the install does not roll back.
     it 'still answers 201 and keeps the admin' do
       post '/setup/bootstrap', params: base_params
 
@@ -104,8 +101,8 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
       expect(JSON.parse(response.body)['status']).to eq('degraded')
     end
 
-    # A mensagem tem que ser acionável: dizer que repete sozinho (o
-    # OwnerMembershipNetJob completa em até 10 min) e o que conferir se persistir.
+    # The message has to be actionable: that it retries on its own
+    # (OwnerMembershipNetJob, ~10 min) and what to check when it does not.
     it 'explains that it retries on its own, and what to check' do
       post '/setup/bootstrap', params: base_params
 
@@ -122,9 +119,9 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     end
   end
 
-  # A garantia de retrocompatibilidade do bump 1.0.0 -> 1.1.0: um consumer da era
-  # 1.0.0 devolve o que sua última expressão calhar de ser (um Logger, nil, uma
-  # String) e NÃO pode virar "degraded" por acidente. Só o símbolo :degraded conta.
+  # The backward-compatibility guarantee of the 1.0.0 -> 1.1.0 bump: a 1.0.0-era
+  # consumer returns whatever its last expression happens to be (a Logger, nil, a
+  # String) and must never become "degraded" by accident.
   it 'treats an unrecognised consumer return as success (1.0.0 compat)' do
     EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| 'anything at all' }
 
