@@ -27,10 +27,13 @@ class SetupBootstrapService
       ensure_account_config
       user      = create_user
       assign_global_role(user)
-      EvoExtensionPoints::AfterBootstrap.run(user: user, payload: @extension_payload)
+      # The consumer is fail-soft by design — raising here would roll the whole
+      # install back — so its return value is the only signal that it ran without
+      # finishing. See EvoExtensionPoints::AfterBootstrap 1.1.0.
+      provisioning = EvoExtensionPoints::AfterBootstrap.run(user: user, payload: @extension_payload)
 
       survey_token = generate_survey_token(user)
-      { user: user, survey_token: survey_token }
+      { user: user, survey_token: survey_token, provisioning: provisioning }
     end
 
     activate_licensing(result[:user])

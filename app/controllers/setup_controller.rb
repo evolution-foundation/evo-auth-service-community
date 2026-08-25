@@ -171,6 +171,21 @@ class SetupController < ActionController::Base
       extension_payload: extension_payload_param
     )
 
+    # Still 201 on both paths: the admin WAS created and the install does not roll
+    # back. Only the body changes, so a consumer that ran without finishing stops
+    # being reported as a flat "ok" — same degradation shape as #register/#activate.
+    if result[:provisioning] == EvoExtensionPoints::AfterBootstrap::DEGRADED
+      Rails.logger.warn '[Setup] Bootstrap provisioning incomplete — consumer reported :degraded'
+      render json: {
+        status: 'degraded',
+        message: 'Installation completed, but account provisioning did not finish — ' \
+                 'it retries automatically within ~10 minutes. If it persists, check that the ' \
+                 'enterprise service and its Sidekiq are running.',
+        survey_token: result[:survey_token]
+      }, status: :created
+      return
+    end
+
     render json: { status: 'ok', message: 'Installation completed successfully', survey_token: result[:survey_token] }, status: :created
 
   rescue SetupBootstrapService::AlreadyBootstrappedError => e
