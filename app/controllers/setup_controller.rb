@@ -7,6 +7,11 @@
 class SetupController < ActionController::Base
   skip_forgery_protection
 
+  # How long a cached registration link is handed back before #register reissues
+  # it. Under the licensing server's ~5 min token TTL so a link we return is
+  # always still live; see #register (CRM-234 defeito 3).
+  REG_URL_TTL = 4.minutes
+
   # GET /setup/status
   # Returns current license state and masked api_key when active.
   # Reports 'inactive' whenever no admin user exists so a DB wipe or
@@ -69,8 +74,16 @@ class SetupController < ActionController::Base
       return
     end
 
+    # CRM-234 defeito 3: only reuse the cached link while it is still fresh. The
+    # licensing token expires (~5 min) and /register/init returns no expiry, so a
+    # link cached forever is the one that answered "licenca expirada" when the
+    # operator finally clicked it (SendGrid mail, or a slow tab). Reissue past
+    # REG_URL_TTL instead. The window stays under the server TTL so a link we hand
+    # out is always live; it is NOT per-request — that would churn the token the
+    # operator's open tab is using and hammer the server on the frontend poll.
     existing_url = ctx.reg_url
-    if existing_url.present?
+    issued_at    = ctx.reg_issued_at
+    if existing_url.present? && issued_at.present? && (Time.current - issued_at) < REG_URL_TTL
       render json: { status: 'pending', register_url: existing_url }
       return
     end
@@ -83,8 +96,9 @@ class SetupController < ActionController::Base
         redirect_uri: params[:redirect_uri]
       )
 
-      ctx.reg_url   = result['register_url']
-      ctx.reg_token = result['token']
+      ctx.reg_url       = result['register_url']
+      ctx.reg_token     = result['token']
+      ctx.reg_issued_at = Time.current
 
       render json: { status: 'pending', register_url: result['register_url'] }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e

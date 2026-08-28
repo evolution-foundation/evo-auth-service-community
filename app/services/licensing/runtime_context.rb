@@ -53,6 +53,19 @@ module Licensing
       @mutex.synchronize { @_t0 = token }
     end
 
+    # When the cached reg_url/token were issued. The licensing server expires the
+    # registration token (~5 min) but its /register/init response carries no
+    # expiry, so the endpoint tracks issuance itself and regenerates a stale link
+    # instead of handing back one that answers "licenca expirada" (CRM-234
+    # defeito 3 — the SendGrid link that never regenerated).
+    def reg_issued_at
+      @mutex.synchronize { @_ta0 }
+    end
+
+    def reg_issued_at=(at)
+      @mutex.synchronize { @_ta0 = at }
+    end
+
     def activate!(api_key:, instance_id:)
       @mutex.synchronize do
         @_k0     = api_key
