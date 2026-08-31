@@ -9,5 +9,5 @@ Rails.application.config.after_initialize do
   ctx = Licensing::Activation.initialize_runtime
 
   # Schedule first heartbeat after the initial interval if license is active.
-  Licensing::HeartbeatJob.set(wait: Licensing::Heartbeat::INTERVAL).perform_later if ctx.active?
+  Licensing::Heartbeat.schedule! if ctx.active?
 end

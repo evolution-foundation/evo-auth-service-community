@@ -25,22 +25,31 @@ module Licensing
         api_key = runtime_data['k']
         Rails.logger.info "[L] #002"
 
-        begin
-          transport = Transport.new(base_url: Endpoint.resolve_url, api_key: api_key)
-          result    = transport.post_signed('/v1/activate', {
-            instance_id: instance_id,
-            version:     version
-          })
+        # A crash-looping box re-runs this on every boot; the shared cool-down
+        # keeps it from hammering /v1/activate while the window is closed.
+        if RetryPolicy.allow_attempt?
+          begin
+            transport = Transport.new(base_url: Endpoint.resolve_url, api_key: api_key)
+            result    = transport.post_signed('/v1/activate', {
+              instance_id: instance_id,
+              version:     version
+            })
 
-          if result['status'] == 'active'
-            ctx.activate!(api_key: api_key, instance_id: instance_id)
-            Rails.logger.info "[L] #003"
-          else
-            _2s(ctx, "Activation returned status: #{result['status']}")
+            if result['status'] == 'active'
+              RetryPolicy.record_success!
+              ctx.activate!(api_key: api_key, instance_id: instance_id)
+              Rails.logger.info "[L] #003"
+            else
+              RetryPolicy.record_failure!
+              _2s(ctx, "Activation returned status: #{result['status']}")
+            end
+
+          rescue Transport::NetworkError, Transport::ResponseError => e
+            RetryPolicy.record_failure!
+            _2s(ctx, e.message)
           end
-
-        rescue Transport::NetworkError, Transport::ResponseError => e
-          _2s(ctx, e.message)
+        else
+          _2s(ctx, 'Activation attempt skipped — backoff window still closed')
         end
 
       else
@@ -104,6 +113,8 @@ module Licensing
     end
 
     def self.try_reactivate(store: nil, version: VERSION)
+      return false unless RetryPolicy.allow_attempt?
+
       store       ||= Store.new
       runtime_data  = store.load_runtime_data
       return false unless runtime_data
@@ -118,13 +129,16 @@ module Licensing
       })
 
       if result['status'] == 'active'
+        RetryPolicy.record_success!
         Runtime.context.activate!(api_key: api_key, instance_id: instance_id)
         Rails.logger.info "[L] #reactivated"
         true
       else
+        RetryPolicy.record_failure!
         false
       end
     rescue StandardError
+      RetryPolicy.record_failure!
       false
     end
 

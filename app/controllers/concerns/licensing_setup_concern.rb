@@ -16,6 +16,11 @@ module LicensingSetupConcern
 
     return if RuntimeConfig.account.nil?
 
+    # Inside the cool-down window nothing touches the network: neither the
+    # synchronous reactivation below nor a fresh SetupJob chain. This is the
+    # gate that turns "retry on every login" into a bounded backoff.
+    return unless Licensing::RetryPolicy.allow_attempt?
+
     return if Licensing::Activation.try_reactivate(store: store)
 
     # Fully asynchronous — login must never wait on the licensing server.

@@ -25,7 +25,7 @@ module Licensing
         instance_id: instance_id
       )
 
-      HeartbeatJob.set(wait: Heartbeat::INTERVAL).perform_later
+      Heartbeat.schedule!
 
       Rails.logger.info "[Setup] Installation completed (customer_id: #{result['customer_id']})"
       true

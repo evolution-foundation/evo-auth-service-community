@@ -69,8 +69,14 @@ class SetupController < ActionController::Base
       return
     end
 
+    # Reuse the cached registration URL ONLY when it was minted for the same
+    # redirect_uri. Serving a URL minted without (or with another) redirect_uri
+    # strands the flow at the portal: the OAuth completes, the api_key is
+    # issued, and no redirect ever brings the browser back to
+    # /setup/activate?code= — the key is never exchanged.
+    requested_redirect = params[:redirect_uri].presence
     existing_url = ctx.reg_url
-    if existing_url.present?
+    if existing_url.present? && ctx.reg_redirect_uri == requested_redirect
       render json: { status: 'pending', register_url: existing_url }
       return
     end
@@ -80,11 +86,12 @@ class SetupController < ActionController::Base
         instance_id:  resolve_instance_id(ctx),
         tier:         ctx.tier,
         version:      ctx.version,
-        redirect_uri: params[:redirect_uri]
+        redirect_uri: requested_redirect
       )
 
-      ctx.reg_url   = result['register_url']
-      ctx.reg_token = result['token']
+      ctx.reg_url          = result['register_url']
+      ctx.reg_token        = result['token']
+      ctx.reg_redirect_uri = requested_redirect
 
       render json: { status: 'pending', register_url: result['register_url'] }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e
@@ -135,10 +142,11 @@ class SetupController < ActionController::Base
       instance_id = resolve_instance_id(ctx)
       Licensing::Store.new.save_runtime_data(api_key: api_key, tier: tier, customer_id: customer_id)
       ctx.activate!(api_key: api_key, instance_id: instance_id)
-      ctx.reg_url   = nil
-      ctx.reg_token = nil
+      ctx.reg_url          = nil
+      ctx.reg_token        = nil
+      ctx.reg_redirect_uri = nil
 
-      Licensing::HeartbeatJob.set(wait: Licensing::Heartbeat::INTERVAL).perform_later
+      Licensing::Heartbeat.schedule!
 
       enqueue_pending_onboarding_pushes
 
