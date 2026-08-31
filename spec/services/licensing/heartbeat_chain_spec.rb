@@ -9,13 +9,17 @@ require 'rails_helper'
 # match it dies on its next tick.
 RSpec.describe Licensing::Heartbeat do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   before do
     Rails.cache.clear
     clear_enqueued_jobs
   end
 
-  after { Licensing::Runtime.context = nil }
+  after do
+    travel_back
+    Licensing::Runtime.context = nil
+  end
 
   def active_context
     ctx = Licensing::RuntimeContext.new(tier: 't', version: '1')
@@ -86,7 +90,8 @@ RSpec.describe Licensing::Heartbeat do
       expect(enqueued_jobs).to be_empty
     end
 
-    it 'the current chain pings and reschedules itself with the same generation' do
+    it 'the current chain pings and reschedules itself with the same generation, never immediately' do
+      freeze_time
       Licensing::Runtime.context = active_context
       generation = Licensing::Heartbeat.schedule!
       clear_enqueued_jobs
@@ -96,6 +101,11 @@ RSpec.describe Licensing::Heartbeat do
 
       expect(Licensing::Heartbeat).to have_received(:ping).once
       expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation)
+
+      scheduled_at = enqueued_jobs.last[:at]
+      low  = Time.current + (Licensing::Heartbeat::INTERVAL * (1 - Licensing::Heartbeat::JITTER))
+      high = Time.current + (Licensing::Heartbeat::INTERVAL * (1 + Licensing::Heartbeat::JITTER))
+      expect(scheduled_at).to be_between(low.to_f, high.to_f).inclusive
     end
 
     it 'does not reschedule when the license is not active' do
