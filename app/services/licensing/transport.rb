@@ -9,11 +9,14 @@ module Licensing
     class NetworkError < StandardError; end
 
     class ResponseError < StandardError
-      attr_reader :status_code, :body
+      attr_reader :status_code, :body, :retry_after
 
-      def initialize(status_code, body)
+      # retry_after: seconds the server asked us to hold off (Retry-After
+      # header), nil when absent — RetryPolicy honours it as a floor.
+      def initialize(status_code, body, retry_after: nil)
         @status_code = status_code
         @body        = body
+        @retry_after = retry_after
         super("Licensing server responded with HTTP #{status_code}: #{body}")
       end
     end
@@ -92,7 +95,10 @@ module Licensing
 
     def _8n(http, request)
       response = http.request(request)
-      raise ResponseError.new(response.code.to_i, response.body) unless response.is_a?(Net::HTTPSuccess)
+      unless response.is_a?(Net::HTTPSuccess)
+        raise ResponseError.new(response.code.to_i, response.body,
+                                retry_after: parse_retry_after(response['Retry-After']))
+      end
 
       _wju(response.body)
     rescue ResponseError
@@ -106,6 +112,15 @@ module Licensing
       Oj.load(body, mode: :compat)
     rescue Oj::ParseError, JSON::ParserError => e
       raise NetworkError, "Invalid JSON response from licensing server: #{e.message}"
+    end
+
+    # Delta-seconds form only; the HTTP-date form is not worth parsing here —
+    # nil just means the backoff computes its own window.
+    def parse_retry_after(value)
+      seconds = value.to_s.strip
+      return nil unless seconds.match?(/\A\d+\z/)
+
+      seconds.to_i
     end
   end
 end

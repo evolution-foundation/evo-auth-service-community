@@ -16,6 +16,14 @@ module LicensingSetupConcern
 
     return if RuntimeConfig.account.nil?
 
+    # The gate that turns "retry on every login" into a bounded backoff:
+    # inside the window neither the reactivation nor a SetupJob touches the net.
+    unless Licensing::RetryPolicy.allow_attempt?
+      Rails.logger.info "[Licensing] Setup skipped — backoff window closed for " \
+                        "another #{Licensing::RetryPolicy.seconds_until_open.to_i}s"
+      return
+    end
+
     return if Licensing::Activation.try_reactivate(store: store)
 
     # Fully asynchronous — login must never wait on the licensing server.

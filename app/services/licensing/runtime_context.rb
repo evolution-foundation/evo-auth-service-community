@@ -18,6 +18,7 @@ module Licensing
       @_h0    = nil
       @_u0     = nil
       @_t0   = nil
+      @_r0   = nil
     end
 
     def active?
@@ -51,6 +52,14 @@ module Licensing
 
     def reg_token=(token)
       @mutex.synchronize { @_t0 = token }
+    end
+
+    def reg_redirect_uri
+      @mutex.synchronize { @_r0 }
+    end
+
+    def reg_redirect_uri=(uri)
+      @mutex.synchronize { @_r0 = uri }
     end
 
     def activate!(api_key:, instance_id:)
