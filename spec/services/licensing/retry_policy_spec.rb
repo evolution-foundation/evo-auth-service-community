@@ -42,6 +42,17 @@ RSpec.describe Licensing::RetryPolicy do
     expect(waits.last).to be <= described_class::MAX_WAIT.to_f * (1 + jitter)
   end
 
+  it 'honours Retry-After as a floor: the window never reopens before it' do
+    freeze_time
+    wait = described_class.record_failure!(retry_after: 600)
+
+    expect(wait).to be >= 600
+    travel(599.seconds)
+    expect(described_class.allow_attempt?).to be(false)
+    travel(wait - 598)
+    expect(described_class.allow_attempt?).to be(true)
+  end
+
   it 'resets completely on success' do
     freeze_time
     3.times do

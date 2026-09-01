@@ -45,7 +45,7 @@ module Licensing
             end
 
           rescue Transport::NetworkError, Transport::ResponseError => e
-            RetryPolicy.record_failure!
+            RetryPolicy.record_failure!(retry_after: e.try(:retry_after))
             _2s(ctx, e.message)
           end
         else
@@ -137,8 +137,8 @@ module Licensing
         RetryPolicy.record_failure!
         false
       end
-    rescue StandardError
-      RetryPolicy.record_failure!
+    rescue StandardError => e
+      RetryPolicy.record_failure!(retry_after: e.try(:retry_after))
       false
     end
 

@@ -25,13 +25,16 @@ module Licensing
       next_attempt_at.nil? || now >= next_attempt_at
     end
 
+    # @param retry_after [Numeric, nil] seconds the server asked us to hold off
+    #   (Retry-After) — honoured as a FLOOR: the window never reopens before it.
     # @return [ActiveSupport::Duration, Numeric] the wait applied to the window
-    def record_failure!(now: Time.current)
+    def record_failure!(now: Time.current, retry_after: nil)
       state    = Rails.cache.read(CACHE_KEY) || {}
       failures = state[:failures].to_i + 1
 
       wait = [BASE_WAIT * (2**(failures - 1)), MAX_WAIT].min
       wait *= 1 + (JITTER * ((2 * rand) - 1))
+      wait = [wait, retry_after].max if retry_after
 
       Rails.cache.write(
         CACHE_KEY,

@@ -30,7 +30,19 @@ module Licensing
       Rails.logger.info "[Setup] Installation completed (customer_id: #{result['customer_id']})"
       true
 
-    rescue Transport::NetworkError, Transport::ResponseError => e
+    rescue Transport::ResponseError => e
+      # A non-recoverable 4xx (401/403/422...) will answer the same on every
+      # retry — :rejected is truthy, so SetupJob stops its chain instead of
+      # hammering the server with a request it already refused. 429 stays
+      # retryable: that refusal is about timing, not about the request.
+      if e.status_code&.between?(400, 499) && e.status_code != 429
+        Rails.logger.error "[Setup] Registration rejected (HTTP #{e.status_code}) — not retrying"
+        return :rejected
+      end
+
+      Rails.logger.error "[Setup] Registration failed: #{e.message}"
+      false
+    rescue Transport::NetworkError => e
       Rails.logger.error "[Setup] Registration failed: #{e.message}"
       false
     rescue StandardError => e
