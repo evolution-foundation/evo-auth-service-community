@@ -8,6 +8,8 @@ Rails.application.config.after_initialize do
 
   ctx = Licensing::Activation.initialize_runtime
 
-  # Schedule first heartbeat after the initial interval if license is active.
-  Licensing::Heartbeat.schedule! if ctx.active?
+  # Rake tasks and consoles are short-lived: rotating the generation there
+  # would kill the live chain and defer the next ping by a whole interval.
+  long_lived = !defined?(Rails::Console) && File.basename($PROGRAM_NAME) != 'rake'
+  Licensing::Heartbeat.schedule! if ctx.active? && long_lived
 end

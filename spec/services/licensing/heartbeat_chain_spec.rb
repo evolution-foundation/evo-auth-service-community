@@ -2,11 +2,8 @@
 
 require 'rails_helper'
 
-# CRM-394: exactly ONE heartbeat chain per box. Every scheduling site used to
-# start its own immortal self-rescheduling chain (and Sidekiq persists them
-# across restarts), which multiplied the fleet's heartbeat traffic by the
-# number of boots. schedule! rotates a generation; any chain that does not
-# match it dies on its next tick.
+# Exactly ONE heartbeat chain per box: schedule! rotates a generation and any
+# chain that does not match it dies on its next tick instead of rescheduling.
 RSpec.describe Licensing::Heartbeat do
   include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
@@ -62,6 +59,58 @@ RSpec.describe Licensing::Heartbeat do
       low  = described_class::INTERVAL * (1 - described_class::JITTER)
       high = described_class::INTERVAL * (1 + described_class::JITTER)
       expect(intervals).to all(be_between(low, high).inclusive)
+    end
+
+    it 'moves both ways instead of returning a flat INTERVAL' do
+      allow(described_class).to receive(:rand).and_return(0.0)
+      expect(described_class.next_interval)
+        .to be_within(0.001).of(described_class::INTERVAL * (1 - described_class::JITTER))
+
+      allow(described_class).to receive(:rand).and_return(1.0)
+      expect(described_class.next_interval)
+        .to be_within(0.001).of(described_class::INTERVAL * (1 + described_class::JITTER))
+    end
+  end
+
+  describe '.ping backoff' do
+    let(:transport) { instance_double(Licensing::Transport) }
+
+    before do
+      Licensing::Runtime.context = active_context
+      allow(Licensing::Endpoint).to receive(:resolve_url).and_return('https://licensing.test')
+      allow(Licensing::Transport).to receive(:new).and_return(transport)
+    end
+
+    it 'honours a Retry-After on the heartbeat instead of ticking at INTERVAL' do
+      allow(transport).to receive(:post_signed)
+        .and_raise(Licensing::Transport::ResponseError.new(429, 'rate limited', retry_after: 3600))
+
+      described_class.ping
+
+      expect(described_class.next_interval).to be_within(5).of(3600)
+    end
+
+    it 'grows the interval on consecutive refusals and resets it on a good ping' do
+      allow(transport).to receive(:post_signed)
+        .and_raise(Licensing::Transport::ResponseError.new(500, 'boom'))
+      2.times { described_class.ping }
+
+      ceiling = described_class::INTERVAL * (1 + described_class::JITTER)
+      expect(described_class.next_interval).to be > ceiling
+
+      allow(transport).to receive(:post_signed).and_return({ 'status' => 'active' })
+      described_class.ping
+
+      expect(described_class.next_interval).to be <= ceiling
+    end
+
+    it 'keeps the activation window untouched when only the heartbeat is refused' do
+      allow(transport).to receive(:post_signed)
+        .and_raise(Licensing::Transport::ResponseError.new(429, 'rate limited'))
+
+      described_class.ping
+
+      expect(Licensing::RetryPolicy.allow_attempt?).to be(true)
     end
   end
 

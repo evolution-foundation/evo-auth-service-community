@@ -2,9 +2,8 @@
 
 require 'rails_helper'
 
-# CRM-394: inside the cool-down window try_reactivate must not touch the
-# network at all — the death-spiral was every login re-POSTing /v1/activate
-# right after a refusal.
+# Inside the cool-down window try_reactivate must not touch the network — the
+# spiral was every login re-POSTing /v1/activate right after a refusal.
 RSpec.describe Licensing::Activation, '.try_reactivate backoff' do
   include ActiveSupport::Testing::TimeHelpers
 

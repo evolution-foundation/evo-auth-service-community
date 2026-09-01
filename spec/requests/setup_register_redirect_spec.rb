@@ -2,11 +2,8 @@
 
 require 'rails_helper'
 
-# CRM-394: the cached registration URL is only valid for the redirect_uri it
-# was minted with. Serving it for a different (or newly provided) redirect_uri
-# strands the flow at the portal: the OAuth completes, the api_key is issued,
-# and the browser is never sent back to /setup/activate?code= — the key is
-# never exchanged.
+# The cached registration URL is only valid for the redirect_uri it was minted
+# with: serving it for another strands the OAuth with the key never exchanged.
 RSpec.describe 'GET /setup/register redirect_uri cache', type: :request do
   let(:ctx) { Licensing::RuntimeContext.new(tier: 't', version: '1') }
 

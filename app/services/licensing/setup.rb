@@ -26,15 +26,15 @@ module Licensing
       )
 
       Heartbeat.schedule!
+      RetryPolicy.record_success!
 
       Rails.logger.info "[Setup] Installation completed (customer_id: #{result['customer_id']})"
       true
 
     rescue Transport::ResponseError => e
-      # A non-recoverable 4xx (401/403/422...) will answer the same on every
-      # retry — :rejected is truthy, so SetupJob stops its chain instead of
-      # hammering the server with a request it already refused. 429 stays
-      # retryable: that refusal is about timing, not about the request.
+      RetryPolicy.record_failure!(retry_after: e.retry_after)
+      # 429 is about timing so it stays retryable; any other 4xx answers the
+      # same forever and :rejected (truthy) stops the SetupJob chain.
       if e.status_code&.between?(400, 499) && e.status_code != 429
         Rails.logger.error "[Setup] Registration rejected (HTTP #{e.status_code}) — not retrying"
         return :rejected
@@ -43,6 +43,7 @@ module Licensing
       Rails.logger.error "[Setup] Registration failed: #{e.message}"
       false
     rescue Transport::NetworkError => e
+      RetryPolicy.record_failure!
       Rails.logger.error "[Setup] Registration failed: #{e.message}"
       false
     rescue StandardError => e

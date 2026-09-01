@@ -18,6 +18,7 @@ module Licensing
       @_h0    = nil
       @_u0     = nil
       @_t0   = nil
+      @_r0   = nil
     end
 
     def active?

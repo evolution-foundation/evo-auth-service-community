@@ -10,9 +10,8 @@ module Licensing
     queue_as :licensing
     discard_on StandardError
 
-    # Jobs already sitting in Redis from before this change carry NO argument:
-    # they fail the chain check and exit without rescheduling — that silent
-    # death is the cleanup of the accumulated chains, not a bug.
+    # A pre-change job carries NO argument: it fails the chain check and exits
+    # without rescheduling — that is the cleanup of the accumulated chains.
     def perform(generation = nil)
       return unless Heartbeat.chain_alive?(generation)
 

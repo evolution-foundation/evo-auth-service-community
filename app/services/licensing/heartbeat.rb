@@ -8,10 +8,7 @@ module Licensing
     JITTER = 0.2
     GENERATION_KEY = 'licensing:heartbeat_generation'
 
-    # The ONLY way a heartbeat chain starts. Every scheduling site used to
-    # start its OWN self-rescheduling chain, and Sidekiq persists scheduled
-    # jobs across restarts — so each boot added one more immortal chain per
-    # box (the observed flood). Rotating the generation makes every previous
+    # The only way a chain starts. Rotating the generation makes every previous
     # chain exit on its next tick instead of rescheduling.
     def self.schedule!(wait: next_interval)
       generation = SecureRandom.uuid
@@ -24,11 +21,8 @@ module Licensing
       Rails.cache.read(GENERATION_KEY)
     end
 
-    # A chain survives ONLY while it matches the current generation. A nil
-    # current generation (cache evicted) adopts the caller's — liveness beats
-    # strictness there: killing the last chain would silence the heartbeat
-    # entirely — but a MISMATCH always kills, which is what collapses the
-    # accumulated legacy chains after the image updates.
+    # A nil current generation (cache evicted) adopts the caller's — killing the
+    # last chain would silence the heartbeat. A mismatch always kills.
     def self.chain_alive?(generation)
       return false if generation.nil?
 
@@ -40,8 +34,12 @@ module Licensing
       current == generation
     end
 
-    def self.next_interval
-      INTERVAL * (1 + (JITTER * ((2 * rand) - 1)))
+    # Never below the jittered INTERVAL, never inside the backoff window a
+    # refused ping left behind — that window is what makes the interval grow.
+    def self.next_interval(now: Time.current)
+      jittered = INTERVAL * (1 + (JITTER * ((2 * rand) - 1)))
+      cool_down = RetryPolicy.seconds_until_open(window: RetryPolicy::HEARTBEAT_WINDOW, now: now)
+      [jittered, cool_down].max
     end
 
     def self.ping(ctx: Runtime.context, version: Activation::VERSION)
@@ -56,6 +54,8 @@ module Licensing
         messages_sent: messages_sent
       })
 
+      RetryPolicy.record_success!(window: RetryPolicy::HEARTBEAT_WINDOW)
+
       case result['status']
       when 'active'
         Rails.logger.debug "[L] #001"
@@ -67,7 +67,13 @@ module Licensing
       end
 
     rescue Transport::NetworkError, Transport::ResponseError => e
+      wait = RetryPolicy.record_failure!(
+        window:      RetryPolicy::HEARTBEAT_WINDOW,
+        base_wait:   INTERVAL,
+        retry_after: e.try(:retry_after)
+      )
       Rails.logger.warn "[L] #004"
+      Rails.logger.warn "[Licensing::Heartbeat] ping refused — next tick in #{wait.to_i}s"
     end
   end
 end

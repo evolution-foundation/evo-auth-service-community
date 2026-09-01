@@ -69,11 +69,8 @@ class SetupController < ActionController::Base
       return
     end
 
-    # Reuse the cached registration URL ONLY when it was minted for the same
-    # redirect_uri. Serving a URL minted without (or with another) redirect_uri
-    # strands the flow at the portal: the OAuth completes, the api_key is
-    # issued, and no redirect ever brings the browser back to
-    # /setup/activate?code= — the key is never exchanged.
+    # Only reuse the cached URL for the redirect_uri it was minted with:
+    # another one strands the OAuth at the portal with the key never exchanged.
     requested_redirect = params[:redirect_uri].presence
     existing_url = ctx.reg_url
     if existing_url.present? && ctx.reg_redirect_uri == requested_redirect
