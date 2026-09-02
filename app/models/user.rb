@@ -323,13 +323,18 @@ class User < ApplicationRecord
         [derived_role_key?(key) ? 1 : 0, user_role.created_at, key]
       end
     else
-      scope = user_roles.joins(:role).order(:created_at).order('roles.key')
-      scope.where("roles.key NOT LIKE ?", "#{DERIVED_ROLE_KEY_PREFIX}%").first || scope.first
+      user_roles.joins(:role).order(derived_roles_last).order(:created_at).order('roles.key').first
     end
   end
 
+  # starts_with is the SQL twin of String#start_with?, so both branches agree on
+  # what counts as derived. LIKE would not: '_' is a single-character wildcard.
+  def derived_roles_last
+    Arel.sql("starts_with(roles.key, #{self.class.connection.quote(DERIVED_ROLE_KEY_PREFIX)})")
+  end
+
   def derived_role_key?(key)
-    key.to_s.start_with?(DERIVED_ROLE_KEY_PREFIX)
+    key.start_with?(DERIVED_ROLE_KEY_PREFIX)
   end
 
   # Permission keys granted explicitly via the user's roles (no BASIC, no
