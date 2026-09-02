@@ -2,10 +2,6 @@
 
 require 'rails_helper'
 
-# CRM-496: user_roles holds a second row per user since the attendance bridge
-# started materializing evo_derived_<user>_<tenant|global> roles, and role_data
-# resolved the global role with an unordered `first` — so the derived role could
-# shadow the real one and /validate presented a super_admin as evo_derived_*.
 RSpec.describe User, type: :model do
   def build_user
     User.create!(
@@ -30,8 +26,6 @@ RSpec.describe User, type: :model do
     role_with(key: "evo_derived_#{user.id}_#{scope}")
   end
 
-  # Both branches of role_data: the query path (what /validate takes) and the
-  # eager-loaded path (what the users list takes).
   def resolved_role_key(user, eager:)
     reloaded = eager ? User.includes(user_roles: :role).find(user.id) : User.find(user.id)
     reloaded.role_data&.fetch(:key)

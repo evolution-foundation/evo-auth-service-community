@@ -57,10 +57,8 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
-  # Roles whose key starts with this are materialized per (user, tenant) by the
-  # attendance-permission bridge, one extra row in user_roles on top of the
-  # user's real role. They carry the attendance verbs, never the authority
-  # level, so they must never win the resolution of the global role.
+  # Materialized per (user, tenant) by the attendance-permission sync, which
+  # lives outside this repo.
   DERIVED_ROLE_KEY_PREFIX = 'evo_derived_'
 
   # dashboard.read has no catalog resource ON PURPOSE (product decision, D2 of
@@ -234,8 +232,7 @@ class User < ApplicationRecord
     user_role = primary_user_role
 
     return @role_data = nil unless user_role
-    
-    # Access role - will use eager loaded association if available
+
     role = user_role.role
     @role_data = role ? {
       id: role.id,
@@ -319,13 +316,6 @@ class User < ApplicationRecord
 
   private
 
-  # The real global role, never a derived one. Since the attendance bridge
-  # started materializing an evo_derived_* row per (user, tenant), user_roles
-  # holds more than one row and an unordered `first` let the derived role
-  # shadow the real one — a super_admin came back from /validate as
-  # evo_derived_*, and every consumer that maps the global role to authority
-  # denied fail-closed. A derived role is still returned when it is all the
-  # user has, so nobody loses a role to this.
   def primary_user_role
     if association(:user_roles).loaded?
       user_roles.min_by do |user_role|
