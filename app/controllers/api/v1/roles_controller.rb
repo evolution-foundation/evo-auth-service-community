@@ -74,6 +74,21 @@ class Api::V1::RolesController < Api::V1::BaseController
   end
 
   def bulk_update_permissions
+    # A system role's permission set belongs to db/seeds/rbac.rb, which rewrites it on
+    # every run: an accepted edit would answer 200 and be reverted. The installation
+    # owner is matched by key as well, since its rows are not always `system: true`.
+    if @role.system? || @role.key == RbacGrantReconciler::ROLE_KEY
+      message =
+        if @role.key == RbacGrantReconciler::ROLE_KEY
+          'The installation owner role holds the full permission catalog by invariant ' \
+          'and is reconciled on every boot; its permissions cannot be edited.'
+        else
+          'Cannot modify the permission set of a system role. Duplicate it as a custom ' \
+          'role to change permissions.'
+        end
+      return error_response('FORBIDDEN', message, status: :forbidden)
+    end
+
     permission_keys = params[:permission_keys]
 
     unless permission_keys.is_a?(Array)

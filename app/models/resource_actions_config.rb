@@ -33,7 +33,10 @@ class ResourceActionsConfig
         destroy_access_token: {name: 'Destroy Access Token', description: 'Revoke user access tokens'},
         remove_avatar: { name: 'Remove Avatar', description: 'Remove user profile avatar' },
         create_account_user: { name: 'Create Account User', description: 'Create account user associations' },
-        manage: { name: 'Manage', description: 'Administer users via Settings (view/manage agents panel)' }
+        manage: { name: 'Manage', description: 'Administer users via Settings (view/manage agents panel)' },
+        # CRM-210: standalone (see STANDALONE_ACTIONS_BY_RESOURCE) so `users.write`
+        # never confers it — account takeover is granted on purpose, never implied.
+        reset_password: { name: 'Reset Password', description: "Set another user's password directly (admin)" }
       }
     },
 
@@ -152,6 +155,20 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new API keys' },
         update: { name: 'Update', description: 'Update API key configurations' },
         delete: { name: 'Delete', description: 'Delete API keys' }
+      }
+    },
+
+    # Integration credential vault (EVO-2250, epic 2): secrets for external
+    # tools and integrations (Dify, n8n, ElevenLabs, custom tool headers, MCP
+    # env vars). Distinct from ai_api_keys, which governs LLM provider keys.
+    ai_integration_credentials: {
+      name: 'Integration Credentials',
+      description: 'Credential vault for external tools and integrations',
+      actions: {
+        read: { name: 'View', description: 'View integration credentials (without revealing secrets)' },
+        create: { name: 'Create', description: 'Create new integration credentials' },
+        update: { name: 'Update', description: 'Update integration credential configurations' },
+        delete: { name: 'Delete', description: 'Delete integration credentials' }
       }
     },
 
@@ -340,7 +357,9 @@ class ResourceActionsConfig
         read: { name: 'View', description: 'View teams and member information' },
         create: { name: 'Create', description: 'Create new teams' },
         update: { name: 'Update', description: 'Update team information' },
-        delete: { name: 'Delete', description: 'Delete teams' }
+        delete: { name: 'Delete', description: 'Delete teams' },
+        # Settings screen access; the chat picker only needs read (CRM-70).
+        manage: { name: 'Manage', description: 'Administer teams via Settings' }
       }
     },
 
@@ -363,7 +382,9 @@ class ResourceActionsConfig
         create: { name: 'Create', description: 'Create new macros' },
         update: { name: 'Update', description: 'Update macro configurations' },
         delete: { name: 'Delete', description: 'Delete macros' },
-        execute: { name: 'Execute', description: 'Execute macros on conversations' }
+        execute: { name: 'Execute', description: 'Execute macros on conversations' },
+        # Settings screen + create/update; running one from the chat only needs execute (CRM-70).
+        manage: { name: 'Manage', description: 'Administer macros via Settings' }
       }
     },
 
@@ -385,7 +406,9 @@ class ResourceActionsConfig
         read: { name: 'View', description: 'View global message templates' },
         create: { name: 'Create', description: 'Create global message templates' },
         update: { name: 'Update', description: 'Update global message templates' },
-        delete: { name: 'Delete', description: 'Delete global message templates' }
+        delete: { name: 'Delete', description: 'Delete global message templates' },
+        # Settings screen + create/update; sending one from the chat only needs read (CRM-70).
+        manage: { name: 'Manage', description: 'Administer message templates via Settings' }
       }
     },
 
@@ -604,6 +627,19 @@ class ResourceActionsConfig
       }
     },
 
+    # Card (deal/lead) writes inside a pipeline, gated separately from editing the
+    # pipeline itself: moving a card, pulling a conversation in, and editing card
+    # fields are the salesperson's routine, whereas pipelines.update is the manager's
+    # power to reshape/archive the funnel. A single `update` action covers every card
+    # write (PipelineItemsController::WRITE_ACTIONS); reads stay on pipelines.read.
+    pipeline_items: {
+      name: 'Pipeline Cards',
+      description: 'Create, move between stages and edit cards inside a pipeline',
+      actions: {
+        update: { name: 'Manage cards', description: 'Create, move and edit pipeline cards' }
+      }
+    },
+
     crm_forms: {
       name: 'Lead Capture Forms',
       description: 'Public lead-capture form builder (form -> pipeline)',
@@ -695,7 +731,11 @@ class ResourceActionsConfig
 
   STANDALONE_ACTIONS_BY_RESOURCE = {
     conversations: %i[read_all].to_set,
-    users: %i[manage].to_set
+    # CRM-210: standalone so the coarse `users.write` never implies it.
+    users: %i[manage reset_password].to_set,
+    macros: %i[manage].to_set,
+    message_templates: %i[manage].to_set,
+    teams: %i[manage].to_set
   }.freeze
 
   # A granular action is a manageable write when it mutates the resource AND is

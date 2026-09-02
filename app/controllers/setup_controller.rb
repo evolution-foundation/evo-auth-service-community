@@ -69,8 +69,11 @@ class SetupController < ActionController::Base
       return
     end
 
+    # Only reuse the cached URL for the redirect_uri it was minted with:
+    # another one strands the OAuth at the portal with the key never exchanged.
+    requested_redirect = params[:redirect_uri].presence
     existing_url = ctx.reg_url
-    if existing_url.present?
+    if existing_url.present? && ctx.reg_redirect_uri == requested_redirect
       render json: { status: 'pending', register_url: existing_url }
       return
     end
@@ -80,11 +83,12 @@ class SetupController < ActionController::Base
         instance_id:  resolve_instance_id(ctx),
         tier:         ctx.tier,
         version:      ctx.version,
-        redirect_uri: params[:redirect_uri]
+        redirect_uri: requested_redirect
       )
 
-      ctx.reg_url   = result['register_url']
-      ctx.reg_token = result['token']
+      ctx.reg_url          = result['register_url']
+      ctx.reg_token        = result['token']
+      ctx.reg_redirect_uri = requested_redirect
 
       render json: { status: 'pending', register_url: result['register_url'] }
     rescue Licensing::Transport::NetworkError, Licensing::Transport::ResponseError => e
@@ -135,10 +139,11 @@ class SetupController < ActionController::Base
       instance_id = resolve_instance_id(ctx)
       Licensing::Store.new.save_runtime_data(api_key: api_key, tier: tier, customer_id: customer_id)
       ctx.activate!(api_key: api_key, instance_id: instance_id)
-      ctx.reg_url   = nil
-      ctx.reg_token = nil
+      ctx.reg_url          = nil
+      ctx.reg_token        = nil
+      ctx.reg_redirect_uri = nil
 
-      Licensing::HeartbeatJob.set(wait: Licensing::Heartbeat::INTERVAL).perform_later
+      Licensing::Heartbeat.schedule!
 
       enqueue_pending_onboarding_pushes
 
@@ -170,6 +175,21 @@ class SetupController < ActionController::Base
       client_ip:  request.remote_ip,
       extension_payload: extension_payload_param
     )
+
+    # Still 201 on both paths: the admin WAS created and the install does not roll
+    # back. Only the body changes, so a consumer that ran without finishing stops
+    # being reported as a flat "ok" — same degradation shape as #register/#activate.
+    if result[:provisioning] == EvoExtensionPoints::AfterBootstrap::DEGRADED
+      Rails.logger.warn '[Setup] Bootstrap provisioning incomplete — consumer reported :degraded'
+      render json: {
+        status: 'degraded',
+        message: 'Installation completed, but account provisioning did not finish — ' \
+                 'it retries automatically within ~10 minutes. If it persists, check that the ' \
+                 'enterprise service and its Sidekiq are running.',
+        survey_token: result[:survey_token]
+      }, status: :created
+      return
+    end
 
     render json: { status: 'ok', message: 'Installation completed successfully', survey_token: result[:survey_token] }, status: :created
 

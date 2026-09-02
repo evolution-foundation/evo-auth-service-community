@@ -4,11 +4,15 @@ require 'rails_helper'
 
 # EVO-2070 RBAC catalog hygiene (+ EVO-2072 agents→ai_agents consolidation).
 # Two guarantees are locked here:
-#   1) the trimmed catalog holds exactly 322 permission keys across 49 resources.
-#      277 came from the EVO-2070 hygiene pass; EVO-2127 then added one coarse
-#      `write` leaf to each resource that has a manageable (non-system) granular
-#      write (45 of 49) to back the role editor's read/write/delete groups →
-#      277 + 45 = 322. The 4 all-system/read-only resources (installation_configs,
+#   1) the trimmed catalog holds exactly 332 permission keys across 51 resources.
+#      277 came from the EVO-2070 hygiene pass, plus the 4 granular actions of
+#      the integration credential vault (EVO-2250) = 281, plus pipeline_items.update
+#      (the dedicated pipeline-card write key — CRM-178) = 282; EVO-2127 then adds
+#      one coarse `write` leaf to each resource that has a manageable (non-system)
+#      granular write (47 of 51, now incl. pipeline_items) to back the role editor's
+#      read/write/delete groups → 282 + 47 = 329; CRM-70 adds the standalone
+#      `manage` to macros, message_templates and teams (use-vs-manage split;
+#      no extra write leaf, those resources already had one) → 332. The 4 all-system/read-only resources (installation_configs,
 #      ai_agent_processor, ai_chat_sessions, ai_a2a_protocol) get no write leaf —
 #      a coarse write there would render an un-grantable checkbox. NOTE: the
 #      earlier 262/47 target assumed ai_tools,
@@ -21,12 +25,13 @@ require 'rails_helper'
 #      dropping them from the catalog.
 RSpec.describe ResourceActionsConfig do
   describe 'catalog size after hygiene' do
-    it 'exposes exactly 322 permission keys' do
-      expect(described_class.all_permission_keys.size).to eq(322)
+    # 332 -> 333: CRM-210 added users.reset_password (standalone, no coarse write).
+    it 'exposes exactly 333 permission keys' do
+      expect(described_class.all_permission_keys.size).to eq(333)
     end
 
-    it 'exposes exactly 49 resources' do
-      expect(described_class.all_resources.size).to eq(49)
+    it 'exposes exactly 51 resources' do
+      expect(described_class.all_resources.size).to eq(51)
     end
 
     it 'adds a manageable, non-system coarse write to resources with a granular write (EVO-2127)' do

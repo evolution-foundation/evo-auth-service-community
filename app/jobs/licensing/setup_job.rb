@@ -18,6 +18,9 @@ module Licensing
 
     def perform(email:, name:, client_ip: nil, attempt: 0)
       return if Runtime.context&.active?
+      # Stop rather than burn RETRY_WAITS inside a closed window: the next
+      # login restarts the chain once the window opens.
+      return unless RetryPolicy.allow_attempt?
 
       store       = Store.new
       instance_id = store.load_or_create_instance_id

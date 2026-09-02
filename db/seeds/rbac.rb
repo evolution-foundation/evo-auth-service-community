@@ -73,38 +73,58 @@ end
 agent_permissions = [
   # Operational reads previously inherited via BASIC_READ_PERMISSIONS. Now that
   # the split removed users.read/inboxes.read from BASIC, the agent role grants
-  # them explicitly. conversations.read_all preserves the current behavior of
-  # agents seeing every inbox (the per-inbox restriction is opt-in: it only
-  # applies to roles WITHOUT conversations.read_all). NOTE: users.manage is
-  # intentionally NOT granted — agents do not see the administrative panel.
+  # them explicitly. The agent is SECURE-BY-DEFAULT for inbox visibility: it does
+  # NOT get conversations.read_all, so it sees only the inboxes it is a member of
+  # (User#assigned_inboxes) — an agent with no membership sees nothing until it is
+  # assigned. account_owner/super_admin still see everything (read_all grant +
+  # administrator?). NOTE: users.manage is intentionally NOT granted — agents do
+  # not see the administrative panel.
   'users.read',
-  'conversations.read_all',
-  'conversations.read', 'conversations.create', 'conversations.update', 'conversations.delete',
+  'conversations.read', 'conversations.create', 'conversations.update',
   'conversations.meta', 'conversations.search', 'conversations.filter', 'conversations.available_for_pipeline',
   'conversations.mute', 'conversations.unmute', 'conversations.transcript', 'conversations.toggle_status',
   'conversations.toggle_priority', 'conversations.toggle_typing_status', 'conversations.update_last_seen',
   'conversations.unread', 'conversations.custom_attributes', 'conversations.attachments', 'conversations.inbox_assistant',
   'conversations.import',
-  'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete',
+  'contacts.read', 'contacts.create', 'contacts.update',
   'contacts.active', 'contacts.search', 'contacts.filter', 'contacts.import', 'contacts.export',
   'contacts.contactable_inboxes', 'contacts.destroy_custom_attributes', 'contacts.avatar',
+  # CRM-166: the agent writes attribute VALUES but had no read on the definitions,
+  # so GET /custom_attribute_definitions 403'd and read-only screens rendered "no
+  # attributes". Read only: create/update/delete stay administrative, and the CRM Settings
+  # screen is gated on those, not on this key.
+  'custom_attribute_definitions.read',
   'pipelines.read',
-  'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update', 'pipeline_stages.delete',
+  # Card writes gate on pipeline_items.update (its own key), NOT pipelines.update —
+  # the agent moves/creates cards without the manager's power to reshape/archive the
+  # funnel. See PipelineItemsController + PipelinePolicy#update_items? in the CRM (CRM-178).
+  'pipeline_items.update',
+  # pipeline_stages.delete is NOT granted: deleting a funnel stage is a destructive
+  # restructuring of the shared pipeline, not attendance. Create/update stay for the
+  # kanban experience.
+  'pipeline_stages.read', 'pipeline_stages.create', 'pipeline_stages.update',
   # accounts.update is administrative (Settings > Account) and deliberately
   # NOT granted; PATCH /api/v1/account enforces it.
   'accounts.read',
   'profiles.read', 'profiles.update', 'profiles.update_avatar', 'profiles.update_password', 'profiles.manage_notifications',
-  # Operational resources used inside conversations (quick-replies, labels, macros,
-  # templates, and team assignment) stay with the agent. EVO-1955 will split their
-  # use-vs-manage gating so agents keep chat usage but lose the Settings screens.
-  'labels.read', 'labels.create', 'labels.update', 'labels.delete',
-  'canned_responses.read', 'canned_responses.create', 'canned_responses.update', 'canned_responses.delete',
-  'message_templates.read', 'message_templates.create', 'message_templates.update', 'message_templates.delete',
-  'macros.read', 'macros.create', 'macros.update', 'macros.delete', 'macros.execute',
+  # Operational resources used inside conversations. Product decision (CRM-70,
+  # 2026-08-18): the agent MANAGES its own labels and canned responses, so those
+  # keep read/create/update. Macros and message templates are use-vs-manage:
+  # the agent keeps `read` (send a template) and `macros.execute` (run one) for
+  # the chat, while `create`/`update` and the Settings screen belong to
+  # `<resource>.manage`, granted to admin roles only. Deletes of every shared
+  # asset stay out (CRM-190). Personal macros an agent already owns keep working.
+  'labels.read', 'labels.create', 'labels.update',
+  'canned_responses.read', 'canned_responses.create', 'canned_responses.update',
+  'message_templates.read',
+  'macros.read', 'macros.execute',
   # teams powers the in-chat "Assign team" picker (GET /teams), so the read is
-  # operational and kept here; team_members enforcement consolidated into teams.*
-  # (EVO-2070), and the Teams Settings screen split is EVO-1955.
-  'teams.read', 'teams.create', 'teams.update', 'teams.delete',
+  # operational and kept here (also in BASIC_READ_PERMISSIONS). Create/update/delete
+  # are NOT granted: creating, renaming and deleting teams — and managing members via
+  # team_members, gated by teams.update — is a manager/settings action, not attendance.
+  # The Settings screen itself is gated by teams.manage (CRM-70), which the agent
+  # does not hold: read alone cannot hide it, since teams.read is basic for everyone.
+  'teams.read',
   'inboxes.read'
   # EVO-1938: administrative Settings resources (AI Agents/Bots/API keys/folders/
   # sessions, Integrations, Channels, Working Hours, Segments, Journeys, Campaigns)

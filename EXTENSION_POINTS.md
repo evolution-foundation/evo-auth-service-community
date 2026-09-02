@@ -240,12 +240,13 @@ denial reasons is a minor bump.
 
 ### 4. `after_bootstrap`
 
-**Version:** `1.0.0`
+**Version:** `1.1.0`
 **Default:** no-op; a pure community install runs no side effect after the
-first admin user is created.
+first admin user is created, and the dispatcher answers `:ok` — nothing was
+pending, so nothing is degraded.
 
 ```ruby
-EvoExtensionPoints::AfterBootstrap.run(user:, payload:) # => nil
+EvoExtensionPoints::AfterBootstrap.run(user:, payload:) # => :ok | :degraded
 ```
 
 Dispatched **inside** the `/setup` bootstrap transaction, immediately after
@@ -263,6 +264,20 @@ Because the call site is inside the bootstrap transaction, an exception raised
 by the consumer block rolls the **whole install** back — atomicity is the
 feature. The consumer owns any internal fail-open / fail-closed policy.
 
+**Return contract (since `1.1.0`):** a consumer that handles its own failure —
+the recommended policy, since raising rolls the install back — reports whether
+it actually finished by returning a symbol:
+
+| Return | Meaning |
+|---|---|
+| `:degraded` | the consumer ran but could not complete; `POST /setup/bootstrap` answers `201` with `{"status":"degraded"}` and an actionable message instead of `{"status":"ok"}` |
+| anything else | treated as `:ok` |
+
+Only the `:degraded` symbol is recognised, and that asymmetry is the
+backward-compatibility guarantee: a `1.0.0`-era consumer returns whatever its
+last expression happens to be (a `Logger`, `nil`, a `String`) and must never
+become "degraded" by accident.
+
 Override:
 
 ```ruby
@@ -272,9 +287,9 @@ end
 ```
 
 **Breaking-change policy:** renaming `run`, changing the `user:` / `payload:`
-keyword shape, moving the call site outside the bootstrap transaction, or
-changing the no-rescue policy is a major bump. Adding an optional keyword is a
-minor bump.
+keyword shape, moving the call site outside the bootstrap transaction, changing
+the no-rescue policy, or narrowing "anything else is `:ok`" is a major bump.
+Adding an optional keyword or a new recognised return symbol is a minor bump.
 
 ### 5. `extra_setup_steps`
 
@@ -375,6 +390,11 @@ document itself is unversioned.
   `/setup` bootstrap transaction with `(user:, payload:)`; no rescue, so a
   consumer exception rolls the install back. New registration key:
   `:after_bootstrap`.
+- `after_bootstrap` `1.1.0` — Additive: `run` reads the consumer's return
+  instead of discarding it and always answering `nil`. `:degraded` means "ran
+  but did not finish" and surfaces on `POST /setup/bootstrap` as
+  `{"status":"degraded"}`; anything else is `:ok`, so a `1.0.0`-era consumer
+  behaves exactly as before. No registration key added.
 - `extra_setup_steps` `1.0.0` — Initial: fail-soft capability query backing
   the `extra_setup_steps` boolean on `GET /setup/status`; default false. New
   registration key: `:extra_setup_steps`.

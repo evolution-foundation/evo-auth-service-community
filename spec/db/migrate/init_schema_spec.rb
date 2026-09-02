@@ -56,7 +56,7 @@ RSpec.describe InitSchema do
           .and_return([column_double('id', :bigint)])
 
         expect(connection).to receive(:add_foreign_key)
-          .with('posts', :users, column: :user_id)
+          .with('posts', :users, column: :user_id, if_not_exists: true)
 
         migration.send(:add_fk_if_missing, :posts, :users, :user_id)
       end

@@ -25,12 +25,25 @@ module Licensing
         instance_id: instance_id
       )
 
-      HeartbeatJob.set(wait: Heartbeat::INTERVAL).perform_later
+      Heartbeat.schedule!
+      RetryPolicy.record_success!
 
       Rails.logger.info "[Setup] Installation completed (customer_id: #{result['customer_id']})"
       true
 
-    rescue Transport::NetworkError, Transport::ResponseError => e
+    rescue Transport::ResponseError => e
+      RetryPolicy.record_failure!(retry_after: e.retry_after)
+      # 429 is about timing so it stays retryable; any other 4xx answers the
+      # same forever and :rejected (truthy) stops the SetupJob chain.
+      if e.status_code&.between?(400, 499) && e.status_code != 429
+        Rails.logger.error "[Setup] Registration rejected (HTTP #{e.status_code}) — not retrying"
+        return :rejected
+      end
+
+      Rails.logger.error "[Setup] Registration failed: #{e.message}"
+      false
+    rescue Transport::NetworkError => e
+      RetryPolicy.record_failure!
       Rails.logger.error "[Setup] Registration failed: #{e.message}"
       false
     rescue StandardError => e

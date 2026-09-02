@@ -69,6 +69,75 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
     expect(User.count).to eq(1)
   end
 
+  # With no consumer, nothing was pending, so nothing is degraded: the community
+  # response is byte-for-byte what it was before the 1.1.0 bump.
+  it 'keeps answering a plain ok on a community install (no consumer)' do
+    post '/setup/bootstrap', params: base_params
+
+    body = JSON.parse(response.body)
+    expect(body['status']).to eq('ok')
+    expect(body['message']).to eq('Installation completed successfully')
+  end
+
+  # The consumer is fail-soft, so its failure used to vanish from the response.
+  # The admin survives and the wizard never runs again (User.count > 0), so this
+  # response is the operator's only chance to learn provisioning did not finish.
+  describe 'when the consumer reports :degraded (CRM-262)' do
+    before do
+      EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| :degraded }
+    end
+
+    # Still 201: the admin WAS created and the install does not roll back.
+    it 'still answers 201 and keeps the admin' do
+      post '/setup/bootstrap', params: base_params
+
+      expect(response).to have_http_status(:created)
+      expect(User.count).to eq(1)
+    end
+
+    it 'answers status degraded instead of ok' do
+      post '/setup/bootstrap', params: base_params
+
+      expect(JSON.parse(response.body)['status']).to eq('degraded')
+    end
+
+    # The message has to be actionable: that it retries on its own
+    # (OwnerMembershipNetJob, ~10 min) and what to check when it does not.
+    it 'explains that it retries on its own, and what to check' do
+      post '/setup/bootstrap', params: base_params
+
+      message = JSON.parse(response.body)['message']
+      expect(message).to match(/did not finish/i)
+      expect(message).to match(/10 minutes/i)
+      expect(message).to match(/sidekiq/i)
+    end
+
+    it 'keeps the survey_token, which does not depend on provisioning' do
+      post '/setup/bootstrap', params: base_params
+
+      expect(JSON.parse(response.body)['survey_token']).to be_present
+    end
+  end
+
+  # The backward-compatibility guarantee of the 1.0.0 -> 1.1.0 bump: a 1.0.0-era
+  # consumer returns whatever its last expression happens to be (a Logger, nil, a
+  # String) and must never become "degraded" by accident.
+  it 'treats an unrecognised consumer return as success (1.0.0 compat)' do
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| 'anything at all' }
+
+    post '/setup/bootstrap', params: base_params
+
+    expect(JSON.parse(response.body)['status']).to eq('ok')
+  end
+
+  it 'treats nil from the consumer as success (1.0.0 returned a fixed nil)' do
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| nil }
+
+    post '/setup/bootstrap', params: base_params
+
+    expect(JSON.parse(response.body)['status']).to eq('ok')
+  end
+
   # extension_payload is opaque: a malformed (non-object) value must not 500 this
   # public, unauthenticated endpoint. It degrades to {} and the hook still fires.
   it 'does not 500 when extension_payload arrives as a non-hash scalar' do

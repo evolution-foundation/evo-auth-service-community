@@ -456,7 +456,12 @@ module AuthHelper
         @user = User.new(user_data)
       else
         begin
-          @user = User.new(user_params)
+          # A nested {user:{...}} payload hit a NON-EXISTENT `user_params` in this
+          # concern → NameError → 500 (EVO-2146). Strong params equivalent to the
+          # flat branch above.
+          @user = User.new(
+            params.require(:user).permit(:name, :email, :password, :password_confirmation)
+          )
         rescue ActionController::ParameterMissing => e
           Rails.logger.error "Parameter missing: #{e.message}"
           return error_response('VALIDATION_ERROR', e.message, status: :unprocessable_entity)
