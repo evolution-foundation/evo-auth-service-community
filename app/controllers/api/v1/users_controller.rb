@@ -204,10 +204,19 @@ class Api::V1::UsersController < Api::BaseController
     system_role = Role.find_by(key: role_key)
     raise ActiveRecord::RecordNotFound, "Role '#{role_key}' not found" unless system_role
 
-    existing = @user.user_roles.joins(:role).where(roles: { system: false })
+    existing = replaceable_roles_of(@user)
     existing.destroy_all if existing.exists?
 
     UserRole.assign_role_to_user(@user, system_role, current_user)
+  end
+
+  # Every grant the update replaces. Revoking only `system: false` roles meant
+  # revoking nothing at all — the seeded roles are all system — so a promotion
+  # added a second role instead of replacing the first (CRM-496). Derived rows
+  # are excluded because the attendance-permission sync owns them.
+  def replaceable_roles_of(user)
+    user.user_roles.joins(:role)
+        .where('NOT starts_with(roles.key, ?)', User::DERIVED_ROLE_KEY_PREFIX)
   end
 
   def check_authorization
@@ -274,16 +283,13 @@ class Api::V1::UsersController < Api::BaseController
 
   # The question is not "is the submitted key one the target already holds?" but
   # "will update_user_role change what the target holds?" — it destroys EVERY
-  # non-system role before assigning, so resubmitting a role the target already
-  # has still REVOKES any other non-system role. Both are role management.
+  # replaceable role before assigning, so resubmitting a role the target already
+  # has still REVOKES any other one. Both are role management.
   def role_set_change?
     target = @user || User.find_by(id: params[:id])
     return true unless target&.has_role?(params[:role])
 
-    target.user_roles.joins(:role)
-          .where(roles: { system: false })
-          .where.not(roles: { key: params[:role] })
-          .exists?
+    replaceable_roles_of(target).where.not(roles: { key: params[:role] }).exists?
   end
 
   # A lookup by id needs neither the ordering nor the includes of the #index scope.
