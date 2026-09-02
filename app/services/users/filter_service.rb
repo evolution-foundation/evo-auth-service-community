@@ -37,7 +37,7 @@ module Users
     private
 
     def base_relation
-      User.includes(:user_roles)
+      User.includes(user_roles: :role)
     end
 
     def apply_filters(relation)

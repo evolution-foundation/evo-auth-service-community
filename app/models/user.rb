@@ -57,6 +57,10 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
+  # Materialized per (user, tenant) by the attendance-permission sync, which
+  # lives outside this repo.
+  DERIVED_ROLE_KEY_PREFIX = 'evo_derived_'
+
   # dashboard.read has no catalog resource ON PURPOSE (product decision, D2 of
   # the RBAC audit): the dashboard is the landing page of every authenticated
   # user, so the key lives only here and the frontend gate that reads it
@@ -224,19 +228,11 @@ class User < ApplicationRecord
   def role_data
     return nil unless persisted?
     return @role_data if defined?(@role_data)
-    
-    # Use eager loaded association if available, otherwise query
-    user_role = if association(:user_roles).loaded?
-      # When eager loaded, use the loaded collection (no query)
-      user_roles.first
-    else
-      # Fallback to query when not eager loaded
-      user_roles.joins(:role).first
-    end
-    
+
+    user_role = primary_user_role
+
     return @role_data = nil unless user_role
-    
-    # Access role - will use eager loaded association if available
+
     role = user_role.role
     @role_data = role ? {
       id: role.id,
@@ -319,6 +315,29 @@ class User < ApplicationRecord
   end
 
   private
+
+  # Among real roles the newest grant wins: a role update replaces the previous
+  # one, so an older row that outlived it is the role the user no longer holds.
+  def primary_user_role
+    if association(:user_roles).loaded?
+      user_roles.max_by do |user_role|
+        key = user_role.role&.key.to_s
+        [derived_role_key?(key) ? 0 : 1, user_role.created_at, key]
+      end
+    else
+      user_roles.joins(:role).order(derived_roles_last).order(created_at: :desc).order('roles.key DESC').first
+    end
+  end
+
+  # starts_with is the SQL twin of String#start_with?, so both branches agree on
+  # what counts as derived. LIKE would not: '_' is a single-character wildcard.
+  def derived_roles_last
+    Arel.sql("starts_with(roles.key, #{self.class.connection.quote(DERIVED_ROLE_KEY_PREFIX)})")
+  end
+
+  def derived_role_key?(key)
+    key.start_with?(DERIVED_ROLE_KEY_PREFIX)
+  end
 
   # Permission keys granted explicitly via the user's roles (no BASIC, no
   # operational implications). Single source of truth for has_permission? and

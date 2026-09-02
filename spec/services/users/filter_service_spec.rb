@@ -262,4 +262,31 @@ RSpec.describe Users::FilterService do
       expect(sorted('name', 'sideways')).to eq(%w[Alice Bob Carol])
     end
   end
+
+  describe 'preloading' do
+    def queries_while
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |*, payload|
+        queries << payload[:sql] unless %w[SCHEMA TRANSACTION].include?(payload[:name])
+      end
+      yield
+      queries
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    # role_data reads the role key to skip derived roles, so the role has to come
+    # down with the list — otherwise every user costs an extra query per role.
+    it 'resolves role_data without querying again' do
+      3.times do |i|
+        user = make_user(name: "Preload #{i}")
+        assign_role(user, 'agent')
+        assign_role(user, "evo_derived_#{user.id}_global")
+      end
+
+      users = mine(described_class.new([]).resolve)
+
+      expect(queries_while { users.each(&:role_data) }).to be_empty
+    end
+  end
 end
