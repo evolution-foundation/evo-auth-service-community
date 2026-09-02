@@ -49,6 +49,15 @@ RSpec.describe 'POST /api/v1/auth/validate — the role it presents', type: :req
     expect(validate!.dig('user', 'role', 'key')).to eq('evolution_admin')
   end
 
+  # A promotion used to leave the previous grant behind (CRM-496): presenting
+  # the older row put an admin back at the authority level they were raised from.
+  it 'presents the role of the last promotion, not the one it replaced' do
+    assign(user, 'agent', at: 2.days.ago)
+    assign(user, 'super_admin', at: 1.day.ago)
+
+    expect(validate!.dig('user', 'role', 'key')).to eq('super_admin')
+  end
+
   it 'presents the derived role when the user holds nothing else' do
     derived = assign_derived(user, at: 1.day.ago)
 

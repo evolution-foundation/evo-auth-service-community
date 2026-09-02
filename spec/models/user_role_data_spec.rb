@@ -73,12 +73,23 @@ RSpec.describe User, type: :model do
         expect(resolved_role_key(user, eager: eager)).to eq(derived.key)
       end
 
-      it 'resolves the oldest role deterministically when both are real' do
+      # A role update replaces the previous grant, so with two real roles the
+      # newest is the one the user holds — the older row is what it replaced.
+      it 'resolves the most recent role when both are real' do
         user = build_user
         assign(user, role_with(key: 'agent'), at: 2.days.ago)
         assign(user, role_with(key: 'supervisor'), at: 1.day.ago)
 
-        expect(resolved_role_key(user, eager: eager)).to eq('agent')
+        expect(resolved_role_key(user, eager: eager)).to eq('supervisor')
+      end
+
+      it 'breaks a same-instant tie on the key, alike in both branches' do
+        user = build_user
+        granted_at = 1.day.ago
+        assign(user, role_with(key: 'aaa_role'), at: granted_at)
+        assign(user, role_with(key: 'zzz_role'), at: granted_at)
+
+        expect(resolved_role_key(user, eager: eager)).to eq('zzz_role')
       end
 
       it 'returns nil when the user has no role at all' do

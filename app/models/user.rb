@@ -316,14 +316,16 @@ class User < ApplicationRecord
 
   private
 
+  # Among real roles the newest grant wins: a role update replaces the previous
+  # one, so an older row that outlived it is the role the user no longer holds.
   def primary_user_role
     if association(:user_roles).loaded?
-      user_roles.min_by do |user_role|
+      user_roles.max_by do |user_role|
         key = user_role.role&.key.to_s
-        [derived_role_key?(key) ? 1 : 0, user_role.created_at, key]
+        [derived_role_key?(key) ? 0 : 1, user_role.created_at, key]
       end
     else
-      user_roles.joins(:role).order(derived_roles_last).order(:created_at).order('roles.key').first
+      user_roles.joins(:role).order(derived_roles_last).order(created_at: :desc).order('roles.key DESC').first
     end
   end
 
