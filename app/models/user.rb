@@ -57,6 +57,12 @@ class User < ApplicationRecord
   require "argon2"
   PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/.freeze
 
+  # Roles whose key starts with this are materialized per (user, tenant) by the
+  # attendance-permission bridge, one extra row in user_roles on top of the
+  # user's real role. They carry the attendance verbs, never the authority
+  # level, so they must never win the resolution of the global role.
+  DERIVED_ROLE_KEY_PREFIX = 'evo_derived_'
+
   # dashboard.read has no catalog resource ON PURPOSE (product decision, D2 of
   # the RBAC audit): the dashboard is the landing page of every authenticated
   # user, so the key lives only here and the frontend gate that reads it
@@ -224,16 +230,9 @@ class User < ApplicationRecord
   def role_data
     return nil unless persisted?
     return @role_data if defined?(@role_data)
-    
-    # Use eager loaded association if available, otherwise query
-    user_role = if association(:user_roles).loaded?
-      # When eager loaded, use the loaded collection (no query)
-      user_roles.first
-    else
-      # Fallback to query when not eager loaded
-      user_roles.joins(:role).first
-    end
-    
+
+    user_role = primary_user_role
+
     return @role_data = nil unless user_role
     
     # Access role - will use eager loaded association if available
@@ -319,6 +318,29 @@ class User < ApplicationRecord
   end
 
   private
+
+  # The real global role, never a derived one. Since the attendance bridge
+  # started materializing an evo_derived_* row per (user, tenant), user_roles
+  # holds more than one row and an unordered `first` let the derived role
+  # shadow the real one — a super_admin came back from /validate as
+  # evo_derived_*, and every consumer that maps the global role to authority
+  # denied fail-closed. A derived role is still returned when it is all the
+  # user has, so nobody loses a role to this.
+  def primary_user_role
+    if association(:user_roles).loaded?
+      user_roles.min_by do |user_role|
+        key = user_role.role&.key.to_s
+        [derived_role_key?(key) ? 1 : 0, user_role.created_at, key]
+      end
+    else
+      scope = user_roles.joins(:role).order(:created_at).order('roles.key')
+      scope.where("roles.key NOT LIKE ?", "#{DERIVED_ROLE_KEY_PREFIX}%").first || scope.first
+    end
+  end
+
+  def derived_role_key?(key)
+    key.to_s.start_with?(DERIVED_ROLE_KEY_PREFIX)
+  end
 
   # Permission keys granted explicitly via the user's roles (no BASIC, no
   # operational implications). Single source of truth for has_permission? and

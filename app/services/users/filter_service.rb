@@ -37,7 +37,9 @@ module Users
     private
 
     def base_relation
-      User.includes(:user_roles)
+      # role is part of the preload because role_data now reads the role key to
+      # skip derived roles — without it the list pays one query per user_role.
+      User.includes(user_roles: :role)
     end
 
     def apply_filters(relation)
