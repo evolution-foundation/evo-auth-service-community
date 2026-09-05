@@ -115,7 +115,7 @@ module ApiResponseHelper
   #
   # @example With collection (auto-pagination)
   #   paginated_response(
-  #     data: @users.map { |u| UserSerializer.full(u) },
+  #     data: @users.map { |u| UserSerializer.directory(u) },
   #     collection: @users,
   #     message: 'Users retrieved'
   #   )

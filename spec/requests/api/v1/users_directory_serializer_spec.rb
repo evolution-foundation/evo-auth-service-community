@@ -31,8 +31,11 @@ RSpec.describe 'Users directory serialization (CRM-535)', type: :request do
   let(:admin_user) { build_user('Admin User', role: admin_role) }
   let!(:other_user) { build_user('Other User') }
 
-  PRIVATE_KEYS = %w[pubsub_token ui_settings custom_attributes mfa_enabled mfa_setup_incomplete].freeze
-  DIRECTORY_KEYS = %w[id name email role availability avatar_url confirmed created_at].freeze
+  let(:private_keys) { %w[pubsub_token ui_settings custom_attributes mfa_enabled mfa_setup_incomplete] }
+  let(:directory_keys) do
+    %w[id name email type role avatar_url display_name available_name availability
+       confirmed confirmed_at created_at updated_at]
+  end
 
   def body
     JSON.parse(response.body)
@@ -46,8 +49,7 @@ RSpec.describe 'Users directory serialization (CRM-535)', type: :request do
       users = body['data']
       expect(users.map { |u| u['id'] }).to include(other_user.id, admin_user.id)
       users.each do |user|
-        expect(user.keys).to include(*DIRECTORY_KEYS)
-        expect(user.keys).not_to include(*PRIVATE_KEYS)
+        expect(user.keys).to match_array(directory_keys)
       end
     end
   end
@@ -63,20 +65,20 @@ RSpec.describe 'Users directory serialization (CRM-535)', type: :request do
 
   describe 'PATCH /api/v1/users/:id' do
     it 'returns the pubsub_token when the target is the caller' do
-      patch "/api/v1/users/#{admin_user.id}", params: { name: 'Renamed Admin' },
-                                               headers: headers_for(admin_user), as: :json
+      patch "/api/v1/users/#{admin_user.id}",
+            params: { name: 'Renamed Admin' }, headers: headers_for(admin_user), as: :json
 
       expect(response).to have_http_status(:ok)
       expect(body.dig('data', 'user', 'pubsub_token')).to eq(admin_user.pubsub_token)
     end
 
     it 'omits the private fields when the target is another user' do
-      patch "/api/v1/users/#{other_user.id}", params: { name: 'Renamed Other' },
-                                               headers: headers_for(admin_user), as: :json
+      patch "/api/v1/users/#{other_user.id}",
+            params: { name: 'Renamed Other' }, headers: headers_for(admin_user), as: :json
 
       expect(response).to have_http_status(:ok)
       expect(body.dig('data', 'user', 'name')).to eq('Renamed Other')
-      expect(body.dig('data', 'user').keys).not_to include(*PRIVATE_KEYS)
+      expect(body.dig('data', 'user').keys).not_to include(*private_keys)
     end
   end
 
@@ -88,7 +90,7 @@ RSpec.describe 'Users directory serialization (CRM-535)', type: :request do
 
       expect(response).to have_http_status(:created)
       expect(body.dig('data', 'user', 'id')).to be_present
-      expect(body.dig('data', 'user').keys).not_to include(*PRIVATE_KEYS)
+      expect(body.dig('data', 'user').keys).not_to include(*private_keys)
     end
   end
 end
