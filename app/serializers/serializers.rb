@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
-# Centralized serializers for User, Account, and related entities
-# Usage:
-#   ::Serializers::UserSerializer.full(user)
-#   ::Serializers::UserSerializer.basic(user)
-#   ::Serializers::AccountSerializer.full(account)
+# Serializers for User, Account, and related entities.
+#
+# `UserSerializer.full` here is the DeviseTokenAuth login payload: it carries
+# pubsub_token, hmac_identifier, uid and provider, so its reader must be the user
+# itself. Anything describing OTHER users goes through the top-level
+# `UserSerializer.directory`/`.for_reader` (CRM-535).
 module Serializers
   class UserSerializer
     class << self
