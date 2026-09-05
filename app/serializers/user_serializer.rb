@@ -36,23 +36,35 @@ module UserSerializer
     base_data
   end
 
-  # Safe serialization for list endpoints (excludes pubsub_token, custom_attributes, ui_settings, mfa)
-  def list(user)
+  # Directory variant for lists of OTHER users (CRM-535). Never carries
+  # pubsub_token: with it plus the id anyone can subscribe to that user's
+  # RoomChannel stream. ui_settings, custom_attributes and MFA state are the
+  # user's own too. `full` stays for payloads whose reader is the user itself.
+  def directory(user)
     return nil unless user
 
     {
       id: user.id,
       name: user.name,
       email: user.email,
+      type: user.type,
+      role: user.role_data,
+      avatar_url: user.avatar_url,
       display_name: user.display_name,
       available_name: user.available_name,
-      role: user.role_data,
+      availability: user.availability,
       confirmed: user.confirmed?,
       confirmed_at: user.confirmed_at,
-      availability: user.availability,
-      type: user.type,
-      created_at: user.created_at
+      created_at: user.created_at,
+      updated_at: user.updated_at
     }
+  end
+
+  # `full` when the reader is the user itself, `directory` otherwise.
+  def for_reader(user, reader)
+    return nil unless user
+
+    reader && user.id == reader.id ? full(user) : directory(user)
   end
 
   # Basic user serialization (for lists, references)

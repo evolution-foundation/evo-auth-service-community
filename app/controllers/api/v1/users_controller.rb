@@ -13,7 +13,7 @@ class Api::V1::UsersController < Api::BaseController
     apply_pagination
 
     paginated_response(
-      data: @users.map { |user| UserSerializer.full(user) },
+      data: @users.map { |user| UserSerializer.directory(user) },
       collection: @users,
       message: 'Users retrieved successfully'
     )
@@ -35,7 +35,7 @@ class Api::V1::UsersController < Api::BaseController
 
     @user = builder.perform
     success_response(
-      data: { user: UserSerializer.full(@user) },
+      data: { user: UserSerializer.for_reader(@user, current_user) },
       message: 'User created successfully',
       status: :created
     )
@@ -58,7 +58,7 @@ class Api::V1::UsersController < Api::BaseController
     end
 
     success_response(
-      data: { user: UserSerializer.full(@user) },
+      data: { user: UserSerializer.for_reader(@user, current_user) },
       message: 'User updated successfully'
     )
   rescue StandardError => e
