@@ -7,7 +7,8 @@ class Api::V1::UsersController < Api::BaseController
   before_action :fetch_user, except: [:create, :index, :bulk_create]
 
   def index
-    @users = Users::FilterService.new(params[:filters], params[:q], params[:sort], params[:order]).resolve
+    @users = Users::FilterService.new(params[:filters], params[:q], params[:sort], params[:order],
+                                      relation: users_index_scope).resolve
 
     apply_pagination
 
@@ -290,6 +291,12 @@ class Api::V1::UsersController < Api::BaseController
     return true unless target&.has_role?(params[:role])
 
     replaceable_roles_of(target).where.not(roles: { key: params[:role] }).exists?
+  end
+
+  # Base relation of #index, before search, filters and sort. A deployment that
+  # restricts the directory prepends an override here; nothing else may widen it.
+  def users_index_scope
+    User.all
   end
 
   # A lookup by id needs neither the ordering nor the includes of the #index scope.

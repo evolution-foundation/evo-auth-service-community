@@ -52,6 +52,23 @@ RSpec.describe Users::FilterService do
     end
   end
 
+  describe 'relation:' do
+    let!(:alice) { make_user(name: 'Alice Silva') }
+    let!(:bob) { make_user(name: 'Bob Silva') }
+
+    it 'starts from the given relation instead of the whole table' do
+      scoped = described_class.new(nil, nil, nil, nil, relation: User.where(id: alice.id))
+
+      expect(mine(scoped.resolve)).to contain_exactly(alice)
+    end
+
+    it 'applies search inside the given relation' do
+      scoped = described_class.new(nil, 'silva', nil, nil, relation: User.where(id: bob.id))
+
+      expect(mine(scoped.resolve)).to contain_exactly(bob)
+    end
+  end
+
   describe 'search (q)' do
     let!(:alice) { make_user(name: 'Alice Silva') }
     let!(:bob) { make_user(name: 'Bob Souza') }

@@ -20,11 +20,13 @@ module Users
                 'WHERE ur.user_id = users.id ORDER BY r.name LIMIT 1)'
     }.freeze
 
-    def initialize(filters, search = nil, sort = nil, order = nil)
+    # `relation` is the starting set; every predicate below only narrows it.
+    def initialize(filters, search = nil, sort = nil, order = nil, relation: User.all)
       @filters = normalize(filters)
       @search = search.to_s.strip
       @sort = sort
       @order = order
+      @relation = relation
     end
 
     def resolve
@@ -37,7 +39,7 @@ module Users
     private
 
     def base_relation
-      User.includes(user_roles: :role)
+      @relation.includes(user_roles: :role)
     end
 
     def apply_filters(relation)
