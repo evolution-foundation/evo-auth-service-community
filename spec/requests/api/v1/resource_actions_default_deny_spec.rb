@@ -7,6 +7,8 @@ require 'rails_helper'
 # retires the `true # permitir por enquanto` branch). Mirrors the probe
 # pattern of users_unmapped_action_authorization_spec.
 RSpec.describe 'ResourceActionsController unmapped-action authorization', type: :request do
+  before { load Rails.root.join('db/seeds/rbac.rb') }
+
   before(:all) do
     Api::V1::ResourceActionsController.class_eval do
       def unmapped_mutation_probe
