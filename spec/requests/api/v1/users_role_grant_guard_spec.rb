@@ -115,6 +115,47 @@ RSpec.describe 'Users role-grant guard (super_admin rank)', type: :request do
       expect(User.find_by(email: email)).to be_nil
     end
 
+    it 'never grants account_owner on create' do
+      email = new_email
+      with_service_token do
+        post '/api/v1/users', params: { email: email, name: 'New', password: password, role: 'account_owner' },
+                              headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:forbidden)
+      expect(User.find_by(email: email)).to be_nil
+    end
+
+    it 'never grants account_owner on bulk_create' do
+      email = new_email
+      with_service_token do
+        post '/api/v1/users/bulk_create', params: { emails: [email], role: 'account_owner' },
+                                          headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:forbidden)
+      expect(User.find_by(email: email)).to be_nil
+    end
+
+    it 'cannot promote an agent to account_owner' do
+      with_service_token do
+        patch "/api/v1/users/#{target.id}", params: { role: 'account_owner' }, headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:forbidden)
+      expect(role_keys_of(target)).to eq(%w[agent])
+    end
+
+    it "leaves an already registered email's roles untouched" do
+      with_service_token do
+        post '/api/v1/users', params: { email: owner.email, name: 'Again', password: password, role: 'agent' },
+                              headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:created)
+      expect(role_keys_of(owner)).to eq(%w[account_owner])
+    end
+
     it 'keeps creating agents' do
       email = new_email
       with_service_token do

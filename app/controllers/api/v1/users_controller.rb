@@ -1,5 +1,6 @@
 class Api::V1::UsersController < Api::BaseController
   AUTHZ_CACHE_TTL = 60.seconds
+  SERVICE_GRANTABLE_ROLE_KEYS = %w[agent].freeze
 
   # Authorization first, or the lookup leaks an id's existence to a caller
   # without users.read.
@@ -34,7 +35,8 @@ class Api::V1::UsersController < Api::BaseController
       password: new_user_params['password'],
       role: new_user_params['role'].presence || 'agent',
       availability: new_user_params['availability'],
-      inviter: current_user
+      inviter: current_user,
+      reassign_existing: current_user.present?
     )
 
     @user = builder.perform
@@ -92,7 +94,8 @@ class Api::V1::UsersController < Api::BaseController
         email: email,
         name: email.split('@').first,
         role: (params[:role] || :agent).to_sym,
-        inviter: current_user
+        inviter: current_user,
+        reassign_existing: current_user.present?
       )
       begin
         builder.perform
@@ -232,10 +235,12 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   # Whether the caller may grant `role_key`. The installation owner is minted by
-  # setup, never by delegation: only a super_admin grants super_admin. A
-  # deployment that restricts other keys prepends an override here; nothing
-  # else may widen it.
+  # setup, never by delegation: only a super_admin grants super_admin. A service
+  # token carries no user to vouch for an administrative grant, so it hands out
+  # only the keys in SERVICE_GRANTABLE_ROLE_KEYS. A deployment that restricts
+  # other keys prepends an override here; nothing else may widen it.
   def grantable_role?(role_key)
+    return SERVICE_GRANTABLE_ROLE_KEYS.include?(role_key.to_s) if current_user.nil?
     return true unless role_key.to_s == 'super_admin'
 
     caller_super_admin?
