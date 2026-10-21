@@ -1,6 +1,24 @@
 module ServiceTokenAuthConcern
   extend ActiveSupport::Concern
 
+  # No fallback to EVOAI_CRM_API_TOKEN: that is the CRM's own credential, and
+  # inheriting it made a shared quickstart default the auth's service token,
+  # which bypasses every authorize_* gate (CRM-829).
+  # Published in the quickstart's .env.example: every default install shared it.
+  PUBLIC_DEFAULT_TOKENS = %w[6e10e689-58ce-4416-bf0d-f5818bf2dcf8].freeze
+
+  def self.expected_service_token
+    ENV['EVOAI_AUTH_API_TOKEN'].presence
+  end
+
+  def self.verify_configured!
+    token = expected_service_token
+    raise 'EVOAI_AUTH_API_TOKEN must be set (generate one with `openssl rand -hex 32`)' if token.blank?
+    return unless PUBLIC_DEFAULT_TOKENS.include?(token.strip)
+
+    raise 'EVOAI_AUTH_API_TOKEN is the public quickstart default; generate a new one with `openssl rand -hex 32`'
+  end
+
   private
 
   def service_token_from_header
@@ -15,7 +33,7 @@ module ServiceTokenAuthConcern
   end
 
   def expected_service_token
-    ENV['EVOAI_AUTH_API_TOKEN'].presence || ENV['EVOAI_CRM_API_TOKEN'].presence
+    ServiceTokenAuthConcern.expected_service_token
   end
 
   def valid_service_token?

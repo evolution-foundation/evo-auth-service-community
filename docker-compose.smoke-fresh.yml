@@ -50,6 +50,8 @@ services:
       POSTGRES_DATABASE: evo_auth_smoke
       REDIS_URL: redis://redis:6379/0
       RAILS_LOG_TO_STDOUT: "true"
+      # .env.example ships it empty and the boot refuses that (CRM-829).
+      EVOAI_AUTH_API_TOKEN: smoke-only-service-token
     ports:
       # Host 13001 para nao colidir com umbrella stack local; container continua em 3001.
       # Em CI runner, qualquer porta livre serve; mantemos 13001 para consistencia.

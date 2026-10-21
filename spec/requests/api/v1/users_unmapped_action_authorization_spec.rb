@@ -77,8 +77,8 @@ RSpec.describe 'UsersController unmapped-action authorization', type: :request d
   end
 
   it 'keeps the service-token bypass intact for an unmapped mutating action' do
-    original = ENV['EVOAI_CRM_API_TOKEN']
-    ENV['EVOAI_CRM_API_TOKEN'] = 'service-token-probe'
+    original = ENV['EVOAI_AUTH_API_TOKEN']
+    ENV['EVOAI_AUTH_API_TOKEN'] = 'service-token-probe'
 
     post '/api/v1/users/unmapped_mutation_probe',
          headers: { 'X-Internal-API-Token' => 'service-token-probe', 'Host' => 'localhost' },
@@ -86,6 +86,6 @@ RSpec.describe 'UsersController unmapped-action authorization', type: :request d
 
     expect(response).to have_http_status(:ok)
   ensure
-    ENV['EVOAI_CRM_API_TOKEN'] = original
+    ENV['EVOAI_AUTH_API_TOKEN'] = original
   end
 end
