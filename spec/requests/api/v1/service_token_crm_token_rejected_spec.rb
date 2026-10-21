@@ -94,4 +94,26 @@ RSpec.describe 'Service token: EVOAI_CRM_API_TOKEN is not a credential', type: :
       end
     end
   end
+
+  describe 'config/initializers/service_token.rb' do
+    let(:initializer) { Rails.root.join('config/initializers/service_token.rb') }
+
+    before do
+      allow(Rails.application.config).to receive(:after_initialize) { |&hook| hook.call }
+    end
+
+    it 'runs the check outside test' do
+      allow(Rails.env).to receive(:test?).and_return(false)
+
+      with_env('EVOAI_CRM_API_TOKEN' => crm_token, 'EVOAI_AUTH_API_TOKEN' => nil) do
+        expect { load initializer }.to raise_error(/EVOAI_AUTH_API_TOKEN must be set/)
+      end
+    end
+
+    it 'skips the check in test' do
+      with_env('EVOAI_AUTH_API_TOKEN' => nil) do
+        expect { load initializer }.not_to raise_error
+      end
+    end
+  end
 end

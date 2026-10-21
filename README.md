@@ -131,7 +131,8 @@ FRONTEND_URL=http://localhost:3000
 
 # Service-to-service token (X-Service-Token). Required: the app does not boot
 # without it. Callers such as the CRM must send this same value.
-EVOAI_AUTH_API_TOKEN=generate_with_openssl_rand_hex_32
+# Generate it per install: openssl rand -hex 32
+EVOAI_AUTH_API_TOKEN=
 
 # Email (MFA and notifications)
 SMTP_HOST=smtp.example.com
