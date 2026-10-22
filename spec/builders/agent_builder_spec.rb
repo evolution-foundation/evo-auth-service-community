@@ -73,6 +73,14 @@ RSpec.describe AgentBuilder do
 
         expect(user.reload.roles.map(&:key)).to eq(%w[custom_supervisor])
       end
+
+      it 'grants the role to a registered email that holds none when reassign_existing is false' do
+        existing.user_roles.destroy_all
+
+        user = described_class.new(email: existing.email, inviter: nil, reassign_existing: false).perform
+
+        expect(user.reload.roles.map(&:key)).to eq(%w[agent])
+      end
     end
   end
 end

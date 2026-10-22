@@ -156,6 +156,27 @@ RSpec.describe 'Users role-grant guard (super_admin rank)', type: :request do
       expect(role_keys_of(owner)).to eq(%w[account_owner])
     end
 
+    it "leaves an already registered email's roles untouched on bulk_create" do
+      with_service_token do
+        post '/api/v1/users/bulk_create', params: { emails: [ owner.email ], role: 'agent' },
+                                          headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(role_keys_of(owner)).to eq(%w[account_owner])
+    end
+
+    it 'gives the agent role to an already registered email that holds none' do
+      roleless = build_user('Roleless Identity')
+      with_service_token do
+        post '/api/v1/users', params: { email: roleless.email, name: 'Again', password: password, role: 'agent' },
+                              headers: service_headers, as: :json
+      end
+
+      expect(response).to have_http_status(:created)
+      expect(role_keys_of(roleless)).to eq(%w[agent])
+    end
+
     it 'keeps creating agents' do
       email = new_email
       with_service_token do

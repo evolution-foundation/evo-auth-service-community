@@ -4,13 +4,14 @@ class AgentBuilder
                     { reassign_existing: true }]
 
   # Creates a user and assigns their role in a transaction. An email already
-  # registered keeps its roles unless `reassign_existing` — a caller with no
-  # user behind it (service token) resolves the identity, it does not promote it.
+  # registered keeps its roles unless `reassign_existing`, and only gets one when
+  # it holds none — a caller with no user behind it (service token) resolves the
+  # identity, it does not promote it.
   # @return [User] the created or found user.
   def perform
     ActiveRecord::Base.transaction do
       @user, created = find_or_create_user
-      assign_role if created || reassign_existing
+      assign_role if created || reassign_existing || @user.roles.none?
     end
     @user
   end
