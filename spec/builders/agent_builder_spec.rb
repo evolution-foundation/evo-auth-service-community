@@ -52,5 +52,35 @@ RSpec.describe AgentBuilder do
 
       expect(user.id).to eq(existing.id)
     end
+
+    context 'when the email is already registered' do
+      let!(:custom_role) { Role.create!(key: 'custom_supervisor', name: 'Supervisor', type: 'user', system: false) }
+      let!(:existing) do
+        User.create!(email: "returning-#{SecureRandom.hex(3)}@example.com", name: 'Exists',
+                     password: 'Ex1st!Pass').tap do |u|
+          UserRole.create!(user: u, role: custom_role)
+        end
+      end
+
+      it 'reassigns the role by default' do
+        user = described_class.new(email: existing.email, inviter: inviter).perform
+
+        expect(user.reload.roles.map(&:key)).to eq(%w[agent])
+      end
+
+      it 'keeps the roles when reassign_existing is false' do
+        user = described_class.new(email: existing.email, inviter: nil, reassign_existing: false).perform
+
+        expect(user.reload.roles.map(&:key)).to eq(%w[custom_supervisor])
+      end
+
+      it 'grants the role to a registered email that holds none when reassign_existing is false' do
+        existing.user_roles.destroy_all
+
+        user = described_class.new(email: existing.email, inviter: nil, reassign_existing: false).perform
+
+        expect(user.reload.roles.map(&:key)).to eq(%w[agent])
+      end
+    end
   end
 end
