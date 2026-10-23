@@ -1,9 +1,7 @@
 module ServiceTokenAuthConcern
   extend ActiveSupport::Concern
 
-  # No fallback to EVOAI_CRM_API_TOKEN: that is the CRM's own credential, and
-  # inheriting it made a shared quickstart default the auth's service token,
-  # which bypasses every authorize_* gate (CRM-829).
+  # No fallback to EVOAI_CRM_API_TOKEN: that is the CRM's credential, not this service's.
   # Published in the quickstart's .env.example: every default install shared it.
   PUBLIC_DEFAULT_TOKENS = %w[6e10e689-58ce-4416-bf0d-f5818bf2dcf8].freeze
 

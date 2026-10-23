@@ -2,9 +2,6 @@
 
 require 'rails_helper'
 
-# CRM-829: the CRM's own token used to double as this service's credential
-# whenever EVOAI_AUTH_API_TOKEN was blank, so the public quickstart value
-# authenticated as a service and read the whole user directory.
 RSpec.describe 'Service token: EVOAI_CRM_API_TOKEN is not a credential', type: :request do
   let(:crm_token) { 'crm-token-probe' }
   let(:auth_token) { 'auth-token-probe' }
