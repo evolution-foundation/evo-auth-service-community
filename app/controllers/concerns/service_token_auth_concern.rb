@@ -1,6 +1,22 @@
 module ServiceTokenAuthConcern
   extend ActiveSupport::Concern
 
+  # No fallback to EVOAI_CRM_API_TOKEN: that is the CRM's credential, not this service's.
+  # Values published in the example env files: an install that kept one shares it with everyone.
+  PUBLIC_DEFAULT_TOKENS = %w[6e10e689-58ce-4416-bf0d-f5818bf2dcf8 CHANGE_ME].freeze
+
+  def self.expected_service_token
+    ENV['EVOAI_AUTH_API_TOKEN'].presence
+  end
+
+  def self.verify_configured!
+    token = expected_service_token
+    raise 'EVOAI_AUTH_API_TOKEN must be set (generate one with `openssl rand -hex 32`)' if token.blank?
+    return unless PUBLIC_DEFAULT_TOKENS.any? { |published| published.casecmp?(token.strip) }
+
+    raise 'EVOAI_AUTH_API_TOKEN is a published default; generate a new one with `openssl rand -hex 32`'
+  end
+
   private
 
   def service_token_from_header
@@ -15,7 +31,7 @@ module ServiceTokenAuthConcern
   end
 
   def expected_service_token
-    ENV['EVOAI_AUTH_API_TOKEN'].presence || ENV['EVOAI_CRM_API_TOKEN'].presence
+    ServiceTokenAuthConcern.expected_service_token
   end
 
   def valid_service_token?

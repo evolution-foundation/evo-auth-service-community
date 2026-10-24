@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **CRM-829 — `EVOAI_AUTH_API_TOKEN` is now required.** It is the only service credential this service accepts; `EVOAI_CRM_API_TOKEN` is no longer read. Web, Sidekiq and rake tasks refuse to boot when `EVOAI_AUTH_API_TOKEN` is missing, still holds the value the quickstart used to ship, or is the `CHANGE_ME` placeholder. Upgrade every installation.
+
+  **Operator action (required before upgrading):**
+  1. Generate a value with `openssl rand -hex 32` and set it as `EVOAI_AUTH_API_TOKEN` on every process of this service.
+  2. Set the CRM's `EVOAI_AUTH_API_TOKEN` (web and Sidekiq) to the same value. The CRM reads it for its permission checks since [evo-ai-crm-community#450](https://github.com/evolution-foundation/evo-ai-crm-community/pull/450); without it, the CRM checks permissions with the user's own bearer, and only users who hold `users.read` pass.
+  3. A CRM version without #450 sends its `EVOAI_CRM_API_TOKEN` instead. Until the CRM is upgraded, keep this service's `EVOAI_AUTH_API_TOKEN` equal to that value; after the upgrade, give it a value of its own. If that `EVOAI_CRM_API_TOKEN` is still the one the quickstart shipped, generate a new one first: this service does not boot with it.
+
 ### Added
 
 - **CRM-166 — the `agent` role reads custom attribute definitions** (migration `20260818120005`) — the default `agent` seed grants `custom_attribute_definitions.read`. The role already wrote attribute VALUES (`conversations.custom_attributes`, `contacts.destroy_custom_attributes`) but held no read on the DEFINITIONS, which is what `Api::V1::CustomAttributeDefinitionsController#index` gates on in the CRM: the 403 surfaced in the UI as "no custom attributes", so a contact's attributes were only visible inside the edit form (which falls back to rendering raw keys). Only the read is granted — `create`/`update`/`delete` on a definition stay administrative. The CRM used to gate the Settings › Custom Attributes menu entry and route on this same `read` key, which would have handed the agent that screen; **deploy together with the evo-ai-frontend-community change that moves those two gates to the administrative `create`/`update`/`delete` keys**, or the agent reaches Settings in the window between the two deploys. An idempotent data-migration backfills the key on already-bootstrapped installations (fresh installs pick it up from the seed).
