@@ -129,6 +129,11 @@ DOORKEEPER_SECRET_KEY=your_doorkeeper_secret_key
 # Frontend URL (CORS and OAuth callbacks)
 FRONTEND_URL=http://localhost:3000
 
+# Service-to-service token (X-Service-Token). Required: the app does not boot
+# without it. Callers such as the CRM must send this same value.
+# Generate it per install: openssl rand -hex 32
+EVOAI_AUTH_API_TOKEN=
+
 # Email (MFA and notifications)
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587

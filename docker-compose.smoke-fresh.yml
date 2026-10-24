@@ -50,10 +50,13 @@ services:
       POSTGRES_DATABASE: evo_auth_smoke
       REDIS_URL: redis://redis:6379/0
       RAILS_LOG_TO_STDOUT: "true"
+      # .env.example ships it empty and the boot refuses that.
+      EVOAI_AUTH_API_TOKEN: smoke-only-service-token
     ports:
       # Host 13001 para nao colidir com umbrella stack local; container continua em 3001.
       # Em CI runner, qualquer porta livre serve; mantemos 13001 para consistencia.
-      - "13001:3001"
+      # Só loopback: o token acima é público e não pode valer para quem vem de fora.
+      - "127.0.0.1:13001:3001"
     # Migrate explicito + server. NAO usamos bin/docker-entrypoint porque o pattern
     # match dele (last-2-args == "./bin/rails server") nao bate quando passamos -p/-b
     # aqui ou no umbrella. Operadores reais (umbrella) tambem fazem chain explicito.

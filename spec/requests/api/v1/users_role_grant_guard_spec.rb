@@ -35,11 +35,11 @@ RSpec.describe 'Users role-grant guard (super_admin rank)', type: :request do
   end
 
   def with_service_token
-    original = ENV['EVOAI_CRM_API_TOKEN']
-    ENV['EVOAI_CRM_API_TOKEN'] = 'service-token-probe'
+    original = ENV['EVOAI_AUTH_API_TOKEN']
+    ENV['EVOAI_AUTH_API_TOKEN'] = 'service-token-probe'
     yield
   ensure
-    ENV['EVOAI_CRM_API_TOKEN'] = original
+    ENV['EVOAI_AUTH_API_TOKEN'] = original
   end
 
   def role_keys_of(user)
