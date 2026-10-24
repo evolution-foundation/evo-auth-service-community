@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   **Operator action (required before upgrading):**
   1. Generate a value with `openssl rand -hex 32` and set it as `EVOAI_AUTH_API_TOKEN` on every process of this service.
-  2. Set the CRM's `EVOAI_AUTH_API_TOKEN` (web and Sidekiq) to the same value. The CRM reads it for its permission checks since [evo-ai-crm-community#450](https://github.com/evolution-foundation/evo-ai-crm-community/pull/450); without it, every RBAC check in the CRM is denied.
+  2. Set the CRM's `EVOAI_AUTH_API_TOKEN` (web and Sidekiq) to the same value. The CRM reads it for its permission checks since [evo-ai-crm-community#450](https://github.com/evolution-foundation/evo-ai-crm-community/pull/450); without it, the CRM checks permissions with the user's own bearer, and only users who hold `users.read` pass.
   3. A CRM version without #450 sends its `EVOAI_CRM_API_TOKEN` instead. Until the CRM is upgraded, keep this service's `EVOAI_AUTH_API_TOKEN` equal to that value; after the upgrade, give it a value of its own. If that `EVOAI_CRM_API_TOKEN` is still the one the quickstart shipped, generate a new one first: this service does not boot with it.
 
 ### Added
