@@ -81,7 +81,13 @@ RSpec.describe 'Service token: EVOAI_CRM_API_TOKEN is not a credential', type: :
 
     it 'refuses the public quickstart default' do
       with_env('EVOAI_AUTH_API_TOKEN' => '6e10e689-58ce-4416-bf0d-f5818bf2dcf8') do
-        expect { ServiceTokenAuthConcern.verify_configured! }.to raise_error(/public quickstart default/)
+        expect { ServiceTokenAuthConcern.verify_configured! }.to raise_error(/published default/)
+      end
+    end
+
+    it 'refuses the CHANGE_ME placeholder, in any case' do
+      with_env('EVOAI_AUTH_API_TOKEN' => 'change_me') do
+        expect { ServiceTokenAuthConcern.verify_configured! }.to raise_error(/published default/)
       end
     end
 

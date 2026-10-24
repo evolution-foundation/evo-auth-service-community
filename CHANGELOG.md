@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **CRM-829 — `EVOAI_AUTH_API_TOKEN` is now required.** It is the only service credential this service accepts; `EVOAI_CRM_API_TOKEN` is no longer read. Web, Sidekiq and rake tasks refuse to boot when `EVOAI_AUTH_API_TOKEN` is missing or still holds the value the quickstart used to ship. Upgrade every installation.
+- **CRM-829 — `EVOAI_AUTH_API_TOKEN` is now required.** It is the only service credential this service accepts; `EVOAI_CRM_API_TOKEN` is no longer read. Web, Sidekiq and rake tasks refuse to boot when `EVOAI_AUTH_API_TOKEN` is missing, still holds the value the quickstart used to ship, or is the `CHANGE_ME` placeholder. Upgrade every installation.
 
   **Operator action (required before upgrading):**
   1. Generate a value with `openssl rand -hex 32` and set it as `EVOAI_AUTH_API_TOKEN` on every process of this service.
