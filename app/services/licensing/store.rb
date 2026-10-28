@@ -144,10 +144,13 @@ module Licensing
 
     private
 
+    # No `connection.active?` guard: it is false for a connection the current
+    # thread has not used yet (every new Sidekiq job thread), which sent the key
+    # only to a file inside the worker container. table_exists? connects on
+    # demand, and an unreachable database still falls back to the file.
     def _db?
       ::RuntimeConfig
-      ActiveRecord::Base.connection.active? &&
-        ActiveRecord::Base.connection.table_exists?('runtime_configs')
+      ActiveRecord::Base.connection.table_exists?('runtime_configs')
     rescue StandardError
       false
     end
