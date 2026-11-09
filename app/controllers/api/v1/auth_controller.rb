@@ -54,6 +54,8 @@ class Api::V1::AuthController < Api::BaseController
     # Without a token header only a JSON request is accepted: a cross-site form post cannot
     # send one without a CORS preflight, so it cannot end the session through the cookies.
     return render_token_not_found('Authentication required') unless current_user || request.media_type == 'application/json'
+    # Resolved before step 2 revokes the cookie's token, which would hide the session.
+    session_user = current_user || session_cookie_owner
 
     # 1. Revoke token from bearer/cookie sent by frontend
     token_payload = @validation_result&.dig(:data, :token)
@@ -80,7 +82,6 @@ class Api::V1::AuthController < Api::BaseController
     end
 
     # 3. Revoke ALL active tokens related to the user to prevent refresh
-    session_user = current_user || session_cookie_owner
     invalidate_user_tokens(session_user) if session_user
 
     # 4. Clear HttpOnly cookies with correct paths
@@ -363,9 +364,12 @@ class Api::V1::AuthController < Api::BaseController
     nil
   end
 
+  # Only a live token names the session: every refresh leaves a revoked one behind, and it
+  # must not be able to end the user's other sessions.
   def session_cookie_owner
-    token = Doorkeeper::AccessToken.find_by(refresh_token: cookies[:_evo_rt]) if cookies[:_evo_rt].present?
-    token ||= Doorkeeper::AccessToken.find_by(token: cookies[:_evo_at]) if cookies[:_evo_at].present?
+    live = Doorkeeper::AccessToken.where(revoked_at: nil)
+    token = live.find_by(refresh_token: cookies[:_evo_rt]) if cookies[:_evo_rt].present?
+    token ||= live.find_by(token: cookies[:_evo_at]) if cookies[:_evo_at].present?
     User.find_by(id: token.resource_owner_id) if token
   end
 
