@@ -3,7 +3,7 @@ class Api::V1::AuthController < Api::BaseController
   include AuthHelper
   include LicensingSetupConcern
 
-  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation]
+  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation, :logout]
 
   # Login
   def login
@@ -49,6 +49,14 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   def logout
+    # Authentication is optional here: an already revoked token must still get its cookies cleared.
+    authenticate_if_token_present
+    # Without a token header only a JSON request is accepted: a cross-site form post cannot
+    # send one without a CORS preflight, so it cannot end the session through the cookies.
+    return render_token_not_found('Authentication required') unless current_user || request.media_type == 'application/json'
+    # Resolved before step 2 revokes the cookie's token, which would hide the session.
+    session_user = current_user || session_cookie_owner
+
     # 1. Revoke token from bearer/cookie sent by frontend
     token_payload = @validation_result&.dig(:data, :token)
     if token_payload.present?
@@ -74,9 +82,7 @@ class Api::V1::AuthController < Api::BaseController
     end
 
     # 3. Revoke ALL active tokens related to the user to prevent refresh
-    if current_user
-      invalidate_user_tokens(current_user)
-    end
+    invalidate_user_tokens(session_user) if session_user
 
     # 4. Clear HttpOnly cookies with correct paths
     # Detecta se está usando HTTPS (incluindo via ngrok)
@@ -347,6 +353,25 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   private
+
+  def authenticate_if_token_present
+    return unless request.headers['Authorization'].present? || request.headers['api_access_token'].present? || request.headers['HTTP_API_ACCESS_TOKEN'].present?
+
+    authenticate_request!
+    set_current_user
+  rescue TokenValidationService::InvalidToken, TokenValidationService::ExpiredToken,
+         TokenValidationService::TokenNotFound, ActiveRecord::RecordNotFound
+    nil
+  end
+
+  # Only a live token names the session: every refresh leaves a revoked one behind, and it
+  # must not be able to end the user's other sessions.
+  def session_cookie_owner
+    live = Doorkeeper::AccessToken.where(revoked_at: nil)
+    token = live.find_by(refresh_token: cookies[:_evo_rt]) if cookies[:_evo_rt].present?
+    token ||= live.find_by(token: cookies[:_evo_at]) if cookies[:_evo_at].present?
+    User.find_by(id: token.resource_owner_id) if token
+  end
 
   def validation_error_details(user)
     user.errors.map do |error|
