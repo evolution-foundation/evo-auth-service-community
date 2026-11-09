@@ -15,81 +15,82 @@ RSpec.describe 'POST /api/v1/auth/logout', type: :request do
     )
   end
 
-  def login
-    post '/api/v1/auth/login', params: { email: user.email, password: password }, as: :json
-    unless response.status == 200
-      fail "Login failed with status #{response.status}: #{response.body}"
-    end
-    JSON.parse(response.body)['data']
-  end
-
-  def logout_with_token(token)
-    post '/api/v1/auth/logout', headers: { 'Authorization' => "Bearer #{token}" }, as: :json
-  end
-
-  def logout_without_token
-    post '/api/v1/auth/logout', as: :json
-  end
-
   before { Rails.cache.clear }
 
-  describe 'with valid token' do
-    it 'revokes the token and clears the cookies' do
-      login_data = login
-      token = login_data.dig('token', 'access_token')
+  def login_token
+    post '/api/v1/auth/login', params: { email: user.email, password: password }, as: :json
+    expect(response).to have_http_status(:ok)
+    access_token = response.parsed_body.dig('data', 'token', 'access_token')
+    Doorkeeper::AccessToken.find_by!(token: access_token)
+  end
 
-      logout_with_token(token)
-
-      expect(response).to have_http_status(:ok)
-      # HttpOnly cookies are cleared with max-age=0 or expires in the past
-      set_cookie = response.headers['Set-Cookie']
-      # Set-Cookie can be an array of strings
-      cookie_str = set_cookie.is_a?(Array) ? set_cookie.join('; ') : set_cookie
-      expect(cookie_str).to match(/_evo_at=;/)
-      expect(cookie_str).to match(/(max-age=0|expires=Thu, 01 Jan 1970)/)
-      expect(cookie_str).to match(/_evo_rt=;/)
-    end
-
-    it 'makes the token unusable after logout' do
-      login_data = login
-      token = login_data.dig('token', 'access_token')
-
-      # Before logout, token is valid
-      get '/api/v1/auth/me', headers: { 'Authorization' => "Bearer #{token}" }
-      expect(response).to have_http_status(:ok)
-
-      # Logout
-      logout_with_token(token)
-      expect(response).to have_http_status(:ok)
-
-      # After logout, token is revoked (on cache miss)
-      get '/api/v1/auth/me', headers: { 'Authorization' => "Bearer #{token}" }
-      expect(response).to have_http_status(:unauthorized)
+  def logout(headers: {}, as_json: true)
+    if as_json
+      post '/api/v1/auth/logout', headers: headers, as: :json
+    else
+      post '/api/v1/auth/logout', headers: headers, params: 'x=1', env: { 'CONTENT_TYPE' => 'application/x-www-form-urlencoded' }
     end
   end
 
-  describe 'with an already revoked token' do
-    it 'returns 200 and still clears the cookies' do
-      token = login.dig('token', 'access_token')
-      Doorkeeper::AccessToken.where(resource_owner_id: user.id).update_all(revoked_at: Time.current)
-      cookies[:_evo_at] = token
-
-      logout_with_token(token)
-
-      expect(response).to have_http_status(:ok)
-      cookie_str = Array(response.headers['Set-Cookie']).join("\n")
-      expect(cookie_str).to match(/_evo_at=;/)
-      expect(cookie_str).to match(/_evo_rt=;/)
-    end
+  def expired_cookie?(name)
+    line = Array(response.headers['Set-Cookie']).flat_map { |h| h.split("\n") }.find { |l| l.start_with?("#{name}=") }
+    line.present? && line.match?(/max-age=0|expires=Thu, 01 Jan 1970/i)
   end
 
-  describe 'without any token' do
-    it 'returns 200 on repeated calls' do
-      logout_without_token
-      expect(response).to have_http_status(:ok)
+  it 'revokes every session token of the user and expires both cookies' do
+    token = login_token
+    other_session = login_token
+    token.update_columns(revoked_at: nil)
 
-      logout_without_token
-      expect(response).to have_http_status(:ok)
-    end
+    logout(headers: { 'Authorization' => "Bearer #{token.token}" })
+
+    expect(response).to have_http_status(:ok)
+    expect(token.reload.revoked_at).to be_present
+    expect(other_session.reload.revoked_at).to be_present
+    expect(expired_cookie?('_evo_at')).to be(true)
+    expect(expired_cookie?('_evo_rt')).to be(true)
+  end
+
+  it 'expires both cookies when the token was already revoked' do
+    token = login_token
+    token.revoke
+    cookies[:_evo_at] = token.token
+
+    logout(headers: { 'Authorization' => "Bearer #{token.token}" })
+
+    expect(response).to have_http_status(:ok)
+    expect(expired_cookie?('_evo_at')).to be(true)
+    expect(expired_cookie?('_evo_rt')).to be(true)
+  end
+
+  it 'revokes the session found through the cookies when no token header is sent' do
+    token = login_token
+    cookies[:_evo_rt] = token.refresh_token
+
+    logout
+
+    expect(response).to have_http_status(:ok)
+    expect(token.reload.revoked_at).to be_present
+  end
+
+  it 'revokes an access token kept only in the _evo_at cookie' do
+    token = login_token
+    cookies.delete('_evo_rt')
+    cookies[:_evo_at] = token.token
+
+    logout
+
+    expect(response).to have_http_status(:ok)
+    expect(token.reload.revoked_at).to be_present
+  end
+
+  it 'refuses a form post without a token header and keeps the session' do
+    token = login_token
+    cookies[:_evo_rt] = token.refresh_token
+
+    logout(as_json: false)
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(token.reload.revoked_at).to be_nil
   end
 end
