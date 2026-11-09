@@ -49,15 +49,14 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   def logout
-    # Attempt authentication without failing if token is revoked/absent.
-    # Allows cookie cleanup even after account deletion.
-    try_authenticate_optional
+    # Authentication is optional here: an already revoked token must still get its cookies cleared.
+    authenticate_if_token_present
 
     # 1. Revoke token from bearer/cookie sent by frontend
     token_payload = @validation_result&.dig(:data, :token)
     if token_payload.present?
       token_type = token_payload[:type]
-
+      
       case token_type
       when 'bearer'
         if @doorkeeper_token
@@ -84,24 +83,24 @@ class Api::V1::AuthController < Api::BaseController
 
     # 4. Clear HttpOnly cookies with correct paths
     # Detecta se está usando HTTPS (incluindo via ngrok)
-    is_secure = request.ssl? ||
+    is_secure = request.ssl? || 
                 request.headers['X-Forwarded-Proto'] == 'https' ||
                 request.headers['X-Forwarded-Ssl'] == 'on' ||
                 request.scheme == 'https'
-
+    
     # Delete refresh token cookie (path atualizado para corresponder ao set_refresh_cookie)
-    cookies.delete(:_evo_rt,
-                  secure: is_secure,
-                  httponly: true,
-                  same_site: is_secure ? :none : :lax,
+    cookies.delete(:_evo_rt, 
+                  secure: is_secure, 
+                  httponly: true, 
+                  same_site: is_secure ? :none : :lax, 
                   domain: cookie_domain,
                   path: '/api/v1/auth')
-
+    
     # Delete access token cookie (default path)
-    cookies.delete(:_evo_at,
-                  secure: is_secure,
-                  httponly: true,
-                  same_site: is_secure ? :none : :lax,
+    cookies.delete(:_evo_at, 
+                  secure: is_secure, 
+                  httponly: true, 
+                  same_site: is_secure ? :none : :lax, 
                   domain: cookie_domain)
 
     success_response(data: {}, message: 'Logged out successfully')
@@ -352,28 +351,14 @@ class Api::V1::AuthController < Api::BaseController
 
   private
 
-  # Attempt token validation without failing if revoked/absent.
-  # Reutiliza o bloco de validação do authenticate_request! sem o render de erro.
-  def try_authenticate_optional
-    return if exempt_from_permission_check? || !token_header_present?
+  def authenticate_if_token_present
+    return unless request.headers['Authorization'].present? || request.headers['api_access_token'].present? || request.headers['HTTP_API_ACCESS_TOKEN'].present?
 
-    begin
-      @token_validator = TokenValidationService.new(request)
-      result = @token_validator.validate!
-
-      user_id = @token_validator.token_type == :bearer ? (@token_validator.token&.resource_owner_id || result.dig(:user, :id)) : result.dig(:user, :id)
-      @current_user = User.find(user_id) if user_id
-      @validation_result = result
-      Current.user = @current_user if @current_user
-
-      set_token_references_from_validator
-    rescue TokenValidationService::InvalidToken, TokenValidationService::ExpiredToken, TokenValidationService::TokenNotFound, ActiveRecord::RecordNotFound
-      # Token revoked/expired/invalid/not found: continue without error
-    end
-  end
-
-  def token_header_present?
-    request.headers['Authorization'].present? || request.headers['api_access_token'].present? || request.headers['HTTP_API_ACCESS_TOKEN'].present?
+    authenticate_request!
+    set_current_user
+  rescue TokenValidationService::InvalidToken, TokenValidationService::ExpiredToken,
+         TokenValidationService::TokenNotFound, ActiveRecord::RecordNotFound
+    nil
   end
 
   def validation_error_details(user)

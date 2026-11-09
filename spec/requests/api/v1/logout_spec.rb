@@ -2,10 +2,7 @@
 
 require 'rails_helper'
 
-# Logout endpoint must clear HttpOnly cookies in two scenarios:
-# 1. Normal logout: user has valid token → revoke it + clear cookies (200)
-# 2. Post-deletion: tokens already revoked → still clear cookies (200)
-RSpec.describe 'POST /api/v1/auth/logout — clear cookies with/without token', type: :request do
+RSpec.describe 'POST /api/v1/auth/logout', type: :request do
   let(:password) { 'Test123!@' }
 
   let(:user) do
@@ -71,25 +68,23 @@ RSpec.describe 'POST /api/v1/auth/logout — clear cookies with/without token', 
     end
   end
 
-  describe 'without valid token (post-deletion scenario)' do
-    it 'still clears the cookies and returns 200' do
-      # Simulate post-deletion: all tokens are revoked, user calls logout anyway
-      logout_without_token
+  describe 'with an already revoked token' do
+    it 'returns 200 and still clears the cookies' do
+      token = login.dig('token', 'access_token')
+      Doorkeeper::AccessToken.where(resource_owner_id: user.id).update_all(revoked_at: Time.current)
+      cookies[:_evo_at] = token
+
+      logout_with_token(token)
 
       expect(response).to have_http_status(:ok)
-      # Cookies must be cleared even without a valid token.
-      # Rails doesn't send Set-Cookie headers if no cookies are set to begin with,
-      # which is correct behavior: logout succeeds and clears nothing (no-op).
-      set_cookie = response.headers['Set-Cookie']
-      if set_cookie.present?
-        cookie_str = set_cookie.is_a?(Array) ? set_cookie.join('; ') : set_cookie
-        expect(cookie_str).to match(/_evo_at=;/)
-        expect(cookie_str).to match(/(max-age=0|expires=Thu, 01 Jan 1970)/)
-        expect(cookie_str).to match(/_evo_rt=;/)
-      end
+      cookie_str = Array(response.headers['Set-Cookie']).join("\n")
+      expect(cookie_str).to match(/_evo_at=;/)
+      expect(cookie_str).to match(/_evo_rt=;/)
     end
+  end
 
-    it 'succeeds even if called multiple times (idempotent)' do
+  describe 'without any token' do
+    it 'returns 200 on repeated calls' do
       logout_without_token
       expect(response).to have_http_status(:ok)
 
