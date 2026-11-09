@@ -2,9 +2,7 @@
 
 require 'rails_helper'
 
-# Regression spec for CRM-972: profile/avatar updates must invalidate the token cache
-# so changes reflect immediately in /api/v1/auth/validate without requiring a new login.
-RSpec.describe 'PUT /api/v1/profile — cache invalidation (CRM-972)', type: :request do
+RSpec.describe 'PUT /api/v1/profile — token cache invalidation', type: :request do
   let(:password) { 'Test123!@' }
 
   before do
@@ -48,7 +46,7 @@ RSpec.describe 'PUT /api/v1/profile — cache invalidation (CRM-972)', type: :re
       expect(original_name).to eq('Original Name')
 
       # 2. Update the name
-      new_name = 'Updated Name CRM972'
+      new_name = 'Updated Name'
       put '/api/v1/profile',
           params: { profile: { name: new_name } },
           headers: headers
@@ -98,7 +96,7 @@ RSpec.describe 'PUT /api/v1/profile — cache invalidation (CRM-972)', type: :re
       file = fixture_file_upload('spec/fixtures/avatar1.png', 'image/png')
 
       # 1. Update both name and avatar
-      new_name = 'Updated Both CRM972'
+      new_name = 'Updated Name And Avatar'
       put '/api/v1/profile',
           params: { profile: { name: new_name, avatar: file } },
           headers: headers
