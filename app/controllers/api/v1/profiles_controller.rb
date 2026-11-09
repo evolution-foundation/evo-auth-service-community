@@ -1,18 +1,18 @@
 class Api::V1::ProfilesController < Api::BaseController
   include AccountSerializerHelper
-  
+
   before_action :check_authorization
-  
+
   def show
     account = account_data
-    accounts = account.present? ? [account.merge('role' => current_user.role_data)] : []
+    accounts = account.present? ? [ account.merge("role" => current_user.role_data) ] : []
 
     success_response(
       data: {
         user: profile_data(current_user),
         accounts: accounts
       },
-      message: 'Profile retrieved successfully'
+      message: "Profile retrieved successfully"
     )
   end
 
@@ -25,13 +25,13 @@ class Api::V1::ProfilesController < Api::BaseController
     filtered_params = profile_params
 
     if current_user.update(filtered_params)
-      TokenValidationService.invalidate_cache_for_user(current_user) if avatar_param.present?
+      TokenValidationService.invalidate_cache_for_user(current_user)
 
       message = if current_user.unconfirmed_email.present?
-                  'Profile updated. Confirmation email sent to the new address.'
-                else
-                  'Profile updated successfully'
-                end
+                  "Profile updated. Confirmation email sent to the new address."
+      else
+                  "Profile updated successfully"
+      end
       success_response(
         data: profile_data(current_user),
         message: message
@@ -45,41 +45,42 @@ class Api::V1::ProfilesController < Api::BaseController
     if params[:avatar].present?
       current_user.avatar.attach(params[:avatar])
       if current_user.save
+        TokenValidationService.invalidate_cache_for_user(current_user)
         success_response(
           data: { avatar_url: avatar_url(current_user) },
-          message: 'Avatar updated successfully'
+          message: "Avatar updated successfully"
         )
       else
         render_unprocessable_entity(current_user.errors)
       end
     else
-      error_response('VALIDATION_ERROR', 'No avatar file provided', status: :unprocessable_entity)
+      error_response("VALIDATION_ERROR", "No avatar file provided", status: :unprocessable_entity)
     end
   end
 
   def update_password
     unless params[:current_password].present? && params[:new_password].present?
-      error_response('VALIDATION_ERROR', 'Current password and new password are required', status: :unprocessable_entity)
+      error_response("VALIDATION_ERROR", "Current password and new password are required", status: :unprocessable_entity)
       return
     end
 
     if current_user.valid_password?(params[:current_password])
       if current_user.update(password: params[:new_password])
-        success_response(data: {}, message: 'Password updated successfully')
+        success_response(data: {}, message: "Password updated successfully")
       else
         render_unprocessable_entity(current_user.errors)
       end
     else
-      error_response('UNAUTHORIZED', 'Current password is incorrect', status: :unprocessable_entity)
+      error_response("UNAUTHORIZED", "Current password is incorrect", status: :unprocessable_entity)
     end
   end
 
   def cancel_email_change
     unless current_user.unconfirmed_email.present?
-      return error_response('VALIDATION_ERROR', 'No pending email change', status: :unprocessable_entity)
+      return error_response("VALIDATION_ERROR", "No pending email change", status: :unprocessable_entity)
     end
     if current_user.update(unconfirmed_email: nil)
-      success_response(data: profile_data(current_user), message: 'Email change cancelled')
+      success_response(data: profile_data(current_user), message: "Email change cancelled")
     else
       render_unprocessable_entity(current_user.errors)
     end
@@ -87,10 +88,10 @@ class Api::V1::ProfilesController < Api::BaseController
 
   def resend_email_confirmation
     unless current_user.pending_reconfirmation?
-      return error_response('VALIDATION_ERROR', 'No pending email confirmation', status: :unprocessable_entity)
+      return error_response("VALIDATION_ERROR", "No pending email confirmation", status: :unprocessable_entity)
     end
     current_user.send_confirmation_instructions
-    success_response(data: {}, message: 'Confirmation email resent')
+    success_response(data: {}, message: "Confirmation email resent")
   end
 
   def notifications
@@ -102,7 +103,7 @@ class Api::V1::ProfilesController < Api::BaseController
         marketing_emails: false,
         security_alerts: true
       },
-      message: 'Notification preferences retrieved successfully'
+      message: "Notification preferences retrieved successfully"
     )
   end
 
@@ -117,7 +118,7 @@ class Api::V1::ProfilesController < Api::BaseController
           security_alerts: params[:security_alerts] || true
         }
       },
-      message: 'Notification preferences updated successfully'
+      message: "Notification preferences updated successfully"
     )
   end
 
@@ -160,19 +161,19 @@ class Api::V1::ProfilesController < Api::BaseController
   def check_authorization
     # Verificar se usuário tem permissão para gerenciar seu próprio perfil
     action_map = {
-      'show' => 'profiles.read',
-      'update' => 'profiles.update',
-      'update_avatar' => 'profiles.update_avatar',
-      'update_password' => 'profiles.update_password',
-      'cancel_email_change' => 'profiles.update',
-      'resend_email_confirmation' => 'profiles.update',
-      'notifications' => 'profiles.read',
-      'update_notifications' => 'profiles.manage_notifications'
+      "show" => "profiles.read",
+      "update" => "profiles.update",
+      "update_avatar" => "profiles.update_avatar",
+      "update_password" => "profiles.update_password",
+      "cancel_email_change" => "profiles.update",
+      "resend_email_confirmation" => "profiles.update",
+      "notifications" => "profiles.read",
+      "update_notifications" => "profiles.manage_notifications"
     }
-    
+
     required_permission = action_map[action_name]
     if required_permission
-      resource_key, action_key = required_permission.split('.')
+      resource_key, action_key = required_permission.split(".")
       authorize_resource!(resource_key, action_key)
     else
       true # Para ações não mapeadas, permitir por enquanto
