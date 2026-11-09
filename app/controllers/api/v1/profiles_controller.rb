@@ -37,6 +37,8 @@ class Api::V1::ProfilesController < Api::BaseController
         message: message
       )
     else
+      # The avatar is attached (and saved) before the profile fields are validated.
+      TokenValidationService.invalidate_cache_for_user(current_user) if avatar_param.present?
       render_unprocessable_entity(current_user.errors)
     end
   end
