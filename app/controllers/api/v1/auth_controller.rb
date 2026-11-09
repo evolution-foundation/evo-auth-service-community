@@ -3,7 +3,7 @@ class Api::V1::AuthController < Api::BaseController
   include AuthHelper
   include LicensingSetupConcern
 
-  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation]
+  skip_before_action :authenticate_request!, only: [:login, :refresh, :register, :forgot_password, :reset_password, :validate, :verify_mfa, :confirmation, :resend_confirmation, :logout]
 
   # Login
   def login
@@ -49,11 +49,20 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   def logout
-    # 1. Revoke token from bearer/cookie sent by frontend
+    # Logout with optional authentication. This endpoint clears cookies in two scenarios:
+    # 1. Normal logout: user has valid token → revoke it + clear cookies (200)
+    # 2. Post-deletion: tokens already revoked → still clear cookies (200)
+    #
+    # CRM-973: after account deletion, tokens were revoked before logout was called.
+    # Without optional auth, logout returned 401 and left _evo_at/_evo_rt in the browser.
+    # We attempt validation but do not fail if the token is revoked/absent.
+    try_optional_authentication!
+
+    # 1. Revoke token from bearer/cookie sent by frontend (only if we have a valid user)
     token_payload = @validation_result&.dig(:data, :token)
     if token_payload.present?
       token_type = token_payload[:type]
-      
+
       case token_type
       when 'bearer'
         if @doorkeeper_token
@@ -74,30 +83,30 @@ class Api::V1::AuthController < Api::BaseController
     end
 
     # 3. Revoke ALL active tokens related to the user to prevent refresh
-    if current_user
-      invalidate_user_tokens(current_user)
+    if @current_user
+      invalidate_user_tokens(@current_user)
     end
 
-    # 4. Clear HttpOnly cookies with correct paths
+    # 4. Clear HttpOnly cookies with correct paths (this ALWAYS happens, regardless of auth)
     # Detecta se está usando HTTPS (incluindo via ngrok)
-    is_secure = request.ssl? || 
+    is_secure = request.ssl? ||
                 request.headers['X-Forwarded-Proto'] == 'https' ||
                 request.headers['X-Forwarded-Ssl'] == 'on' ||
                 request.scheme == 'https'
-    
+
     # Delete refresh token cookie (path atualizado para corresponder ao set_refresh_cookie)
-    cookies.delete(:_evo_rt, 
-                  secure: is_secure, 
-                  httponly: true, 
-                  same_site: is_secure ? :none : :lax, 
+    cookies.delete(:_evo_rt,
+                  secure: is_secure,
+                  httponly: true,
+                  same_site: is_secure ? :none : :lax,
                   domain: cookie_domain,
                   path: '/api/v1/auth')
-    
+
     # Delete access token cookie (default path)
-    cookies.delete(:_evo_at, 
-                  secure: is_secure, 
-                  httponly: true, 
-                  same_site: is_secure ? :none : :lax, 
+    cookies.delete(:_evo_at,
+                  secure: is_secure,
+                  httponly: true,
+                  same_site: is_secure ? :none : :lax,
                   domain: cookie_domain)
 
     success_response(data: {}, message: 'Logged out successfully')
@@ -347,6 +356,47 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   private
+
+  # Try to validate the request token, but don't fail if it's revoked/absent.
+  # Used by logout to ensure token revocation happens when a token exists,
+  # while still clearing cookies even if the token is already gone.
+  def try_optional_authentication!
+    return if exempt_from_permission_check?
+
+    # Attempt token validation
+    if request.headers['Authorization'].present? || request.headers['api_access_token'].present? || request.headers['HTTP_API_ACCESS_TOKEN'].present?
+      begin
+        @token_validator = TokenValidationService.new(request)
+        result = @token_validator.validate!
+
+        # Minimize overhead by using token reference when available.
+        user_id = if @token_validator.token_type == :bearer
+                    @token_validator.token&.resource_owner_id || result.dig(:user, :id)
+                  else
+                    result.dig(:user, :id)
+                  end
+
+        @current_user = User.find(user_id) if user_id
+        @validation_result = result
+        Current.user = @current_user if @current_user
+
+        # Reuse the token already loaded during validation (avoids extra DB query)
+        loaded_token = @token_validator.token
+        if loaded_token
+          case @token_validator.token_type
+          when :bearer
+            @doorkeeper_token = loaded_token
+          when :api_access_token
+            @access_token = loaded_token
+          end
+        end
+      rescue TokenValidationService::InvalidToken, TokenValidationService::ExpiredToken, TokenValidationService::TokenNotFound, ActiveRecord::RecordNotFound => e
+        # Token is revoked, expired, invalid, or user not found: continue anyway
+        # The cookies will be cleared (step 4) regardless
+        Rails.logger.debug("Logout: token validation failed (#{e.class}), continuing with cookie cleanup")
+      end
+    end
+  end
 
   def validation_error_details(user)
     user.errors.map do |error|
