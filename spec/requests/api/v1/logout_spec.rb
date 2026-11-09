@@ -5,11 +5,6 @@ require 'rails_helper'
 # Logout endpoint must clear HttpOnly cookies in two scenarios:
 # 1. Normal logout: user has valid token → revoke it + clear cookies (200)
 # 2. Post-deletion: tokens already revoked → still clear cookies (200)
-#
-# Regression for CRM-973: after account deletion, logout returned 401
-# because it required authentication but tokens were revogado. This left
-# _evo_at/_evo_rt cookies in the browser, causing the next user in the same tab
-# to inherit the previous session.
 RSpec.describe 'POST /api/v1/auth/logout — clear cookies with/without token', type: :request do
   let(:password) { 'Test123!@' }
 
