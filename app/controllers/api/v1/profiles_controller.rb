@@ -25,7 +25,7 @@ class Api::V1::ProfilesController < Api::BaseController
     filtered_params = profile_params
 
     if current_user.update(filtered_params)
-      TokenValidationService.invalidate_cache_for_user(current_user) if avatar_param.present?
+      TokenValidationService.invalidate_cache_for_user(current_user)
 
       message = if current_user.unconfirmed_email.present?
                   'Profile updated. Confirmation email sent to the new address.'
@@ -37,6 +37,8 @@ class Api::V1::ProfilesController < Api::BaseController
         message: message
       )
     else
+      # The avatar is attached (and saved) before the profile fields are validated.
+      TokenValidationService.invalidate_cache_for_user(current_user) if avatar_param.present?
       render_unprocessable_entity(current_user.errors)
     end
   end
@@ -45,6 +47,7 @@ class Api::V1::ProfilesController < Api::BaseController
     if params[:avatar].present?
       current_user.avatar.attach(params[:avatar])
       if current_user.save
+        TokenValidationService.invalidate_cache_for_user(current_user)
         success_response(
           data: { avatar_url: avatar_url(current_user) },
           message: 'Avatar updated successfully'

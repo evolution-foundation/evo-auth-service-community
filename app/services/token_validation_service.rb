@@ -75,9 +75,11 @@ class TokenValidationService
       .pluck(:token)
       .each { |t| invalidate_cache_for_token(t) }
 
-    # Invalidate cache for all access tokens owned by the user
+    # Invalidate cache for all access tokens that validate as the user: owned by the
+    # user, or owned by an account and issued to the user.
     AccessToken
       .where(owner: user)
+      .or(AccessToken.where(issued_id: user.id))
       .pluck(:token)
       .each { |t| invalidate_cache_for_token(t) }
   end
