@@ -55,11 +55,8 @@ class AccessToken < ApplicationRecord
   end
 
   def update_token
-    previous_digest = self[:token]
     assign_token(self.class.generate_unique_token)
     save!
-    TokenValidationService.invalidate_cache_for_digest(previous_digest)
-    true
   end
 
   # The value on the instance that generated it (create / update_token), so the

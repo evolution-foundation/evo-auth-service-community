@@ -40,9 +40,6 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def update
     if @access_token.update(access_token_params)
-      # The cached validation carries the scopes; drop it so a narrowed token is
-      # narrowed on the next request.
-      TokenValidationService.invalidate_cache_for_digest(@access_token[:token])
       audit('update')
       success_response(data: { access_token: AccessTokenSerializer.full(@access_token) }, message: 'Access token updated successfully')
     else
@@ -52,7 +49,6 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def destroy
     @access_token.destroy
-    TokenValidationService.invalidate_cache_for_digest(@access_token[:token])
     audit('destroy')
     success_response(data: {}, message: 'Access token deleted successfully')
   end

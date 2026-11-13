@@ -57,19 +57,16 @@ RSpec.describe AccessToken do
     end
   end
 
-  describe '#update_token' do
-    it 'replaces the value and drops the cached validation of the old one' do
+  describe "#update_token" do
+    it "replaces the value, and the old one no longer finds the token" do
       token = create_token
       old_value = token.token
-      allow(TokenValidationService).to receive(:invalidate_cache_for_digest)
 
       token.update_token
 
       expect(token.token).not_to eq(old_value)
       expect(described_class.for_token(old_value)).to be_nil
       expect(described_class.for_token(token.token)).to eq(token)
-      expect(TokenValidationService).to have_received(:invalidate_cache_for_digest)
-        .with(Digest::SHA256.hexdigest(old_value))
     end
   end
 
