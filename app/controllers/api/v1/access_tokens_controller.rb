@@ -2,6 +2,7 @@ class Api::V1::AccessTokensController < Api::BaseController
   before_action :set_owner_context
   before_action :set_access_token, only: [:show, :update, :destroy, :update_token]
   before_action :check_authorization
+  before_action :limit_scopes_to_caller_token, only: [:create, :update]
 
   OWNER_TYPE = 'User'.freeze
 
@@ -30,7 +31,8 @@ class Api::V1::AccessTokensController < Api::BaseController
     @access_token = AccessToken.new(token_params)
 
     if @access_token.save
-      success_response(data: { access_token: AccessTokenSerializer.full(@access_token) }, message: 'Access token created successfully', status: :created)
+      audit('create')
+      success_response(data: { access_token: AccessTokenSerializer.with_token(@access_token) }, message: 'Access token created successfully', status: :created)
     else
       render_unprocessable_entity(@access_token.errors)
     end
@@ -38,6 +40,7 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def update
     if @access_token.update(access_token_params)
+      audit('update')
       success_response(data: { access_token: AccessTokenSerializer.full(@access_token) }, message: 'Access token updated successfully')
     else
       render_unprocessable_entity(@access_token.errors)
@@ -46,13 +49,15 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def destroy
     @access_token.destroy
+    audit('destroy')
     success_response(data: {}, message: 'Access token deleted successfully')
   end
 
   def update_token
     if @access_token.update_token
+      audit('update_token')
       success_response(
-        data: { access_token: AccessTokenSerializer.full(@access_token) },
+        data: { access_token: AccessTokenSerializer.with_token(@access_token) },
         message: 'Token regenerated successfully'
       )
     else
@@ -61,6 +66,39 @@ class Api::V1::AccessTokensController < Api::BaseController
   end
 
   private
+
+  # A request made with a scoped API token may only hand out what that token
+  # holds: no "default" and no key outside its effective scopes.
+  def limit_scopes_to_caller_token
+    caller_token = @authenticated_access_token
+    return if caller_token.nil? || caller_token.unrestricted?
+
+    requested = params.dig(:access_token, :scopes)
+    return if requested.nil? && action_name == 'update'
+
+    requested_keys = AccessToken.new(scopes: requested).scope_list
+    allowed = caller_token.effective_scopes
+    return if requested_keys.none?(AccessToken::UNRESTRICTED_SCOPE) && (requested_keys - allowed).empty?
+
+    respond_forbidden('A token can only grant scopes it holds')
+  end
+
+  # Audit trail: who created, changed, regenerated or deleted which token. The
+  # value never goes to the log, and a log failure never costs the caller the
+  # one response that carries it.
+  def audit(action)
+    via = if @authenticated_access_token then 'access_token'
+          elsif @doorkeeper_token then 'bearer'
+          else 'session'
+          end
+    scopes = @access_token.scopes.to_s.gsub(/[[:cntrl:]]+/, ' ')
+    Rails.logger.warn(
+      "[AccessTokens##{action}] actor=#{current_user&.id} via=#{via} " \
+      "token=#{@access_token.id} owner=#{@access_token.owner_type}:#{@access_token.owner_id} scopes=#{scopes.inspect}"
+    )
+  rescue StandardError => e
+    Rails.logger.error("[AccessTokens##{action}] audit log failed: #{e.class}")
+  end
 
   def set_owner_context
     @owner = current_user

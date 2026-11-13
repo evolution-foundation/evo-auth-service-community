@@ -28,8 +28,11 @@ class TokenValidationService
       cache_status = "hit"
       # Verify token is still valid (not revoked, not expired)
       verify_token_not_revoked!
-      log_validation_event(status: "ok", cache_status: cache_status, duration_ms: elapsed_ms(started_at))
-      return cached
+      unless scopes_changed_since?(cached)
+        log_validation_event(status: "ok", cache_status: cache_status, duration_ms: elapsed_ms(started_at))
+        return cached
+      end
+      cache_status = "stale"
     end
 
     user_data = case @token_type
@@ -67,6 +70,18 @@ class TokenValidationService
     Rails.cache.delete(cache_key_for(token_string))
   end
 
+  # API access tokens store the SHA-256 of their value, which is the key suffix.
+  # Best effort: a cached validation also goes stale on its own once the token's
+  # scopes differ from the ones it carries (#scopes_changed_since?).
+  def self.invalidate_cache_for_digest(token_digest)
+    return if token_digest.blank?
+
+    Rails.cache.delete("#{CACHE_KEY_PREFIX}/#{token_digest}")
+  rescue StandardError => e
+    Rails.logger.warn("TokenValidationService: cache invalidation failed: #{e.class}")
+    nil
+  end
+
   def self.invalidate_cache_for_user(user)
     # Invalidate cache for all active bearer tokens
     Doorkeeper::AccessToken
@@ -81,13 +96,25 @@ class TokenValidationService
       .where(owner: user)
       .or(AccessToken.where(issued_id: user.id))
       .pluck(:token)
-      .each { |t| invalidate_cache_for_token(t) }
+      .each do |stored|
+        invalidate_cache_for_digest(stored)
+        invalidate_cache_for_token(stored) # stored before hashing
+      end
   end
 
   private
 
   def cache_key
     self.class.cache_key_for(@used_token)
+  end
+
+  # The cached payload of an API token carries its scopes; once the stored
+  # scopes differ, the payload is rebuilt instead of served.
+  def scopes_changed_since?(cached)
+    return false unless @token_type == :api_access_token && @token
+
+    cached_scopes = cached.dig(:token, :scopes) || cached.dig("token", "scopes")
+    cached_scopes.to_s != @token.scopes.to_s
   end
 
   def monotonic_now
@@ -123,7 +150,7 @@ class TokenValidationService
       raise ExpiredToken, "Token has expired" if @token.expired?
       raise InvalidToken, "Token has been revoked" if @token.revoked?
     when :api_access_token
-      @token = AccessToken.find_by(token: @used_token)
+      @token = AccessToken.for_token(@used_token)
       raise InvalidToken, "Invalid access token" unless @token
     end
   end
@@ -170,7 +197,7 @@ class TokenValidationService
   end
 
   def validate_access_token
-    @token = AccessToken.find_by(token: @used_token)
+    @token = AccessToken.for_token(@used_token)
     raise InvalidToken, "Invalid access token" unless @token
 
     user = @token.issued_id.present? ? User.find(@token.issued_id) : @token.owner

@@ -19,8 +19,8 @@ module TokenSerializer
     {
       id: token.id,
       name: token.name,
-      token: token.token,
       scopes: token.scopes,
+      effective_scopes: token.effective_scopes,
       expires_at: nil,
       created_at: token.created_at,
       type: 'api_access_token'

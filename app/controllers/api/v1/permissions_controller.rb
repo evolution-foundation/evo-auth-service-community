@@ -16,7 +16,15 @@ class Api::V1::PermissionsController < Api::BaseController
     
     return error_response('VALIDATION_ERROR', 'Permission key is required', status: :bad_request) if permission_key.blank?
     
-    cache_context = @access_token.present? ? 'api_access_token' : (@doorkeeper_token.present? ? 'bearer' : 'unknown')
+    cache_context = if @access_token.present?
+                      # Keyed by token and scope set: two tokens of one user, or one token
+                      # before and after a scope change, get their own verdicts.
+                      "api_access_token:#{@access_token.id}:#{Digest::SHA256.hexdigest(@access_token.scopes.to_s)}"
+                    elsif @doorkeeper_token.present?
+                      'bearer'
+                    else
+                      'unknown'
+                    end
     has_permission = false
 
     # Verificar tipo de autenticação e processar adequadamente
@@ -51,13 +59,9 @@ class Api::V1::PermissionsController < Api::BaseController
 
   private
 
+  # An API token grants what its scopes allow AND its owner holds.
   def check_access_token_permission(permission_key)
-    # Para api_access_token, verificar primeiro se o token tem o scope necessário
-    unless @access_token.has_scope?(permission_key)
-      return false
-    end
-
-    true
+    @access_token.has_scope?(permission_key) && current_user.has_permission?(permission_key)
   end
 
   def cache_key_for_permission(user_id, permission_key, auth_type)

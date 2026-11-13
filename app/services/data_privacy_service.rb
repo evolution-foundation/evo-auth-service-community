@@ -294,7 +294,7 @@ class DataPrivacyService
     
     # Revoke OAuth tokens (if association exists)
     if user.respond_to?(:access_tokens)
-      user.access_tokens.pluck(:token).each { |t| TokenValidationService.invalidate_cache_for_token(t) }
+      user.access_tokens.pluck(:token).each { |d| TokenValidationService.invalidate_cache_for_digest(d) }
       user.access_tokens.update_all(revoked_at: Time.current)
     end
   end

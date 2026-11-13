@@ -37,6 +37,13 @@ module PermissionCheckable
                        current_permission_service.can?(resource, action)
                      end
 
+    # A request authenticated by an API access token is also bounded by the
+    # token's scopes.
+    if has_permission && @authenticated_access_token && !@authenticated_access_token.has_scope?(permission_key)
+      has_permission = false
+      Rails.logger.warn "Permission denied by token scope: user_id=#{current_api_user.id} token=#{@authenticated_access_token.id} permission=#{permission_key}"
+    end
+
     Rails.logger.info "Permission check for #{permission_key}: user_id=#{current_api_user.id}, has_permission=#{has_permission}"
     return true if has_permission
 
