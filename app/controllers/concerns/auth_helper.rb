@@ -396,8 +396,8 @@ module AuthHelper
       }
     elsif @access_token
       {
-        access_token: @access_token.token,
-        scopes: @access_token.scopes, # AccessToken has default scopes
+        scopes: @access_token.scopes,
+        effective_scopes: @access_token.effective_scopes
       }
     else
       {}

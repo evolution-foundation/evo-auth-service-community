@@ -30,7 +30,8 @@ class Api::V1::AccessTokensController < Api::BaseController
     @access_token = AccessToken.new(token_params)
 
     if @access_token.save
-      success_response(data: { access_token: AccessTokenSerializer.full(@access_token) }, message: 'Access token created successfully', status: :created)
+      audit('create')
+      success_response(data: { access_token: AccessTokenSerializer.with_token(@access_token) }, message: 'Access token created successfully', status: :created)
     else
       render_unprocessable_entity(@access_token.errors)
     end
@@ -38,6 +39,10 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def update
     if @access_token.update(access_token_params)
+      # The cached validation carries the scopes; drop it so a narrowed token is
+      # narrowed on the next request.
+      TokenValidationService.invalidate_cache_for_digest(@access_token.token_digest)
+      audit('update')
       success_response(data: { access_token: AccessTokenSerializer.full(@access_token) }, message: 'Access token updated successfully')
     else
       render_unprocessable_entity(@access_token.errors)
@@ -46,13 +51,16 @@ class Api::V1::AccessTokensController < Api::BaseController
 
   def destroy
     @access_token.destroy
+    TokenValidationService.invalidate_cache_for_digest(@access_token.token_digest)
+    audit('destroy')
     success_response(data: {}, message: 'Access token deleted successfully')
   end
 
   def update_token
     if @access_token.update_token
+      audit('update_token')
       success_response(
-        data: { access_token: AccessTokenSerializer.full(@access_token) },
+        data: { access_token: AccessTokenSerializer.with_token(@access_token) },
         message: 'Token regenerated successfully'
       )
     else
@@ -61,6 +69,15 @@ class Api::V1::AccessTokensController < Api::BaseController
   end
 
   private
+
+  # Audit trail: who created, changed, regenerated or deleted which token. The
+  # value never goes to the log.
+  def audit(action)
+    Rails.logger.warn(
+      "[AccessTokens##{action}] actor=#{current_user&.id} via=#{@authenticated_access_token ? 'access_token' : 'session'} " \
+      "token=#{@access_token.id} owner=#{@access_token.owner_type}:#{@access_token.owner_id} scopes=#{@access_token.scopes}"
+    )
+  end
 
   def set_owner_context
     @owner = current_user

@@ -67,6 +67,13 @@ class TokenValidationService
     Rails.cache.delete(cache_key_for(token_string))
   end
 
+  # API access tokens keep only their SHA-256 digest, which is the key suffix.
+  def self.invalidate_cache_for_digest(token_digest)
+    return if token_digest.blank?
+
+    Rails.cache.delete("#{CACHE_KEY_PREFIX}/#{token_digest}")
+  end
+
   def self.invalidate_cache_for_user(user)
     # Invalidate cache for all active bearer tokens
     Doorkeeper::AccessToken
@@ -80,8 +87,8 @@ class TokenValidationService
     AccessToken
       .where(owner: user)
       .or(AccessToken.where(issued_id: user.id))
-      .pluck(:token)
-      .each { |t| invalidate_cache_for_token(t) }
+      .pluck(:token_digest)
+      .each { |d| invalidate_cache_for_digest(d) }
   end
 
   private
@@ -123,7 +130,7 @@ class TokenValidationService
       raise ExpiredToken, "Token has expired" if @token.expired?
       raise InvalidToken, "Token has been revoked" if @token.revoked?
     when :api_access_token
-      @token = AccessToken.find_by(token: @used_token)
+      @token = AccessToken.for_token(@used_token)
       raise InvalidToken, "Invalid access token" unless @token
     end
   end
@@ -170,7 +177,7 @@ class TokenValidationService
   end
 
   def validate_access_token
-    @token = AccessToken.find_by(token: @used_token)
+    @token = AccessToken.for_token(@used_token)
     raise InvalidToken, "Invalid access token" unless @token
 
     user = @token.issued_id.present? ? User.find(@token.issued_id) : @token.owner

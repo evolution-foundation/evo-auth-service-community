@@ -65,6 +65,9 @@ class Api::BaseController < ApplicationController
       @doorkeeper_token = loaded_token
     when :api_access_token
       @access_token = loaded_token
+      # Kept apart from @access_token, which a controller may reuse for the
+      # record it manages (AccessTokensController does).
+      @authenticated_access_token = loaded_token
     end
   end
 
