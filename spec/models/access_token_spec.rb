@@ -17,63 +17,42 @@ RSpec.describe AccessToken do
     described_class.create!(owner: user, name: "tk-#{SecureRandom.hex(3)}", scopes: scopes)
   end
 
-  describe 'storage' do
-    it 'keeps only the digest of the generated value' do
+  describe "storage" do
+    def stored(id)
+      described_class.connection.select_value("SELECT token FROM access_tokens WHERE id = '#{id}'")
+    end
+
+    it "stores the hash of the generated value, never the value" do
       token = create_token
 
       expect(token.token).to match(/\A\h{64}\z/)
-      expect(token.token_digest).to eq(Digest::SHA256.hexdigest(token.token))
-      stored = described_class.connection.select_value(
-        "SELECT token FROM access_tokens WHERE id = #{described_class.connection.quote(token.id)}"
-      )
-      expect(stored).to be_nil
+      expect(stored(token.id)).to eq(Digest::SHA256.hexdigest(token.token))
     end
 
-    it 'has no value once read back' do
+    it "has only the hash once read back" do
       token = create_token
 
-      expect(described_class.find(token.id).token).to be_nil
+      expect(described_class.find(token.id).token).to eq(Digest::SHA256.hexdigest(token.token))
     end
 
-    it 'finds a token by its raw value' do
+    it "finds a token by its raw value" do
       token = create_token
 
       expect(described_class.for_token(token.token)).to eq(token)
-      expect(described_class.for_token('not-a-token')).to be_nil
+      expect(described_class.for_token("not-a-token")).to be_nil
       expect(described_class.for_token(nil)).to be_nil
     end
-  end
 
-  describe "rows written with the value" do
-    def insert_legacy(raw)
+    it "finds a token stored before hashing by its value and hashes it" do
+      raw = SecureRandom.hex(32)
       id = SecureRandom.uuid
       described_class.connection.execute(<<~SQL.squish)
         INSERT INTO access_tokens (id, name, owner_type, owner_id, scopes, token, created_at, updated_at)
         VALUES ('#{id}', 'legacy', 'User', '#{user.id}', 'labels.read', '#{raw}', now(), now())
       SQL
-      id
-    end
-
-    def stored(id, column)
-      described_class.connection.select_value("SELECT #{column} FROM access_tokens WHERE id = '#{id}'")
-    end
-
-    it "finds one by its value, then keeps only the digest" do
-      raw = SecureRandom.hex(32)
-      id = insert_legacy(raw)
 
       expect(described_class.for_token(raw)&.id).to eq(id)
-      expect(stored(id, "token")).to be_nil
-      expect(stored(id, "token_digest")).to eq(Digest::SHA256.hexdigest(raw))
-      expect(described_class.for_token(raw)&.id).to eq(id)
-    end
-
-    it "clears every stored value and fills the missing digests" do
-      raw = SecureRandom.hex(32)
-      id = insert_legacy(raw)
-
-      expect(described_class.backfill_and_clear_values).to eq(1)
-      expect(stored(id, "token")).to be_nil
+      expect(stored(id)).to eq(Digest::SHA256.hexdigest(raw))
       expect(described_class.for_token(raw)&.id).to eq(id)
     end
   end

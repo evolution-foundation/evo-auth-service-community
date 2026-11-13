@@ -5,8 +5,7 @@
 #  id         :uuid           not null, primary key
 #  name       :string
 #  owner_type :string
-#  token      :string           (ignored; cleared by HashAccessTokens)
-#  token_digest :string
+#  token      :string           SHA-256 of the value
 #  scopes     :string
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
@@ -15,12 +14,6 @@
 #
 
 class AccessToken < ApplicationRecord
-  # Only the SHA-256 digest is kept. The raw value exists in memory on the
-  # instance that generated it (create / update_token), so the API can show it
-  # once; a token read back from the database has no value. The legacy `token`
-  # column is read only to migrate rows written before the digest existed.
-  self.ignored_columns += ['token']
-
   # Legacy tokens (and the one MFA login issues) carry this scope and keep the
   # owner's full permissions. Any other scope list restricts the token to it.
   UNRESTRICTED_SCOPE = 'default'
@@ -28,9 +21,7 @@ class AccessToken < ApplicationRecord
   belongs_to :owner, polymorphic: true
   belongs_to :issued_by, class_name: 'User', foreign_key: 'issued_id', optional: true
 
-  attr_reader :token
-
-  validates :token_digest, presence: true, uniqueness: true
+  validates :token, presence: true, uniqueness: true
   validates :scopes, presence: true
   validates :name, presence: true
   validates :owner_type, inclusion: { in: %w[Account User] }
@@ -46,43 +37,35 @@ class AccessToken < ApplicationRecord
   def self.for_token(raw_token)
     return nil if raw_token.blank?
 
-    find_by(token_digest: digest(raw_token)) || migrate_stored_value(raw_token)
+    find_by(token: digest(raw_token)) || hash_stored_value(raw_token)
   end
 
-  # A row still holding its value (written by an instance of the previous
-  # release during a rolling deploy) gets its digest and loses the value on use.
-  def self.migrate_stored_value(raw_token)
-    record = where(token_digest: nil).find_by('token = ?', raw_token.to_s)
-    return nil unless record
-
-    where(id: record.id).update_all(token_digest: digest(raw_token), token: nil) # rubocop:disable Rails/SkipsModelValidations
-    record.reload
-  end
-
-  # Fills missing digests and clears every stored value; returns how many rows
-  # still held one.
-  def self.backfill_and_clear_values
-    connection.update(<<~SQL.squish)
-      UPDATE access_tokens
-      SET token_digest = COALESCE(token_digest, encode(sha256(convert_to(token, 'UTF8')), 'hex')),
-          token = NULL
-      WHERE token IS NOT NULL
-    SQL
+  # A token stored before hashing still holds its value: it is hashed on use.
+  def self.hash_stored_value(raw_token)
+    record = find_by(token: raw_token.to_s)
+    record&.update_column(:token, digest(raw_token)) # rubocop:disable Rails/SkipsModelValidations
+    record
   end
 
   def self.generate_unique_token
     loop do
       token = SecureRandom.hex(32)
-      break token unless exists?(token_digest: digest(token))
+      break token unless exists?(token: digest(token))
     end
   end
 
   def update_token
-    previous_digest = token_digest
+    previous_digest = self[:token]
     assign_token(self.class.generate_unique_token)
     save!
     TokenValidationService.invalidate_cache_for_digest(previous_digest)
     true
+  end
+
+  # The value on the instance that generated it (create / update_token), so the
+  # API can show it once; the stored hash otherwise.
+  def token
+    @raw_token || super
   end
 
   def scope_list
@@ -115,12 +98,12 @@ class AccessToken < ApplicationRecord
   private
 
   def generate_token
-    assign_token(self.class.generate_unique_token) if token_digest.blank?
+    assign_token(self.class.generate_unique_token) if self[:token].blank?
   end
 
   def assign_token(raw_token)
-    @token = raw_token
-    self.token_digest = self.class.digest(raw_token)
+    @raw_token = raw_token
+    self[:token] = self.class.digest(raw_token)
   end
 
   def set_owner_type

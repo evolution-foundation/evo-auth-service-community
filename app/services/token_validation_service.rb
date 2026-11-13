@@ -70,7 +70,7 @@ class TokenValidationService
     Rails.cache.delete(cache_key_for(token_string))
   end
 
-  # API access tokens keep only their SHA-256 digest, which is the key suffix.
+  # API access tokens store the SHA-256 of their value, which is the key suffix.
   # Best effort: a cached validation also goes stale on its own once the token's
   # scopes differ from the ones it carries (#scopes_changed_since?).
   def self.invalidate_cache_for_digest(token_digest)
@@ -95,8 +95,11 @@ class TokenValidationService
     AccessToken
       .where(owner: user)
       .or(AccessToken.where(issued_id: user.id))
-      .pluck(:token_digest)
-      .each { |d| invalidate_cache_for_digest(d) }
+      .pluck(:token)
+      .each do |stored|
+        invalidate_cache_for_digest(stored)
+        invalidate_cache_for_token(stored) # stored before hashing
+      end
   end
 
   private
