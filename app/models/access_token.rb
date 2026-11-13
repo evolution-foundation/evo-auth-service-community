@@ -15,9 +15,10 @@
 #
 
 class AccessToken < ApplicationRecord
-  # Only the SHA-256 digest is stored. The raw value exists in memory on the
+  # Only the SHA-256 digest is kept. The raw value exists in memory on the
   # instance that generated it (create / update_token), so the API can show it
-  # once; a token read back from the database has no value.
+  # once; a token read back from the database has no value. The legacy `token`
+  # column is read only to migrate rows written before the digest existed.
   self.ignored_columns += ['token']
 
   # Legacy tokens (and the one MFA login issues) carry this scope and keep the
@@ -45,7 +46,28 @@ class AccessToken < ApplicationRecord
   def self.for_token(raw_token)
     return nil if raw_token.blank?
 
-    find_by(token_digest: digest(raw_token))
+    find_by(token_digest: digest(raw_token)) || migrate_stored_value(raw_token)
+  end
+
+  # A row still holding its value (written by an instance of the previous
+  # release during a rolling deploy) gets its digest and loses the value on use.
+  def self.migrate_stored_value(raw_token)
+    record = where(token_digest: nil).find_by('token = ?', raw_token.to_s)
+    return nil unless record
+
+    where(id: record.id).update_all(token_digest: digest(raw_token), token: nil) # rubocop:disable Rails/SkipsModelValidations
+    record.reload
+  end
+
+  # Fills missing digests and clears every stored value; returns how many rows
+  # still held one.
+  def self.backfill_and_clear_values
+    connection.update(<<~SQL.squish)
+      UPDATE access_tokens
+      SET token_digest = COALESCE(token_digest, encode(sha256(convert_to(token, 'UTF8')), 'hex')),
+          token = NULL
+      WHERE token IS NOT NULL
+    SQL
   end
 
   def self.generate_unique_token

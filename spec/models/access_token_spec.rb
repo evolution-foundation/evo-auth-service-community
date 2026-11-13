@@ -44,6 +44,40 @@ RSpec.describe AccessToken do
     end
   end
 
+  describe "rows written with the value" do
+    def insert_legacy(raw)
+      id = SecureRandom.uuid
+      described_class.connection.execute(<<~SQL.squish)
+        INSERT INTO access_tokens (id, name, owner_type, owner_id, scopes, token, created_at, updated_at)
+        VALUES ('#{id}', 'legacy', 'User', '#{user.id}', 'labels.read', '#{raw}', now(), now())
+      SQL
+      id
+    end
+
+    def stored(id, column)
+      described_class.connection.select_value("SELECT #{column} FROM access_tokens WHERE id = '#{id}'")
+    end
+
+    it "finds one by its value, then keeps only the digest" do
+      raw = SecureRandom.hex(32)
+      id = insert_legacy(raw)
+
+      expect(described_class.for_token(raw)&.id).to eq(id)
+      expect(stored(id, "token")).to be_nil
+      expect(stored(id, "token_digest")).to eq(Digest::SHA256.hexdigest(raw))
+      expect(described_class.for_token(raw)&.id).to eq(id)
+    end
+
+    it "clears every stored value and fills the missing digests" do
+      raw = SecureRandom.hex(32)
+      id = insert_legacy(raw)
+
+      expect(described_class.backfill_and_clear_values).to eq(1)
+      expect(stored(id, "token")).to be_nil
+      expect(described_class.for_token(raw)&.id).to eq(id)
+    end
+  end
+
   describe '#update_token' do
     it 'replaces the value and drops the cached validation of the old one' do
       token = create_token

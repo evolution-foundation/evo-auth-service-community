@@ -28,8 +28,11 @@ class TokenValidationService
       cache_status = "hit"
       # Verify token is still valid (not revoked, not expired)
       verify_token_not_revoked!
-      log_validation_event(status: "ok", cache_status: cache_status, duration_ms: elapsed_ms(started_at))
-      return cached
+      unless scopes_changed_since?(cached)
+        log_validation_event(status: "ok", cache_status: cache_status, duration_ms: elapsed_ms(started_at))
+        return cached
+      end
+      cache_status = "stale"
     end
 
     user_data = case @token_type
@@ -68,10 +71,15 @@ class TokenValidationService
   end
 
   # API access tokens keep only their SHA-256 digest, which is the key suffix.
+  # Best effort: a cached validation also goes stale on its own once the token's
+  # scopes differ from the ones it carries (#scopes_changed_since?).
   def self.invalidate_cache_for_digest(token_digest)
     return if token_digest.blank?
 
     Rails.cache.delete("#{CACHE_KEY_PREFIX}/#{token_digest}")
+  rescue StandardError => e
+    Rails.logger.warn("TokenValidationService: cache invalidation failed: #{e.class}")
+    nil
   end
 
   def self.invalidate_cache_for_user(user)
@@ -95,6 +103,15 @@ class TokenValidationService
 
   def cache_key
     self.class.cache_key_for(@used_token)
+  end
+
+  # The cached payload of an API token carries its scopes; once the stored
+  # scopes differ, the payload is rebuilt instead of served.
+  def scopes_changed_since?(cached)
+    return false unless @token_type == :api_access_token && @token
+
+    cached_scopes = cached.dig(:token, :scopes) || cached.dig("token", "scopes")
+    cached_scopes.to_s != @token.scopes.to_s
   end
 
   def monotonic_now

@@ -94,6 +94,74 @@ RSpec.describe 'Access tokens API', type: :request do
     end
   end
 
+  describe "granting scopes with a scoped token" do
+    let(:manager) { AccessToken.create!(owner: user, name: "manager", scopes: "access_tokens.create,access_tokens.update,labels.read") }
+
+    it "refuses an unrestricted token or a scope the caller token does not hold" do
+      %w[default contacts.read].each do |scopes|
+        post "/api/v1/access_tokens",
+             params: { access_token: { name: "child", scopes: scopes } },
+             headers: headers_with(manager.token), as: :json
+
+        expect(response).to have_http_status(:forbidden), scopes
+      end
+      expect(AccessToken.where(name: "child")).to be_empty
+    end
+
+    it "grants a scope the caller token holds" do
+      post "/api/v1/access_tokens",
+           params: { access_token: { name: "child", scopes: "labels.read" } },
+           headers: headers_with(manager.token), as: :json
+
+      expect(response).to have_http_status(:created)
+    end
+
+    it "refuses to widen a token beyond the caller token" do
+      target = AccessToken.create!(owner: user, name: "target", scopes: "labels.read")
+
+      patch "/api/v1/access_tokens/#{target.id}",
+            params: { access_token: { scopes: "default" } },
+            headers: headers_with(manager.token), as: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(target.reload.scopes).to eq("labels.read")
+    end
+  end
+
+  describe "validation after a scope change" do
+    it "serves the new scopes without waiting for the cache to expire" do
+      token = AccessToken.create!(owner: user, name: "changing", scopes: "labels.read,contacts.read")
+      post "/api/v1/auth/validate", headers: headers_with(token.token)
+      expect(body.dig("token", "effective_scopes")).to include("contacts.read")
+
+      token.update!(scopes: "labels.read")
+      post "/api/v1/auth/validate", headers: headers_with(token.token)
+
+      expect(body.dig("token", "effective_scopes")).not_to include("contacts.read")
+    end
+  end
+
+  describe "permission check endpoint" do
+    let(:agent) do
+      User.create!(
+        name: "Agent", email: "agent-#{SecureRandom.hex(4)}@example.com",
+        password: "Test123!@", password_confirmation: "Test123!@", confirmed_at: Time.current
+      )
+    end
+
+    it "grants only what both the token scopes and the owner allow" do
+      unrestricted = AccessToken.create!(owner: agent, name: "agent-default", scopes: "default")
+      post "/api/v1/permissions/check", params: { permission_key: "users.manage" }, headers: headers_with(unrestricted.token), as: :json
+      expect(body["has_permission"]).to be(false)
+
+      narrow = AccessToken.create!(owner: user, name: "admin-narrow", scopes: "labels.read")
+      post "/api/v1/permissions/check", params: { permission_key: "contacts.read" }, headers: headers_with(narrow.token), as: :json
+      expect(body["has_permission"]).to be(false)
+      post "/api/v1/permissions/check", params: { permission_key: "labels.read" }, headers: headers_with(narrow.token), as: :json
+      expect(body["has_permission"]).to be(true)
+    end
+  end
+
   describe 'audit trail' do
     it 'logs who created, regenerated and deleted a token, without the value' do
       lines = []
@@ -108,7 +176,8 @@ RSpec.describe 'Access tokens API', type: :request do
       delete "/api/v1/access_tokens/#{created['id']}", headers: headers_with(session_token.token)
 
       audit = lines.grep(/\[AccessTokens#/)
-      expect(audit.size).to eq(3)
+      expect(audit.map { |l| l[/\[AccessTokens#(\w+)\]/, 1] }).to eq(%w[create update_token destroy])
+      expect(audit).to all(include("via=access_token"))
       expect(audit).to all(include("actor=#{user.id}", "token=#{created['id']}"))
       expect(audit.join).not_to include(created['token'], regenerated)
     end

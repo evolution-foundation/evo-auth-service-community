@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-# API access tokens are looked up by their SHA-256 digest, and the raw value is
-# no longer stored. Existing tokens keep working: their digest is computed from
-# the stored value before the value is cleared. The `token` column stays (empty)
-# so services that still map it keep booting; dropping it is a later migration.
-# Irreversible on purpose: the cleared values cannot be recovered.
+# API access tokens are looked up by their SHA-256 digest. This backfills the
+# digest of existing tokens and leaves their stored value alone, so instances
+# still running the previous release keep authenticating them during a rolling
+# deploy. Once every instance runs this release, `rails access_tokens:clear_values`
+# clears the stored values; a token used before that is cleared on first use.
 class HashAccessTokens < ActiveRecord::Migration[7.1]
   def up
     add_column :access_tokens, :token_digest, :string
@@ -16,10 +16,10 @@ class HashAccessTokens < ActiveRecord::Migration[7.1]
     SQL
 
     add_index :access_tokens, :token_digest, unique: true
-    execute 'UPDATE access_tokens SET token = NULL'
   end
 
   def down
-    raise ActiveRecord::IrreversibleMigration
+    remove_index :access_tokens, :token_digest
+    remove_column :access_tokens, :token_digest
   end
 end
