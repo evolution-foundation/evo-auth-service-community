@@ -23,8 +23,15 @@ Rails.application.configure do
     config.action_controller.perform_caching = false
   end
 
-  # Change to :null_store to avoid any caching.
-  config.cache_store = :memory_store
+  # With Redis available, jobs run in Sidekiq and the cache lives in Redis, as
+  # in production: the licensing backoff and heartbeat chain are kept in
+  # Rails.cache and must be shared by the web and Sidekiq processes.
+  if ENV["REDIS_URL"].present?
+    config.cache_store = :redis_cache_store, { url: ENV["REDIS_URL"], namespace: "cache" }
+    config.active_job.queue_adapter = :sidekiq
+  else
+    config.cache_store = :memory_store
+  end
 
   # Store uploaded files (see config/storage.yml for options).
   # Use ACTIVE_STORAGE_SERVICE env var to select: local, amazon, s3_compatible
