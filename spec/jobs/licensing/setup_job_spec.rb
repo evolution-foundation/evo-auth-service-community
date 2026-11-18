@@ -6,15 +6,21 @@ require 'rails_helper'
 # 429 and network errors stay retryable, bounded by RETRY_WAITS.
 RSpec.describe Licensing::SetupJob do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   let(:args) { { email: 'op@box.test', name: 'Operador', client_ip: nil } }
+
+  let(:store) { instance_double(Licensing::Store, load_or_create_instance_id: 'instance-1', load_runtime_data: nil) }
 
   before do
     Rails.cache.clear
     clear_enqueued_jobs
     Licensing::Runtime.context = Licensing::RuntimeContext.new(tier: 't', version: '1')
-    allow(Licensing::Store).to receive(:new)
-      .and_return(instance_double(Licensing::Store, load_or_create_instance_id: 'instance-1'))
+    allow(Licensing::Store).to receive(:new).and_return(store)
+  end
+
+  def enqueued_args
+    enqueued_jobs.last[:args].first.symbolize_keys.except(:_aj_ruby2_keywords)
   end
 
   after { Licensing::Runtime.context = nil }
@@ -35,6 +41,21 @@ RSpec.describe Licensing::SetupJob do
     expect(enqueued_jobs.size).to eq(1)
   end
 
+  it 'schedules the retry after the backoff window its own failure opened' do
+    allow(Licensing::Registration).to receive(:geo_lookup).and_return({})
+    allow(Licensing::Registration).to receive(:direct_register)
+      .and_raise(Licensing::Transport::NetworkError, 'unreachable')
+
+    described_class.new.perform(**args, attempt: 0)
+    retry_at = Time.zone.at(enqueued_jobs.last[:at])
+    clear_enqueued_jobs
+
+    travel_to(retry_at, with_usec: true) { described_class.new.perform(**args, attempt: 1) }
+
+    expect(Licensing::Registration).to have_received(:direct_register).twice
+    expect(enqueued_jobs.size).to eq(1)
+  end
+
   it 'does not run inside a closed activation window' do
     Licensing::RetryPolicy.record_failure!
     allow(Licensing::Setup).to receive(:perform)
@@ -43,6 +64,44 @@ RSpec.describe Licensing::SetupJob do
 
     expect(Licensing::Setup).not_to have_received(:perform)
     expect(enqueued_jobs).to be_empty
+  end
+
+  it 'keeps a retry that finds the window closed again waiting for it to open' do
+    Licensing::RetryPolicy.record_failure!
+    allow(Licensing::Setup).to receive(:perform)
+
+    described_class.new.perform(**args, attempt: 2)
+
+    expect(Licensing::Setup).not_to have_received(:perform)
+    expect(enqueued_args).to include(attempt: 2)
+    expect(Licensing::RetryPolicy.allow_attempt?(now: Time.zone.at(enqueued_jobs.last[:at]))).to be(true)
+  end
+
+  it 'ends the chain once another process has stored a license' do
+    allow(Licensing::Setup).to receive(:perform).and_return(false)
+    described_class.new.perform(**args, attempt: 0)
+    retry_args = enqueued_args
+    clear_enqueued_jobs
+
+    allow(store).to receive(:load_runtime_data).and_return({ 'k' => 'activated-elsewhere' })
+    described_class.new.perform(**retry_args)
+
+    expect(Licensing::Setup).to have_received(:perform).once
+    expect(enqueued_jobs).to be_empty
+  end
+
+  it 'keeps retrying a chain begun with a stored key while that key is unchanged' do
+    allow(store).to receive(:load_runtime_data).and_return({ 'k' => 'stale-key' })
+    allow(Licensing::Setup).to receive(:perform).and_return(false)
+    described_class.new.perform(**args, attempt: 0)
+    retry_args = enqueued_args
+    clear_enqueued_jobs
+
+    described_class.new.perform(**retry_args)
+
+    expect(retry_args[:key_digest]).not_to include('stale-key')
+    expect(Licensing::Setup).to have_received(:perform).twice
+    expect(enqueued_args).to include(attempt: 2, key_digest: retry_args[:key_digest])
   end
 
   describe 'Licensing::Setup.perform error classification' do
