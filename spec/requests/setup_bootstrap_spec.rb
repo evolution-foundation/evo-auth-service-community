@@ -10,12 +10,6 @@ require 'rails_helper'
 # here) is what restores the old enterprise behavior — the community knows
 # nothing about it.
 RSpec.describe 'POST /setup/bootstrap', type: :request do
-  # SetupBootstrapService#run_seeds (load db/seeds.rb) commits, which defeats the
-  # transactional-fixture rollback and leaks the created admin across examples
-  # (the 2nd bootstrap then hits an already-bootstrapped state). Manage isolation
-  # explicitly instead: truncate users per example.
-  self.use_transactional_tests = false
-
   let(:base_params) do
     {
       first_name: 'Owner',
@@ -24,10 +18,6 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
       password:   'ChangeMe123!',
       password_confirmation: 'ChangeMe123!'
     }
-  end
-
-  before do
-    ActiveRecord::Base.connection.execute('TRUNCATE users CASCADE')
   end
 
   after do
@@ -52,7 +42,7 @@ RSpec.describe 'POST /setup/bootstrap', type: :request do
 
   it 'invokes the :after_bootstrap hook with the persisted user and the opaque payload' do
     received = nil
-    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| received = [user.id, payload] }
+    EvoExtensionPoints.replace(:after_bootstrap) { |user:, payload:| received = [ user.id, payload ] }
 
     post '/setup/bootstrap', params: base_params.merge(extension_payload: { 'foo' => 'bar' })
 

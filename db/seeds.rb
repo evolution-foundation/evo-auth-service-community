@@ -4,7 +4,7 @@ puts "🌱 Seeding Evo Auth Service (Community)..."
 
 # Seed RBAC system
 puts "📋 Seeding RBAC system..."
-require_relative 'seeds/rbac'
+load File.expand_path('seeds/rbac.rb', __dir__)
 puts "✅ Seeded RBAC system with roles, actions and permissions"
 puts "   - Roles: #{Role.count}"
 puts "   - Role Permission Actions: #{RolePermissionsAction.count}"

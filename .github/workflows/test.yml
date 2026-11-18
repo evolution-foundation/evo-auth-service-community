@@ -30,8 +30,19 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       RAILS_ENV: test
+      REDIS_URL: redis://127.0.0.1:6379/1
       POSTGRES_HOST: 127.0.0.1
       POSTGRES_PORT: 5432
       POSTGRES_USERNAME: postgres
@@ -56,14 +67,5 @@ jobs:
       - name: Prepare database
         run: bundle exec rails db:create db:schema:load
 
-      # Request specs that are red on develop already. Gating on the whole suite
-      # would mean merging this workflow already broken, which is how a repo ends
-      # up with no CI in the first place. They are excluded by name, not silently:
-      # fixing one is a matter of deleting its entry here.
-      #   TODO(EVO-2062 follow-up): unbreak these and shrink the list to zero.
-      # `--order defined` keeps the run deterministic; the .rspec default of
-      # random order surfaces cross-example leakage this suite still has.
       - name: RSpec
-        run: |
-          bundle exec rspec --order defined --format progress \
-            --exclude-pattern "**/{account,setup_bootstrap,resource_actions_default_deny}_spec.rb"
+        run: bundle exec rspec --format progress

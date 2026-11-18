@@ -9,6 +9,7 @@ require 'rails_helper'
 # developer wires up but forgets to add to the map.
 RSpec.describe 'UsersController unmapped-action authorization', type: :request do
   before(:all) do
+    @original_callbacks = Api::V1::UsersController._process_action_callbacks.dup
     Api::V1::UsersController.class_eval do
       skip_before_action :fetch_user,
                          only: %i[unmapped_mutation_probe unmapped_read_probe],
@@ -36,9 +37,11 @@ RSpec.describe 'UsersController unmapped-action authorization', type: :request d
   end
 
   after(:all) do
+    Api::V1::UsersController._process_action_callbacks = @original_callbacks
     Rails.application.reload_routes!
     Api::V1::UsersController.send(:remove_method, :unmapped_mutation_probe)
     Api::V1::UsersController.send(:remove_method, :unmapped_read_probe)
+    Api::V1::UsersController.clear_action_methods!
   end
 
   let(:password) { 'Test123!@' }

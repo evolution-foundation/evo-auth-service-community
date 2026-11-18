@@ -12,6 +12,8 @@ require 'rails_helper'
 # These specs exercise the previously-untested paths that the manual smoke
 # missed (PATCH without the key; partial custom_attributes update).
 RSpec.describe 'PATCH /api/v1/account — mask_contact_pii enforcement (EVO-1551)', type: :request do
+  before { load Rails.root.join('db/seeds/rbac.rb') }
+
   let(:password) { 'Test123!@' }
 
   # PATCH /api/v1/account now enforces accounts.update, which the seeded
