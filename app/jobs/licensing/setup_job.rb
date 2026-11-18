@@ -11,9 +11,10 @@ module Licensing
     queue_as :licensing
     discard_on StandardError
 
-    # Reschedule cadence when the licensing server is unreachable.
-    # Five attempts at growing intervals — total ~5 minutes — then we give up
-    # and let the heartbeat path pick it up later.
+    # Reschedule cadence when the licensing server is unreachable: five
+    # attempts, then we give up and let the heartbeat path pick it up later.
+    # Each step is a floor — the retry also waits out the backoff window the
+    # failure just opened, or it would find the window closed and end the chain.
     RETRY_WAITS = [10.seconds, 30.seconds, 1.minute, 2.minutes, 5.minutes].freeze
 
     def perform(email:, name:, client_ip: nil, attempt: 0)
@@ -36,8 +37,9 @@ module Licensing
       return if ok
       return if attempt >= RETRY_WAITS.size - 1
 
+      wait = [ RETRY_WAITS[attempt], RetryPolicy.seconds_until_open ].max
       self.class
-          .set(wait: RETRY_WAITS[attempt])
+          .set(wait: wait)
           .perform_later(email: email, name: name, client_ip: client_ip, attempt: attempt + 1)
     end
   end

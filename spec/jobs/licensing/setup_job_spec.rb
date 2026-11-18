@@ -6,6 +6,7 @@ require 'rails_helper'
 # 429 and network errors stay retryable, bounded by RETRY_WAITS.
 RSpec.describe Licensing::SetupJob do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   let(:args) { { email: 'op@box.test', name: 'Operador', client_ip: nil } }
 
@@ -32,6 +33,21 @@ RSpec.describe Licensing::SetupJob do
 
     described_class.new.perform(**args, attempt: 0)
 
+    expect(enqueued_jobs.size).to eq(1)
+  end
+
+  it 'schedules the retry after the backoff window its own failure opened' do
+    allow(Licensing::Registration).to receive(:geo_lookup).and_return({})
+    allow(Licensing::Registration).to receive(:direct_register)
+      .and_raise(Licensing::Transport::NetworkError, 'unreachable')
+
+    described_class.new.perform(**args, attempt: 0)
+    retry_at = Time.zone.at(enqueued_jobs.last[:at])
+    clear_enqueued_jobs
+
+    travel_to(retry_at, with_usec: true) { described_class.new.perform(**args, attempt: 1) }
+
+    expect(Licensing::Registration).to have_received(:direct_register).twice
     expect(enqueued_jobs.size).to eq(1)
   end
 
