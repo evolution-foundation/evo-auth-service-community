@@ -7,6 +7,7 @@ module Licensing
     # of boxes booted together does not tick in lockstep against the server.
     JITTER = 0.2
     GENERATION_KEY = 'licensing:heartbeat_generation'
+    RESCHEDULE_RETRY_BASE = 5.seconds
 
     # The only way a chain starts. Rotating the generation makes every previous
     # chain exit on its next tick instead of rescheduling.
@@ -15,6 +16,28 @@ module Licensing
       Rails.cache.write(GENERATION_KEY, generation)
       HeartbeatJob.set(wait: wait).perform_later(generation)
       generation
+    end
+
+    # Queues the next tick of a live chain. When the enqueue fails (Redis down)
+    # the retry is held in this process, because nothing queued is left to
+    # carry the chain; the wait doubles up to INTERVAL.
+    def self.reschedule!(generation, attempt: 0)
+      return unless Runtime.context&.active? && chain_alive?(generation)
+      return if HeartbeatJob.set(wait: next_interval).perform_later(generation)
+
+      retry_reschedule(generation, attempt)
+    rescue StandardError => e
+      Rails.logger.warn "[Licensing::Heartbeat] reschedule failed (#{e.class}) — retrying in-process"
+      retry_reschedule(generation, attempt)
+    end
+
+    def self.retry_reschedule(generation, attempt)
+      delay = [ RESCHEDULE_RETRY_BASE * (2**attempt), INTERVAL ].min
+      retry_later(delay) { reschedule!(generation, attempt: attempt + 1) }
+    end
+
+    def self.retry_later(delay, &)
+      Concurrent::ScheduledTask.execute(delay.to_f, &)
     end
 
     def self.current_generation

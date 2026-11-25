@@ -20,9 +20,7 @@ module Licensing
       # $! is the in-flight exception during unwinding; nil means clean exit.
       # Only reschedule on success — an unexpected exception must not create
       # a runaway loop of failing jobs every INTERVAL seconds.
-      if $!.nil? && Runtime.context&.active? && Heartbeat.chain_alive?(generation)
-        self.class.set(wait: Heartbeat.next_interval).perform_later(generation)
-      end
+      Heartbeat.reschedule!(generation) if $!.nil?
     end
   end
 end

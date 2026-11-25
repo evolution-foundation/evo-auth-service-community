@@ -72,6 +72,17 @@ RSpec.describe Licensing::Heartbeat do
     end
   end
 
+  describe '.retry_reschedule' do
+    it 'doubles the wait on each attempt and never goes past INTERVAL' do
+      delays = []
+      allow(described_class).to receive(:retry_later) { |delay| delays << delay }
+
+      [ 0, 1, 6 ].each { |attempt| described_class.retry_reschedule('gen', attempt) }
+
+      expect(delays).to eq([ 5.seconds, 10.seconds, described_class::INTERVAL ])
+    end
+  end
+
   describe '.ping backoff' do
     let(:transport) { instance_double(Licensing::Transport) }
 
@@ -155,6 +166,48 @@ RSpec.describe Licensing::Heartbeat do
       low  = Time.current + (Licensing::Heartbeat::INTERVAL * (1 - Licensing::Heartbeat::JITTER))
       high = Time.current + (Licensing::Heartbeat::INTERVAL * (1 + Licensing::Heartbeat::JITTER))
       expect(scheduled_at).to be_between(low.to_f, high.to_f).inclusive
+    end
+
+    context 'when queueing the next tick fails once' do
+      let!(:generation) do
+        Licensing::Runtime.context = active_context
+        Licensing::Heartbeat.schedule!.tap { clear_enqueued_jobs }
+      end
+      let(:retry_delays) { [] }
+
+      before do
+        allow(Licensing::Heartbeat).to receive(:ping)
+        calls = 0
+        allow(Licensing::HeartbeatJob).to receive(:set).and_wrap_original do |original, *args, **kwargs|
+          calls += 1
+          raise RedisClient::CannotConnectError, 'redis down' if calls == 1
+
+          original.call(*args, **kwargs)
+        end
+      end
+
+      it 'retries in-process until the chain has its next tick queued' do
+        allow(Licensing::Heartbeat).to receive(:retry_later) do |delay, &retry_block|
+          retry_delays << delay
+          retry_block.call
+        end
+
+        Licensing::HeartbeatJob.new.perform(generation)
+
+        expect(retry_delays).to eq([ Licensing::Heartbeat::RESCHEDULE_RETRY_BASE ])
+        expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation)
+      end
+
+      it 'drops the retry when another chain took over in the meantime' do
+        allow(Licensing::Heartbeat).to receive(:retry_later) do |_delay, &retry_block|
+          Rails.cache.write(Licensing::Heartbeat::GENERATION_KEY, 'newer-generation')
+          retry_block.call
+        end
+
+        Licensing::HeartbeatJob.new.perform(generation)
+
+        expect(enqueued_jobs).to be_empty
+      end
     end
 
     it 'does not reschedule when the license is not active' do
