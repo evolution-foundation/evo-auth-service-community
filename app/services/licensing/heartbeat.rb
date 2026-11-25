@@ -7,6 +7,7 @@ module Licensing
     # of boxes booted together does not tick in lockstep against the server.
     JITTER = 0.2
     GENERATION_KEY = 'licensing:heartbeat_generation'
+    TICK_KEY = "licensing:heartbeat_tick"
     RESCHEDULE_RETRY_BASE = 5.seconds
 
     # The only way a chain starts. Rotating the generation makes every previous
@@ -21,10 +22,19 @@ module Licensing
     # Queues the next tick of a live chain. When the enqueue fails (Redis down)
     # the retry is held in this process, because nothing queued is left to
     # carry the chain; the wait doubles up to INTERVAL.
+    #
+    # Each tick carries an id stored before the enqueue: if a failed enqueue
+    # had in fact been accepted, the retry's newer id makes that tick exit
+    # instead of growing a second chain.
     def self.reschedule!(generation, attempt: 0)
       return unless Runtime.context&.active? && chain_alive?(generation)
-      return if HeartbeatJob.set(wait: next_interval).perform_later(generation)
 
+      tick = SecureRandom.uuid
+      Rails.cache.write(TICK_KEY, tick)
+      job = HeartbeatJob.new(generation, tick)
+      return if job.enqueue(wait: next_interval)
+
+      Rails.logger.warn "[Licensing::Heartbeat] reschedule refused (#{job.enqueue_error&.message || 'no error given'}) — retrying in-process"
       retry_reschedule(generation, attempt)
     rescue StandardError => e
       Rails.logger.warn "[Licensing::Heartbeat] reschedule failed (#{e.class}) — retrying in-process"
@@ -36,8 +46,24 @@ module Licensing
       retry_later(delay) { reschedule!(generation, attempt: attempt + 1) }
     end
 
-    def self.retry_later(delay, &)
-      Concurrent::ScheduledTask.execute(delay.to_f, &)
+    # The retry runs on a concurrent-ruby thread, outside any request or job,
+    # so it enters the Rails executor like a job would.
+    def self.retry_later(delay, &block)
+      Concurrent::ScheduledTask.execute(delay.to_f) { Rails.application.executor.wrap(&block) }
+    end
+
+    # A tick from before ids existed (or from schedule!) carries none and
+    # passes. A nil current id (cache evicted) adopts the caller's, as
+    # chain_alive? does with the generation.
+    def self.current_tick?(tick)
+      return true if tick.nil?
+
+      current = Rails.cache.read(TICK_KEY)
+      if current.nil?
+        Rails.cache.write(TICK_KEY, tick)
+        return true
+      end
+      current == tick
     end
 
     def self.current_generation

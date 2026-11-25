@@ -160,7 +160,7 @@ RSpec.describe Licensing::Heartbeat do
       Licensing::HeartbeatJob.new.perform(generation)
 
       expect(Licensing::Heartbeat).to have_received(:ping).once
-      expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation)
+      expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation, kind_of(String))
 
       scheduled_at = enqueued_jobs.last[:at]
       low  = Time.current + (Licensing::Heartbeat::INTERVAL * (1 - Licensing::Heartbeat::JITTER))
@@ -175,30 +175,46 @@ RSpec.describe Licensing::Heartbeat do
       end
       let(:retry_delays) { [] }
 
-      before do
-        allow(Licensing::Heartbeat).to receive(:ping)
+      # Only the jobs the chain builds carry arguments; the spec's own
+      # HeartbeatJob.new.perform does not.
+      def fail_first_enqueue(accepted:)
         calls = 0
-        allow(Licensing::HeartbeatJob).to receive(:set).and_wrap_original do |original, *args, **kwargs|
-          calls += 1
-          raise RedisClient::CannotConnectError, 'redis down' if calls == 1
+        allow(Licensing::HeartbeatJob).to receive(:new).and_wrap_original do |original, *args|
+          original.call(*args).tap do |job|
+            next if args.empty?
 
-          original.call(*args, **kwargs)
+            calls += 1
+            next unless calls == 1
+
+            allow(job).to receive(:enqueue).and_wrap_original do |enqueue, *enqueue_args|
+              enqueue.call(*enqueue_args) if accepted
+              raise RedisClient::CannotConnectError, 'redis down'
+            end
+          end
         end
       end
 
-      it 'retries in-process until the chain has its next tick queued' do
+      def run_retries_now
         allow(Licensing::Heartbeat).to receive(:retry_later) do |delay, &retry_block|
           retry_delays << delay
           retry_block.call
         end
+      end
+
+      before { allow(Licensing::Heartbeat).to receive(:ping) }
+
+      it 'retries in-process until the chain has its next tick queued' do
+        fail_first_enqueue(accepted: false)
+        run_retries_now
 
         Licensing::HeartbeatJob.new.perform(generation)
 
         expect(retry_delays).to eq([ Licensing::Heartbeat::RESCHEDULE_RETRY_BASE ])
-        expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation)
+        expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation, kind_of(String)).once
       end
 
       it 'drops the retry when another chain took over in the meantime' do
+        fail_first_enqueue(accepted: false)
         allow(Licensing::Heartbeat).to receive(:retry_later) do |_delay, &retry_block|
           Rails.cache.write(Licensing::Heartbeat::GENERATION_KEY, 'newer-generation')
           retry_block.call
@@ -207,6 +223,57 @@ RSpec.describe Licensing::Heartbeat do
         Licensing::HeartbeatJob.new.perform(generation)
 
         expect(enqueued_jobs).to be_empty
+      end
+
+      it 'lets only the retried tick go on when the failed enqueue had been accepted' do
+        fail_first_enqueue(accepted: true)
+        run_retries_now
+
+        Licensing::HeartbeatJob.new.perform(generation)
+
+        orphan, retried = enqueued_jobs.map { |job| job[:args] }
+        expect([ orphan.first, retried.first ]).to eq([ generation, generation ])
+        clear_enqueued_jobs
+
+        Licensing::HeartbeatJob.new.perform(*orphan)
+        expect(Licensing::Heartbeat).to have_received(:ping).once
+        expect(enqueued_jobs).to be_empty
+
+        Licensing::HeartbeatJob.new.perform(*retried)
+        expect(Licensing::Heartbeat).to have_received(:ping).twice
+        expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation, kind_of(String))
+      end
+
+      it 'warns when the queue refuses the tick without raising' do
+        refused = false
+        allow(Licensing::HeartbeatJob).to receive(:new).and_wrap_original do |original, *args|
+          original.call(*args).tap do |job|
+            next if args.empty? || refused
+
+            refused = true
+            allow(job).to receive(:enqueue).and_return(false)
+          end
+        end
+        allow(Rails.logger).to receive(:warn)
+        run_retries_now
+
+        Licensing::HeartbeatJob.new.perform(generation)
+
+        expect(Rails.logger).to have_received(:warn).with(/reschedule refused/)
+        expect(Licensing::HeartbeatJob).to have_been_enqueued.with(generation, kind_of(String)).once
+      end
+    end
+
+    describe 'retry_later' do
+      it 'runs the retry inside the Rails executor' do
+        allow(Concurrent::ScheduledTask).to receive(:execute) { |_delay, &task| task.call }
+        allow(Rails.application.executor).to receive(:wrap).and_call_original
+        ran = false
+
+        Licensing::Heartbeat.retry_later(1) { ran = true }
+
+        expect(Rails.application.executor).to have_received(:wrap)
+        expect(ran).to be(true)
       end
     end
 
