@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/pipeline.yml` is the only workflow. Each check below is one job
+`.github/workflows/ci.yml` is the only workflow. Each check below is one job
 in it, and the image is published only after all of them pass.
 
 | Check | What it does | Fails when |

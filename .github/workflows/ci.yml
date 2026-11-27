@@ -200,7 +200,7 @@ jobs:
       # These identifiers were removed from the community code and must not come back.
       - name: No enterprise identifiers
         run: |
-          if git grep -nE 'evo_enterprise|enterprise/v1' -- . ':!.github/workflows/pipeline.yml' ; then
+          if git grep -nE 'evo_enterprise|enterprise/v1' -- . ':!.github/workflows/ci.yml' ; then
             echo "::error::Forbidden identifiers (evo_enterprise / enterprise/v1) found."
             exit 1
           fi
