@@ -9,7 +9,7 @@ in it, and the image is published only after all of them pass.
 | **Application Tests** | RSpec through `ci/rspec`, with Postgres and Redis | a spec fails, or an example is skipped, outside `ci/test-exceptions.txt` |
 | **Build Application** | builds this commit's image (same Dockerfile and `RAILS_ENV=production` as the publish jobs) and boots it on a clean database | migrations fail, or `/health` and `/ready` do not answer ready |
 | **Migration Version Check** | auth and CRM share `schema_migrations`; auth owns odd versions | a new migration has an even version |
-| **Community Boundary Check** | the community code has no enterprise identifiers | `evo_enterprise` or `enterprise/v1` appears |
+| **Community Boundary Check** | the community code has no enterprise identifiers | one of the identifiers listed in the job appears |
 | **Publish Image** | pull requests: `pr-<n>`, `sha-<short>` (amd64); pushes: one image per architecture | the build or the push fails |
 | **Publish Image Tags** | `:develop` on develop, `:latest` on main and on `v*` tags (plus `:X.Y.Z`) | the manifest cannot be created |
 | **Pipeline Status** | **the only required check** | any check above is not green |
