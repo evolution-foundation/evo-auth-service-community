@@ -6,8 +6,9 @@ name: Pipeline
 on:
   pull_request:
   push:
-    branches: [develop, main]
-    tags: ["v*.*.*"]
+    branches: [develop, main, "release/**"]
+    # Release candidate tags are created by this pipeline and publish nothing.
+    tags: ["v*.*.*", "!v*-rc.*"]
 
 permissions:
   contents: read
@@ -21,9 +22,9 @@ env:
   # Deploy images bake RAILS_ENV=production; the Dockerfile defaults to
   # development for the local compose.
   IMAGE_BUILD_ARGS: RAILS_ENV=production
-  # A from-scratch build on the refs that move :latest: a cached layer once
-  # shipped an image without fixes that were in the tagged source.
-  NO_CACHE: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+  # A from-scratch build on release branches and on the refs that move :latest:
+  # a cached layer once shipped an image without fixes that were in the source.
+  NO_CACHE: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
 
 jobs:
   syntax:
@@ -248,9 +249,60 @@ jobs:
           cache-from: type=gha,scope=linux/amd64
           cache-to: type=gha,scope=linux/amd64,mode=max
 
+  version:
+    name: Resolve Version
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      notes_start: ${{ steps.resolve.outputs.notes_start }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      # release/X.Y is the only human choice (X: change that needs action from
+      # whoever installs; Y: every regular cut). Z and rc.N are computed:
+      # the first version of a line is X.Y.0, an urgent fix on a released line
+      # is the last final + 1, and every push on the branch is the next rc.N.
+      # A re-run on a commit that already has an RC tag reuses it.
+      - name: Resolve
+        id: resolve
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags --quiet
+          short=${GITHUB_SHA:0:7}
+          release_tag=
+          case "$REF" in
+            refs/heads/release/*)
+              line=${REF_NAME#release/}
+              [[ "$line" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::release branches are named release/X.Y, got $REF_NAME"; exit 1; }
+              release_tag=$(git tag --points-at HEAD --list "v$line.*-rc.*" | sort -V | tail -1)
+              if [ -z "$release_tag" ]; then
+                last_final=$(git tag --list "v$line.*" | grep -v -- '-rc' | sort -V | tail -1 || true)
+                if [ -n "$last_final" ]; then base="$line.$(( ${last_final##*.} + 1 ))"; else base="$line.0"; fi
+                last_rc=$(git tag --list "v$base-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
+                release_tag="v$base-rc.$(( ${last_rc:-0} + 1 ))"
+              fi
+              version=${release_tag#v} ;;
+            refs/tags/v*) version=${REF_NAME#v} ;;
+            *) version="$REF_NAME-$short" ;;
+          esac
+          notes_start=$(git tag --list 'v*' | grep -v -- '-rc' | sort -V | tail -1 || true)
+          {
+            echo "version=$version"
+            echo "release_tag=$release_tag"
+            echo "notes_start=$notes_start"
+          } >> "$GITHUB_OUTPUT"
+          echo "version=$version release_tag=$release_tag"
+
   publish-arch:
     name: Publish Image
-    needs: [syntax, tests, build, migrations, boundary]
+    needs: [syntax, tests, build, migrations, boundary, version]
     if: github.event_name == 'push'
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
@@ -278,7 +330,7 @@ jobs:
           provenance: mode=max
           sbom: true
           labels: |
-            org.opencontainers.image.version=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('{0}-{1}', github.ref_name, github.sha) }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: ${{ env.IMAGE_BUILD_ARGS }}
@@ -301,7 +353,7 @@ jobs:
 
   publish-tags:
     name: Publish Image Tags
-    needs: publish-arch
+    needs: [publish-arch, version]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -317,6 +369,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # release/X.Y -> only :X.Y.Z-rc.N (:latest does not move);
       # v* tag -> :X.Y.Z and :latest; main -> :latest and :main-<short>;
       # develop -> :develop and :develop-<short>.
       - name: Create and push the multi-arch manifest
@@ -324,6 +377,7 @@ jobs:
         env:
           GH_REF: ${{ github.ref }}
           GH_REF_NAME: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
           short="${GITHUB_SHA:0:7}"
@@ -331,6 +385,7 @@ jobs:
             refs/tags/v*)        tags=("$IMAGE_NAME:${GH_REF_NAME#v}" "$IMAGE_NAME:latest") ;;
             refs/heads/main)     tags=("$IMAGE_NAME:latest" "$IMAGE_NAME:main-$short") ;;
             refs/heads/develop)  tags=("$IMAGE_NAME:develop" "$IMAGE_NAME:develop-$short") ;;
+            refs/heads/release/*) tags=("$IMAGE_NAME:$VERSION") ;;
             *) echo "::error::unexpected ref $GH_REF"; exit 1 ;;
           esac
           args=()
@@ -338,10 +393,36 @@ jobs:
           docker buildx imagetools create "${args[@]}" $(printf "$IMAGE_NAME@sha256:%s " *)
           echo "Published: ${tags[*]}"
 
+  release-candidate:
+    name: Publish Release Candidate
+    needs: [publish-tags, version]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # The tag is created only after the image is published, so a failed run
+      # leaves the number free for the next one. A tag pushed by this token
+      # starts no new run.
+      - name: Create the RC tag and the prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.release_tag }}
+          NOTES_START: ${{ needs.version.outputs.notes_start }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already released; nothing to do."; exit 0
+          fi
+          start=(); [ -n "$NOTES_START" ] && start=(--notes-start-tag "$NOTES_START")
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" --generate-notes "${start[@]}" --prerelease --latest=false
+          echo "Published $TAG as a prerelease (image $IMAGE_NAME:${TAG#v})."
+
   status:
     name: Pipeline Status
     if: always()
-    needs: [syntax, tests, build, migrations, boundary, publish-pr, publish-arch, publish-tags]
+    needs: [syntax, tests, build, migrations, boundary, version, publish-pr, publish-arch, publish-tags, release-candidate]
     runs-on: ubuntu-24.04
     steps:
       - name: Every check passed
@@ -359,9 +440,11 @@ jobs:
           if [ "$EVENT" = pull_request ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
              && { [ "$BASE" = develop ] || [ "$BASE" = main ]; }; then pr=true; fi
           push=false; [ "$EVENT" = push ] && push=true
-          bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" '
+          release=false; [[ "$GITHUB_REF" == refs/heads/release/* ]] && [ "$push" = true ] && release=true
+          bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" --argjson release "$release" '
             def expected: if .key == "publish-pr" then $pr
-              elif .key == "publish-arch" or .key == "publish-tags" then $push
+              elif .key == "version" or .key == "publish-arch" or .key == "publish-tags" then $push
+              elif .key == "release-candidate" then $release
               else true end;
             to_entries[]
             | select(.value.result != "success")
