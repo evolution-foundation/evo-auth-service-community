@@ -14,7 +14,7 @@ all of them pass.
 | **Migration Version Check** | `migration-version-check` | auth and CRM share `schema_migrations`; auth owns odd versions | a new migration has an even version |
 | **Community Boundary Check** | `community-boundary-check` | the community code has no enterprise identifiers | one of the identifiers listed in the action appears |
 | **Publish Image** | `publish-image` | pull requests: `pr-<n>`, `sha-<short>` (amd64); pushes: one image per architecture | the build or the push fails |
-| **Resolve Version** | `resolve-version` | pushes: the version of this run and what to publish (see Releases) | a release branch is not named `release/X.Y`; on main, the merged content differs from the last RC or the final tag exists |
+| **Resolve Version** | `resolve-version` | pushes: the version of this run and what to publish (see Releases) | a release branch is not named `release/X.Y`, or a new candidate is asked for a commit that is not the branch tip; on main, main is not identical to any tested RC, or the final tag exists on another commit |
 | **Publish Image Tags** | `publish-image-tags` | `:develop` on develop, `:X.Y.Z-rc.N` on `release/X.Y` | the manifest cannot be created |
 | **Publish Release Candidate** | `release-candidate` | `release/X.Y` only: tag `vX.Y.Z-rc.N` and a GitHub prerelease, after the image is published | the release cannot be created |
 | **Promote Release** | `promote-release` | merge of `release/X.Y` into main: the last RC image gets `:X.Y.Z` and `:latest` without a rebuild, then tag `vX.Y.Z` and the final GitHub release | the RC image cannot be retagged or the release cannot be created |
@@ -44,19 +44,30 @@ The flow, with version 1.2.0 as the example:
 4. **Fixes** reach `release/1.2` by pull request (only fixes, nothing new), and
    the same fix goes to `develop`. Each merge is a new candidate.
 5. **Release:** a pull request `release/1.2 -> main`, approved and merged by an
-   admin. Before the merge, **Release Dry Run** shows on the pull request what
-   the merge will publish and fails if it would not publish a final version. **main is the only trigger of a final version:** the merge promotes the
-   image of the last candidate, without a rebuild, to `1.2.0` and `:latest`, and
-   creates the `v1.2.0` tag and the final GitHub release. If main differs from
-   that candidate, or `v1.2.0` already exists, nothing is published.
+   admin, with any merge method. Before the merge, **Release Dry Run** shows on
+   the pull request what the merge will publish and fails if it would not
+   publish a final version. **main is the only trigger of a final version:**
+   main must be identical to the last candidate of the version, and that
+   candidate's image is promoted, without a rebuild, to `1.2.0` and `:latest`, with the `v1.2.0` tag
+   and the final GitHub release. If main matches no candidate, matches an
+   older candidate than the last one, or `v1.2.0` exists on another commit,
+   nothing is published. A promotion that failed
+   halfway is completed by re-running it.
 6. **Urgent fix** after `1.2.0`: a pull request on `release/1.2` publishes
    `1.2.1-rc.1`, and its merge into main publishes `1.2.1`. What `develop` got
    since the cut does not go with it.
 
 Nobody creates a version or publishes by hand: tags are created only by this
-workflow, and a tag pushed by hand publishes nothing. A push on main that is
-not the merge of a release branch publishes nothing; merging anything else
-into main (`develop`, a feature branch) fails Resolve Version.
+workflow, and a tag pushed by hand publishes nothing. Anything on main that is
+not identical to a tested candidate (`develop`, a feature branch, a direct
+push) fails Resolve Version and publishes nothing.
+
+Only the tip of a release branch gets a new candidate; re-running an older push
+reuses its candidate or fails. Release notes start at the highest final version
+below the one published, so an urgent `1.2.1` is compared with `1.2.0` even
+after `1.3.0`. The final image keeps the candidate's version label inside
+(`1.2.0-rc.3`): changing it would make a different image. The final version is
+in the image tags, the index annotation and the git tag.
 
 Protection: `develop`, `release/**` and `main` require Pipeline Status and one
 approval, and only admins can merge. `v*` tags cannot be moved or deleted.

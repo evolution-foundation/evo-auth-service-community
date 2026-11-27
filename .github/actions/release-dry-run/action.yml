@@ -25,7 +25,7 @@ runs:
         MODE: ${{ steps.resolve.outputs.mode }}
       run: |
         if [ "$MODE" != promote ]; then
-          echo "::error::main only receives release/X.Y branches; this merge would publish nothing (mode=$MODE)."
+          echo "::error::this merge would not publish a final version (mode=$MODE)."
           exit 1
         fi
 

@@ -11,7 +11,7 @@ inputs:
     description: toJSON(needs) of the calling job.
     required: true
   publish-mode:
-    description: mode output of Resolve Version (build, promote, none); empty on pull requests.
+    description: mode output of Resolve Version (build, promote); empty on pull requests.
     default: ""
 
 runs:

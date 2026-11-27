@@ -3,10 +3,10 @@ description: >-
   The version of this run and what to publish. release/X.Y is the only human
   choice (X: a change that needs action from whoever installs; Y: every regular
   cut). Z and rc.N are computed: a new line starts at X.Y.0, an urgent fix on a
-  released line is the last final + 1, and every push on the branch is the next
-  rc.N (a re-run on a commit that already has an RC reuses it). main is the only
-  trigger of a final version: the merge of release/X.Y promotes its last RC.
-  Needs a checkout with full history.
+  released line is the last final + 1, and every push on the branch tip is the
+  next rc.N (a re-run on a commit that already has an RC reuses it). main is the
+  only trigger of a final version: main must be identical to a tested RC, which
+  is then promoted. Needs a checkout with full history.
 
 inputs:
   ref:
@@ -15,19 +15,19 @@ inputs:
 
 outputs:
   mode:
-    description: build (develop, release/X.Y), promote (merge of release/X.Y into main) or none.
+    description: build (develop, release/X.Y) or promote (main).
     value: ${{ steps.resolve.outputs.mode }}
   version:
-    description: X.Y.Z-rc.N on release branches, X.Y.Z on a promotion, <ref>-<short> on develop.
+    description: X.Y.Z-rc.N on release branches, X.Y.Z on main, <ref>-<short> on develop.
     value: ${{ steps.resolve.outputs.version }}
   release-tag:
-    description: vX.Y.Z-rc.N on release branches, vX.Y.Z on a promotion.
+    description: vX.Y.Z-rc.N on release branches, vX.Y.Z on main.
     value: ${{ steps.resolve.outputs.release_tag }}
   source-tag:
-    description: On a promotion, the RC tag whose image is promoted.
+    description: On main, the RC tag whose image is promoted.
     value: ${{ steps.resolve.outputs.source_tag }}
   notes-start:
-    description: Last final tag, where the release notes start.
+    description: Highest final version below this one, where the release notes start.
     value: ${{ steps.resolve.outputs.notes_start }}
 
 runs:
@@ -45,50 +45,59 @@ runs:
         GITHUB_REF_NAME=${GITHUB_REF#refs/heads/}
         git fetch --force --tags --quiet
         short=${GITHUB_SHA:0:7}
-        mode=build release_tag= source_tag=
+        mode=build release_tag= source_tag= target=
+        # Only well-formed tags are read, so a tag name never reaches arithmetic
+        # or the shell unvalidated.
+        n='(0|[1-9][0-9]*)'
+        finals() { git tag --list 'v*' | grep -E "^v$n\.$n\.$n\$" | sort -V || true; }
+        rcs() { git tag --list 'v*' | grep -E "^v$n\.$n\.$n-rc\.$n\$" | sort -V || true; }
+
         case "$GITHUB_REF" in
           refs/heads/release/*)
             line=${GITHUB_REF_NAME#release/}
-            [[ "$line" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::release branches are named release/X.Y, got $GITHUB_REF_NAME"; exit 1; }
-            release_tag=$(git tag --points-at HEAD --list "v$line.*-rc.*" | sort -V | tail -1)
+            [[ "$line" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::release branches are named release/X.Y (no leading zeros), got $GITHUB_REF_NAME"; exit 1; }
+            esc=${line//./\\.}
+            release_tag=$(git tag --points-at HEAD | grep -E "^v$esc\.$n-rc\.$n\$" | sort -V | tail -1 || true)
             if [ -z "$release_tag" ]; then
-              last_final=$(git tag --list "v$line.*" | grep -v -- '-rc' | sort -V | tail -1 || true)
+              # A re-run of an older push must not publish stale code under a new number.
+              tip=$(git rev-parse -q --verify "refs/remotes/origin/$GITHUB_REF_NAME" || true)
+              [ "$tip" = "$GITHUB_SHA" ] || { echo "::error::$short is not the tip of $GITHUB_REF_NAME; only the tip gets a new candidate"; exit 1; }
+              last_final=$(finals | grep -E "^v$esc\." | tail -1 || true)
               if [ -n "$last_final" ]; then base="$line.$(( ${last_final##*.} + 1 ))"; else base="$line.0"; fi
-              last_rc=$(git tag --list "v$base-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
-              release_tag="v$base-rc.$(( ${last_rc:-0} + 1 ))"
+              last_rc=$(rcs | grep -E "^v${base//./\\.}-rc\." | tail -1 || true)
+              rc_n=0; [ -z "$last_rc" ] || rc_n=${last_rc##*.}
+              release_tag="v$base-rc.$(( rc_n + 1 ))"
             fi
-            version=${release_tag#v} ;;
+            version=${release_tag#v}
+            target=${version%-rc.*} ;;
           refs/heads/main)
-            mode=none version="main-$short"
-            merged=$(git rev-parse -q --verify HEAD^2 || true)
-            branch=
-            if [ -n "$merged" ]; then
-              # The branch whose head was merged wins; containment is the fallback,
-              # since later release branches may also contain this commit.
-              branch=$(git branch -r --points-at "$merged" --format='%(refname:short)' | grep '^origin/release/' || true)
-              [ -n "$branch" ] || branch=$(git branch -r --contains "$merged" --format='%(refname:short)' | grep '^origin/release/' || true)
-              if [ "$(printf '%s\n' "$branch" | grep -c .)" -gt 1 ]; then
-                echo "::error::the merged commit belongs to more than one release branch: $(echo $branch)"; exit 1
-              fi
+            # The candidate is found by content, not by branch or merge parents, so
+            # merge commits, squash and rebase all work, and the release branch may
+            # already be gone. Anything that is not a tested candidate fails.
+            head_tree=$(git rev-parse 'HEAD^{tree}')
+            for t in $(rcs | sort -rV); do
+              if [ "$(git rev-parse "$t^{tree}")" = "$head_tree" ]; then source_tag=$t; break; fi
+            done
+            [ -n "$source_tag" ] || { echo "::error::main is not identical to any tested release candidate; main only receives release/X.Y branches"; exit 1; }
+            release_tag=${source_tag%-rc.*}
+            # Only the last candidate of a version is the one approved for release.
+            last_rc=$(rcs | grep -E "^${release_tag//./\\.}-rc\." | tail -1)
+            [ "$last_rc" = "$source_tag" ] || { echo "::error::main matches $source_tag, but the last candidate of $release_tag is $last_rc; only the last candidate is promoted"; exit 1; }
+            if git rev-parse -q --verify "refs/tags/$release_tag" >/dev/null; then
+              # A re-run after the tag was created is fine only on the same commit.
+              [ "$(git rev-parse "$release_tag^{commit}")" = "$GITHUB_SHA" ] || { echo "::error::$release_tag already exists on another commit"; exit 1; }
             fi
-            if [ -z "$branch" ]; then
-              echo "Push on main is not the merge of a release branch: nothing to publish."
-            else
-              line=${branch#origin/release/}
-              source_tag=$(git tag --list "v$line.*-rc.*" | sort -V | tail -1)
-              [ -n "$source_tag" ] || { echo "::error::$branch was merged but has no RC tag"; exit 1; }
-              if [ "$(git rev-parse "$source_tag^{tree}")" != "$(git rev-parse 'HEAD^{tree}')" ]; then
-                echo "::error::main does not match the last tested RC ($source_tag). Refusing to publish."; exit 1
-              fi
-              release_tag=${source_tag%-rc.*}
-              if git rev-parse -q --verify "refs/tags/$release_tag" >/dev/null; then
-                echo "::error::$release_tag already exists"; exit 1
-              fi
-              mode=promote version=${release_tag#v}
-            fi ;;
+            mode=promote version=${release_tag#v} target=$version ;;
           *) version="$GITHUB_REF_NAME-$short" ;;
         esac
-        notes_start=$(git tag --list 'v*' | grep -v -- '-rc' | sort -V | tail -1 || true)
+
+        notes_start=
+        if [ -n "$target" ]; then
+          for t in $(finals); do
+            [ "$t" = "v$target" ] && break
+            [ "$(printf '%s\n%s\n' "$t" "v$target" | sort -V | head -1)" = "$t" ] && notes_start=$t
+          done
+        fi
         {
           echo "mode=$mode"
           echo "version=$version"
@@ -96,4 +105,4 @@ runs:
           echo "source_tag=$source_tag"
           echo "notes_start=$notes_start"
         } >> "$GITHUB_OUTPUT"
-        echo "mode=$mode version=$version release_tag=$release_tag source_tag=$source_tag"
+        echo "mode=$mode version=$version release_tag=$release_tag source_tag=$source_tag notes_start=$notes_start"

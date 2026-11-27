@@ -1,8 +1,11 @@
 name: Promote Release
 description: >-
-  On the merge of release/X.Y into main: the image of the last RC gets X.Y.Z and
-  :latest without a rebuild, then the vX.Y.Z tag and the final GitHub release
-  are created. Resolve Version already refused a main that differs from that RC.
+  On main: the image of the RC that main is identical to gets X.Y.Z and :latest
+  without a rebuild, then the vX.Y.Z tag and the final GitHub release are
+  created. Both steps can be re-run: a run that failed halfway is completed by
+  re-running it. The image config keeps the RC version label, since changing it
+  would make a different image; the final version is in the tags and the index
+  annotation.
 
 inputs:
   image:
@@ -56,6 +59,11 @@ runs:
         NOTES_START: ${{ inputs.notes-start }}
       run: |
         set -euo pipefail
+        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          target=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
+          [ "$target" = "$GITHUB_SHA" ] || { echo "::error::$TAG already exists on another commit"; exit 1; }
+          echo "$TAG already released from this commit; nothing to do."; exit 0
+        fi
         start=(); [ -n "$NOTES_START" ] && start=(--notes-start-tag "$NOTES_START")
         gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
           --title "$TAG" --generate-notes "${start[@]}" --latest
