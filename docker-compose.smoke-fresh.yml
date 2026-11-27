@@ -55,7 +55,5 @@ services:
       # Em CI runner, qualquer porta livre serve; mantemos 13001 para consistencia.
       # Loopback only: the token above is public and must not work from other hosts.
       - "127.0.0.1:13001:3001"
-    # Migrate explicito + server. NAO usamos bin/docker-entrypoint porque o pattern
-    # match dele (last-2-args == "./bin/rails server") nao bate quando passamos -p/-b
-    # aqui ou no umbrella. Operadores reais (umbrella) tambem fazem chain explicito.
-    command: ["bash", "-c", "bundle exec rails db:create && bundle exec rails db:migrate && bundle exec rails server -p 3001 -b 0.0.0.0"]
+    # Sem `command:`: a imagem sobe como foi publicada, com o ENTRYPOINT
+    # (evo-auth-entrypoint cria o banco e aplica as migrations) e o CMD padrao.
