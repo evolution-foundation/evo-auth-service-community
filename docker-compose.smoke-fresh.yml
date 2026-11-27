@@ -1,9 +1,8 @@
-# Smoke EVO-1404 — fresh DB validation of the image under test (SMOKE_IMAGE)
+# Smoke: fresh DB validation of the image under test (SMOKE_IMAGE)
 #
 # Sobe Postgres limpo + Redis e roda a imagem buildada do commit (no CI) ou a
 # :latest publicada (execucao manual sem SMOKE_IMAGE), exercitando db:migrate
-# end-to-end.
-# Healthcheck verde + /ready 200 = AC2 satisfeito.
+# end-to-end. Passa quando o container fica healthy e /ready responde ready.
 #
 # RAILS_ENV vem de SMOKE_RAILS_ENV (padrao development, para a execucao manual).
 # O CI usa production, o mesmo ambiente da imagem publicada.
