@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Runs every spec file except the ones written in ci/test-exceptions.txt and fails
+# on a pending/skipped example outside a `non-blocking` line. A new spec runs by
+# default; deleting a line puts that spec back in the run.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+list=ci/test-exceptions.txt
+report=${RSPEC_JSON:-tmp/rspec.json}
+excluded=$(mktemp)
+nonblocking=$(mktemp)
+trap 'rm -f "$excluded" "$nonblocking"' EXIT
+
+trim() { local s=$1; s=${s#"${s%%[![:space:]]*}"}; printf '%s' "${s%"${s##*[![:space:]]}"}"; }
+
+invalid=0
+n=0
+while IFS= read -r line || [ -n "$line" ]; do
+  n=$((n + 1))
+  [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+  IFS='|' read -r target class owner reason extra <<<"$line"
+  target=$(trim "$target"); class=$(trim "$class"); owner=$(trim "$owner"); reason=$(trim "${reason:-}")
+  if [ -n "${extra:-}" ] || [ -z "$target" ] || [ -z "$owner" ] || [ -z "$reason" ]; then
+    echo "::error file=$list,line=$n::expected 'target | class | owner | reason'"; invalid=1; continue
+  fi
+  if [ ! -f "$target" ]; then
+    echo "::error file=$list,line=$n::$target does not exist; delete the line"; invalid=1; continue
+  fi
+  case "$class" in
+    known-failure|not-runnable-here) echo "$target" >>"$excluded" ;;
+    non-blocking) echo "$target" >>"$nonblocking" ;;
+    *) echo "::error file=$list,line=$n::unknown class '$class'"; invalid=1 ;;
+  esac
+done <"$list"
+[ "$invalid" -eq 0 ] || exit 1
+
+mapfile -t specs < <(find spec -name '*_spec.rb' | sort | grep -vxF -f "$excluded" || true)
+echo "Running ${#specs[@]} spec files; $(grep -c . "$excluded" || true) excluded by $list."
+
+mkdir -p "$(dirname "$report")"
+status=0
+# `--order defined` keeps the run deterministic; random order still surfaces
+# cross-example leakage in this suite.
+bundle exec rspec --order defined --format progress --format json --out "$report" "${specs[@]}" || status=$?
+
+skipped=$(jq -r '.examples[] | select(.status == "pending") | "\(.file_path):\(.line_number)"' "$report" \
+  | sed 's|^\./||' | grep -vF -f <(sed 's/$/:/' "$nonblocking") || true)
+if [ -n "$skipped" ]; then
+  echo "::error::skipped examples count as failures (a skipped test did not run):"
+  echo "$skipped" | sed 's/^/  /'
+  status=1
+fi
+exit "$status"

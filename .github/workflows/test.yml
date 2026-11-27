@@ -7,14 +7,16 @@
 name: Tests
 
 on:
-  pull_request:
-  push:
-    branches: [develop, main]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   rspec:
     name: RSpec
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04, where setup-ruby has no Ruby 3.4.4.
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -50,20 +52,11 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           # Reads .ruby-version; bundler-cache handles install + gem caching.
-          ruby-version-file: .ruby-version
           bundler-cache: true
 
       - name: Prepare database
         run: bundle exec rails db:create db:schema:load
 
-      # Request specs that are red on develop already. Gating on the whole suite
-      # would mean merging this workflow already broken, which is how a repo ends
-      # up with no CI in the first place. They are excluded by name, not silently:
-      # fixing one is a matter of deleting its entry here.
-      #   TODO(EVO-2062 follow-up): unbreak these and shrink the list to zero.
-      # `--order defined` keeps the run deterministic; the .rspec default of
-      # random order surfaces cross-example leakage this suite still has.
+      # Whole suite minus ci/test-exceptions.txt; a skipped example fails the job.
       - name: RSpec
-        run: |
-          bundle exec rspec --order defined --format progress \
-            --exclude-pattern "**/{account,setup_bootstrap,resource_actions_default_deny}_spec.rb"
+        run: ci/rspec
