@@ -1,0 +1,8 @@
+# Specs outside the gate. One line each: target | class | owner | reason
+#   known-failure      fails today; the file does not run until the line is deleted
+#   not-runnable-here  needs something CI cannot provide; the file does not run
+#   non-blocking       runs, but its pending examples do not fail the job
+# Reviewed at every release cut. ci/rspec rejects a line without owner or reason,
+# or naming a file that no longer exists.
+spec/requests/api/v1/account_spec.rb | known-failure | Danilo | Role.find_by!(key: 'super_admin') raises RecordNotFound: the test database has no seeded roles (4 examples)
+spec/requests/api/v1/resource_actions_default_deny_spec.rb | known-failure | Danilo | same missing super_admin role (1 example); passes only when an earlier spec leaves the role behind

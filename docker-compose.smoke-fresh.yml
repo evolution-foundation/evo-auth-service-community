@@ -1,12 +1,12 @@
-# Smoke EVO-1404 — fresh DB validation against published :latest
+# Smoke EVO-1404 — fresh DB validation of the image under test (SMOKE_IMAGE)
 #
-# Sobe Postgres limpo + Redis e roda a image evoapicloud/evo-auth-service-community:latest
-# usando o entrypoint padrao (bin/docker-entrypoint), exercitando db:migrate end-to-end.
+# Sobe Postgres limpo + Redis e roda a imagem buildada do commit (no CI) ou a
+# :latest publicada (execucao manual sem SMOKE_IMAGE), exercitando db:migrate
+# end-to-end.
 # Healthcheck verde + /ready 200 = AC2 satisfeito.
 #
-# RAILS_ENV=development por design: o Dockerfile publicado roda em development
-# (sem assets:precompile, bundle com todos os groups). Forcar production aqui
-# quebraria por motivos nao relacionados ao AC.
+# RAILS_ENV vem de SMOKE_RAILS_ENV (padrao development, para a execucao manual).
+# O CI usa production, o mesmo ambiente da imagem publicada.
 
 services:
   postgres:
@@ -30,7 +30,9 @@ services:
       retries: 20
 
   evo-auth:
-    image: evoapicloud/evo-auth-service-community:latest
+    # CI sets SMOKE_IMAGE to the image built from the commit under test; the
+    # published :latest is only the default for a manual run.
+    image: ${SMOKE_IMAGE:-evoapicloud/evo-auth-service-community:latest}
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
@@ -39,9 +41,6 @@ services:
     env_file:
       - .env.example
     environment:
-      # TODO(EVO-1404 review L3): hoje o Dockerfile publicado e dev-only. Se um PR
-      # futuro mudar pra multi-stage prod, este RAILS_ENV vai mascarar regressao.
-      # Parametrizar via SMOKE_RAILS_ENV quando esse refactor chegar.
       RAILS_ENV: ${SMOKE_RAILS_ENV:-development}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"

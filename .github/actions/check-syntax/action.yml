@@ -1,0 +1,13 @@
+name: Check Syntax
+description: RuboCop against the debt frozen in .rubocop_todo.yml; any offense outside it fails.
+
+runs:
+  using: composite
+  steps:
+    - uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+
+    - name: RuboCop
+      shell: bash
+      run: bundle exec rubocop --format github --format progress

@@ -1,0 +1,171 @@
+name: Pipeline
+
+# The only workflow of this repository: triggers, order and services. What each
+# check does lives in .github/actions/<check>/action.yml. The image is published
+# only after every check, and "Pipeline Status" is the single required check on
+# protected branches. Checks and debt files: ci/README.md.
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE_NAME: evoapicloud/evo-auth-service-community
+  # Deploy images bake RAILS_ENV=production; the Dockerfile defaults to
+  # development for the local compose.
+  IMAGE_BUILD_ARGS: RAILS_ENV=production
+  # A from-scratch build on the refs that move :latest: a cached layer once
+  # shipped an image without fixes that were in the tagged source.
+  NO_CACHE: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+
+# ubuntu-latest is 26.04, where setup-ruby has no Ruby 3.4.4.
+jobs:
+  syntax:
+    name: Check Syntax
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/check-syntax
+
+  tests:
+    name: Application Tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # SetupBootstrapService stores the survey_token in Redis; without one the
+      # token comes back nil and setup_bootstrap_spec fails.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RAILS_ENV: test
+      REDIS_URL: redis://127.0.0.1:6379/1
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      # Boot-time requirements, not secrets: config/initializers/doorkeeper.rb
+      # aborts the boot without them. Fixed throwaway values keep runs reproducible.
+      SECRET_KEY_BASE: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      DOORKEEPER_JWT_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/application-tests
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/build-application
+        with:
+          build-args: ${{ env.IMAGE_BUILD_ARGS }}
+          rails-env: production
+          no-cache: ${{ env.NO_CACHE }}
+
+  migrations:
+    name: Migration Version Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/migration-version-check
+
+  boundary:
+    name: Community Boundary Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/community-boundary-check
+
+  publish-pr:
+    name: Publish Image
+    needs: [syntax, tests, build, migrations, boundary]
+    # Internal pull requests only: a fork gets no registry credentials.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["develop", "main"]'), github.base_ref)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/publish-image
+        with:
+          mode: pull-request
+          image: ${{ env.IMAGE_NAME }}
+          version: pr-${{ github.event.pull_request.number }}
+          revision: ${{ github.event.pull_request.head.sha }}
+          build-args: ${{ env.IMAGE_BUILD_ARGS }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish-arch:
+    name: Publish Image
+    needs: [syntax, tests, build, migrations, boundary]
+    if: github.event_name == 'push'
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/publish-image
+        with:
+          mode: digest
+          image: ${{ env.IMAGE_NAME }}
+          arch: ${{ matrix.arch }}
+          version: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('{0}-{1}', github.ref_name, github.sha) }}
+          revision: ${{ github.sha }}
+          build-args: ${{ env.IMAGE_BUILD_ARGS }}
+          no-cache: ${{ env.NO_CACHE }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish-tags:
+    name: Publish Image Tags
+    needs: publish-arch
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/publish-image-tags
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  status:
+    name: Pipeline Status
+    if: always()
+    needs: [syntax, tests, build, migrations, boundary, publish-pr, publish-arch, publish-tags]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/pipeline-status
+        with:
+          results: ${{ toJSON(needs) }}
