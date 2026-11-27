@@ -99,6 +99,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       SMOKE_IMAGE: evo-auth-smoke:ci
+      # Boot in the same environment as the published image.
+      SMOKE_RAILS_ENV: production
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -238,6 +240,10 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           build-args: ${{ env.IMAGE_BUILD_ARGS }}
           cache-from: type=gha,scope=linux/amd64
           cache-to: type=gha,scope=linux/amd64,mode=max
@@ -341,13 +347,25 @@ jobs:
       - name: Every check passed
         env:
           RESULTS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE: ${{ github.base_ref }}
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          # The publish jobs are skipped by design on the event they do not
-          # handle (and on fork pull requests); every check must be a success.
-          bad=$(echo "$RESULTS" | jq -r 'to_entries[]
+          # A publish job may be skipped only on the event it does not handle:
+          # publish-pr runs on internal pull requests to develop/main, the
+          # per-architecture jobs on pushes. Everything else must be a success.
+          pr=false
+          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
+             && { [ "$BASE" = develop ] || [ "$BASE" = main ]; }; then pr=true; fi
+          push=false; [ "$EVENT" = push ] && push=true
+          bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" '
+            def expected: if .key == "publish-pr" then $pr
+              elif .key == "publish-arch" or .key == "publish-tags" then $push
+              else true end;
+            to_entries[]
             | select(.value.result != "success")
-            | select((.key | startswith("publish")) and .value.result == "skipped" | not)
+            | select((.value.result == "skipped" and (expected | not)) | not)
             | .key')
           if [ -n "$bad" ]; then
             echo "::error::not green: $(echo $bad)"
