@@ -103,12 +103,12 @@ owns a **disjoint slice of the version space by parity**:
 When you generate a migration, bump the timestamp by 1 second if needed so its
 version is **odd**.
 
-**Enforcement:** the real gate is the `.github/workflows/migration-version-parity.yml`
-workflow (`parity` job) — a lightweight filename scan that runs on every PR
-without Rails/DB, since the RSpec suite is not run in full on PRs. The companion
-`spec/migration_version_parity_spec.rb` documents the same rule for local runs.
-For either to actually **block** a merge, its check must be marked *required* in
-this repo's branch-protection settings.
+**Enforcement:** the **Migration Version Check** in `.github/workflows/ci.yml`
+(`.github/actions/migration-version-check`) — a filename scan that runs on every
+change without Rails or a database. The companion
+`spec/migration_version_parity_spec.rb` documents the same rule and runs in
+**Application Tests**. Both feed **Pipeline Status**, the required check, so a
+violation blocks the merge.
 
 **Scope of the guarantee:** parity only makes *new* (≥ cutoff) migrations
 collision-free. Migrations predating the convention are grandfathered and may sit
