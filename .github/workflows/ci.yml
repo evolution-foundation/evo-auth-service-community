@@ -6,10 +6,10 @@ name: Pipeline
 # protected branches. Checks and debt files: ci/README.md.
 on:
   pull_request:
+  # Tags are created by this workflow (RC on release/X.Y, final on main) and
+  # never trigger it; a tag pushed by hand publishes nothing.
   push:
     branches: [develop, main, "release/**"]
-    # Release candidate tags are created by this workflow and publish nothing.
-    tags: ["v*.*.*", "!v*-rc.*"]
 
 permissions:
   contents: read
@@ -23,9 +23,9 @@ env:
   # Deploy images bake RAILS_ENV=production; the Dockerfile defaults to
   # development for the local compose.
   IMAGE_BUILD_ARGS: RAILS_ENV=production
-  # A from-scratch build on release branches and on the refs that move :latest:
-  # a cached layer once shipped an image without fixes that were in the source.
-  NO_CACHE: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
+  # Release candidates build from scratch: a cached layer once shipped an image
+  # without fixes that were in the source. The final version reuses that image.
+  NO_CACHE: ${{ startsWith(github.ref, 'refs/heads/release/') }}
 
 # ubuntu-latest is 26.04, where setup-ruby has no Ruby 3.4.4.
 jobs:
@@ -130,8 +130,10 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
       version: ${{ steps.resolve.outputs.version }}
       release-tag: ${{ steps.resolve.outputs.release-tag }}
+      source-tag: ${{ steps.resolve.outputs.source-tag }}
       notes-start: ${{ steps.resolve.outputs.notes-start }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -143,7 +145,7 @@ jobs:
   publish-arch:
     name: Publish Image
     needs: [syntax, tests, build, migrations, boundary, version]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.version.outputs.mode == 'build'
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
@@ -192,13 +194,33 @@ jobs:
           notes-start: ${{ needs.version.outputs.notes-start }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  promote:
+    name: Promote Release
+    needs: [syntax, tests, build, migrations, boundary, version]
+    if: github.event_name == 'push' && needs.version.outputs.mode == 'promote'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/promote-release
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          source-tag: ${{ needs.version.outputs.source-tag }}
+          release-tag: ${{ needs.version.outputs.release-tag }}
+          notes-start: ${{ needs.version.outputs.notes-start }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   status:
     name: Pipeline Status
     if: always()
-    needs: [syntax, tests, build, migrations, boundary, version, publish-pr, publish-arch, publish-tags, release-candidate]
+    needs: [syntax, tests, build, migrations, boundary, version, publish-pr, publish-arch, publish-tags, release-candidate, promote]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/pipeline-status
         with:
           results: ${{ toJSON(needs) }}
+          publish-mode: ${{ needs.version.outputs.mode }}

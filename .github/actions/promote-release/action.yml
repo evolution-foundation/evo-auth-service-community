@@ -1,0 +1,61 @@
+name: Promote Release
+description: >-
+  On the merge of release/X.Y into main: the image of the last RC gets X.Y.Z and
+  :latest without a rebuild, then the vX.Y.Z tag and the final GitHub release
+  are created. Resolve Version already refused a main that differs from that RC.
+
+inputs:
+  image:
+    required: true
+  source-tag:
+    description: vX.Y.Z-rc.N whose image is promoted.
+    required: true
+  release-tag:
+    description: vX.Y.Z to create.
+    required: true
+  notes-start:
+    default: ""
+  registry-username:
+    required: true
+  registry-password:
+    required: true
+  token:
+    description: Token with contents:write.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+    - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      with:
+        username: ${{ inputs.registry-username }}
+        password: ${{ inputs.registry-password }}
+
+    - name: Tag the tested RC image as the final version
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        SOURCE: ${{ inputs.source-tag }}
+        FINAL: ${{ inputs.release-tag }}
+      run: |
+        set -euo pipefail
+        src="$IMAGE:${SOURCE#v}"
+        docker buildx imagetools create \
+          --annotation "index:org.opencontainers.image.version=${FINAL#v}" \
+          -t "$IMAGE:${FINAL#v}" -t "$IMAGE:latest" "$src"
+        echo "Promoted $src to $IMAGE:${FINAL#v} and $IMAGE:latest"
+        docker buildx imagetools inspect "$src" --format '{{json .Manifest.Digest}}'
+
+    - name: Create the tag and the final release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ inputs.release-tag }}
+        NOTES_START: ${{ inputs.notes-start }}
+      run: |
+        set -euo pipefail
+        start=(); [ -n "$NOTES_START" ] && start=(--notes-start-tag "$NOTES_START")
+        gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          --title "$TAG" --generate-notes "${start[@]}" --latest
