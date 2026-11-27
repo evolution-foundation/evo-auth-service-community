@@ -1,0 +1,37 @@
+name: Publish Release Candidate
+description: >-
+  Creates the vX.Y.Z-rc.N tag and a GitHub prerelease. Runs after the image is
+  published, so a failed run leaves the number free. A tag pushed with the
+  workflow token starts no new run.
+
+inputs:
+  tag:
+    required: true
+  image:
+    required: true
+  notes-start:
+    description: Last final tag; notes are generated from it.
+    default: ""
+  token:
+    description: Token with contents:write.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Create the RC tag and the prerelease
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ inputs.tag }}
+        IMAGE: ${{ inputs.image }}
+        NOTES_START: ${{ inputs.notes-start }}
+      run: |
+        set -euo pipefail
+        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          echo "$TAG already released; nothing to do."; exit 0
+        fi
+        start=(); [ -n "$NOTES_START" ] && start=(--notes-start-tag "$NOTES_START")
+        gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          --title "$TAG" --generate-notes "${start[@]}" --prerelease --latest=false
+        echo "Published $TAG as a prerelease (image $IMAGE:${TAG#v})."

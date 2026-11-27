@@ -1,0 +1,42 @@
+name: Pipeline Status
+description: >-
+  Fails when any job of the run is not green. A job may be skipped only on the
+  event it does not handle: publish-pr runs on internal pull requests to
+  develop/main; version and the per-architecture jobs on pushes;
+  release-candidate on pushes to release branches.
+
+inputs:
+  results:
+    description: toJSON(needs) of the calling job.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Every check passed
+      shell: bash
+      env:
+        RESULTS: ${{ inputs.results }}
+        EVENT: ${{ github.event_name }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        BASE: ${{ github.base_ref }}
+      run: |
+        echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+        pr=false
+        if [ "$EVENT" = pull_request ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
+           && { [ "$BASE" = develop ] || [ "$BASE" = main ]; }; then pr=true; fi
+        push=false; [ "$EVENT" = push ] && push=true
+        release=false; [[ "$GITHUB_REF" == refs/heads/release/* ]] && [ "$push" = true ] && release=true
+        bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" --argjson release "$release" '
+          def expected: if .key == "publish-pr" then $pr
+            elif .key == "version" or .key == "publish-arch" or .key == "publish-tags" then $push
+            elif .key == "release-candidate" then $release
+            else true end;
+          to_entries[]
+          | select(.value.result != "success")
+          | select((.value.result == "skipped" and (expected | not)) | not)
+          | .key')
+        if [ -n "$bad" ]; then
+          echo "::error::not green: $(echo $bad)"
+          exit 1
+        fi

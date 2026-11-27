@@ -1,0 +1,89 @@
+name: Build Application
+description: >-
+  Builds this commit's image with the same Dockerfile and build args as the
+  publish jobs and boots it on a clean database, so the migrations and the boot
+  of this commit are tested, not an image already published.
+
+inputs:
+  build-args:
+    description: Build args, same as publishing.
+    required: true
+  rails-env:
+    description: RAILS_ENV of the booted container.
+    default: production
+  no-cache:
+    description: Build from scratch.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+    - name: Build the image of this commit
+      uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/amd64
+        load: true
+        tags: evo-auth-smoke:ci
+        build-args: ${{ inputs.build-args }}
+        no-cache: ${{ inputs.no-cache == 'true' }}
+        cache-from: type=gha,scope=linux/amd64
+        cache-to: type=gha,scope=linux/amd64,mode=max
+
+    - name: Boot on a clean database
+      shell: bash
+      env:
+        SMOKE_IMAGE: evo-auth-smoke:ci
+        SMOKE_RAILS_ENV: ${{ inputs.rails-env }}
+      run: |
+        docker compose -f docker-compose.smoke-fresh.yml up -d
+        for i in $(seq 1 36); do
+          cid=$(docker compose -f docker-compose.smoke-fresh.yml ps -aq evo-auth)
+          state=$(docker inspect --format='{{.State.Status}}' "$cid" 2>/dev/null || echo "starting")
+          status=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "starting")
+          echo "[$i/36] evo-auth state=$state health=$status"
+          if [ "$status" = "healthy" ]; then exit 0; fi
+          if [ "$state" = "exited" ] || [ "$state" = "dead" ] || [ "$state" = "restarting" ]; then
+            echo "::error::container crashed (state=$state)"
+            docker compose -f docker-compose.smoke-fresh.yml logs evo-auth 2>&1 | tail -50
+            exit 1
+          fi
+          sleep 5
+        done
+        echo "::error::evo-auth did not become healthy in 180s"
+        exit 1
+
+    - name: Check /health and /ready
+      shell: bash
+      run: |
+        # `{ ...; exit 1; }`, not a subshell: a subshell exit does not stop the step.
+        curl -fsS http://localhost:13001/health || { echo "::error::/health failed: the app did not boot"; exit 1; }
+        # A 200 with status:not_ready must not pass.
+        body=$(curl -fsS http://localhost:13001/ready) || { echo "::error::/ready failed: migrations or database not OK"; exit 1; }
+        echo "$body" | grep -q '"status":"ready"' || { echo "::error::/ready does not report status:ready (body=$body)"; exit 1; }
+
+    - name: Collect logs
+      if: always()
+      shell: bash
+      env:
+        SMOKE_IMAGE: evo-auth-smoke:ci
+      run: |
+        mkdir -p /tmp/logs
+        echo "commit=$GITHUB_SHA image=$(docker image inspect --format='{{.Id}}' "$SMOKE_IMAGE" 2>/dev/null)" > /tmp/logs/image.txt
+        docker compose -f docker-compose.smoke-fresh.yml logs evo-auth > /tmp/logs/evo-auth.log
+        docker compose -f docker-compose.smoke-fresh.yml logs postgres > /tmp/logs/postgres.log
+
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      if: always()
+      with:
+        name: build-application-logs
+        path: /tmp/logs/
+        retention-days: 7
+
+    - name: Teardown
+      if: always()
+      shell: bash
+      run: docker compose -f docker-compose.smoke-fresh.yml down -v
