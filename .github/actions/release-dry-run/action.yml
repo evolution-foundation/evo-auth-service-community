@@ -1,0 +1,68 @@
+name: Release Dry Run
+description: >-
+  On a pull request into main, rehearses the promotion that the merge would run,
+  without publishing anything: resolves the version as main would (same
+  resolve-version), checks that main would be identical to the last tested RC,
+  and builds the image promotion with --dry-run. Fails when the merge would not
+  publish a final version. Needs a checkout of the pull request merge commit with
+  full history.
+
+inputs:
+  image:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      uses: ./.github/actions/resolve-version
+      with:
+        ref: refs/heads/main
+
+    - name: The merge publishes a final version
+      shell: bash
+      env:
+        MODE: ${{ steps.resolve.outputs.mode }}
+      run: |
+        if [ "$MODE" != promote ]; then
+          echo "::error::main only receives release/X.Y branches; this merge would publish nothing (mode=$MODE)."
+          exit 1
+        fi
+
+    - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+    - name: Rehearse the image promotion
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        SOURCE: ${{ steps.resolve.outputs.source-tag }}
+        FINAL: ${{ steps.resolve.outputs.release-tag }}
+        NOTES_START: ${{ steps.resolve.outputs.notes-start }}
+      run: |
+        set -euo pipefail
+        src="$IMAGE:${SOURCE#v}"
+        plan=$(docker buildx imagetools create --dry-run \
+          --annotation "index:org.opencontainers.image.version=${FINAL#v}" \
+          -t "$IMAGE:${FINAL#v}" -t "$IMAGE:latest" "$src")
+        manifests() { jq -r '.manifests[] | "\(.platform.os)/\(.platform.architecture) \(.digest)"' | sort; }
+        promoted=$(echo "$plan" | manifests)
+        tested=$(docker buildx imagetools inspect "$src" --raw | manifests)
+        [ "$promoted" = "$tested" ] || { echo "::error::the promotion would not reuse the images of $SOURCE"; exit 1; }
+        {
+          echo "### Release Dry Run"
+          echo
+          echo "Merging this pull request publishes **$FINAL**, promoting **$SOURCE** without a rebuild."
+          echo
+          echo "| Item | Value |"
+          echo "|---|---|"
+          echo "| Image tags | \`$IMAGE:${FINAL#v}\`, \`$IMAGE:latest\` |"
+          echo "| Source image | \`$src\` |"
+          echo "| Git tag and release | \`$FINAL\` (Latest), notes since \`${NOTES_START:-the first commit}\` |"
+          echo
+          echo "Images (identical to the tested candidate):"
+          echo
+          echo '```'
+          echo "$promoted"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "Dry run OK: $FINAL from $SOURCE"

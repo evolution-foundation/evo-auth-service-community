@@ -213,10 +213,23 @@ jobs:
           registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  release-dry-run:
+    name: Release Dry Run
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    steps:
+      # The pull request merge commit is what main would become.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/release-dry-run
+        with:
+          image: ${{ env.IMAGE_NAME }}
+
   status:
     name: Pipeline Status
     if: always()
-    needs: [syntax, tests, build, migrations, boundary, version, publish-pr, publish-arch, publish-tags, release-candidate, promote]
+    needs: [syntax, tests, build, migrations, boundary, version, publish-pr, publish-arch, publish-tags, release-candidate, promote, release-dry-run]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

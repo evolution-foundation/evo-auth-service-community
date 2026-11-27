@@ -8,6 +8,11 @@ description: >-
   trigger of a final version: the merge of release/X.Y promotes its last RC.
   Needs a checkout with full history.
 
+inputs:
+  ref:
+    description: Ref to resolve as; defaults to the ref of the run. Release Dry Run passes refs/heads/main.
+    default: ""
+
 outputs:
   mode:
     description: build (develop, release/X.Y), promote (merge of release/X.Y into main) or none.
@@ -31,8 +36,13 @@ runs:
     - name: Resolve
       id: resolve
       shell: bash
+      env:
+        REF_INPUT: ${{ inputs.ref }}
       run: |
         set -euo pipefail
+        # GITHUB_* variables cannot be overridden, so the ref comes in as an input.
+        GITHUB_REF=${REF_INPUT:-$GITHUB_REF}
+        GITHUB_REF_NAME=${GITHUB_REF#refs/heads/}
         git fetch --force --tags --quiet
         short=${GITHUB_SHA:0:7}
         mode=build release_tag= source_tag=

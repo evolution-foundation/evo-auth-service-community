@@ -4,7 +4,7 @@ description: >-
   does not apply: publish-pr runs on internal pull requests to develop/main;
   version on pushes; the image build on pushes that build (develop, release);
   release-candidate on pushes to release branches; promote on the merge of a
-  release branch into main.
+  release branch into main; release-dry-run on pull requests into main.
 
 inputs:
   results:
@@ -34,13 +34,15 @@ runs:
         release=false; [[ "$GITHUB_REF" == refs/heads/release/* ]] && [ "$push" = true ] && release=true
         build=false; [ "$push" = true ] && [ "$MODE" = build ] && build=true
         promote=false; [ "$push" = true ] && [ "$MODE" = promote ] && promote=true
+        dryrun=false; [ "$EVENT" = pull_request ] && [ "$BASE" = main ] && dryrun=true
         bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" --argjson release "$release" \
-                --argjson build "$build" --argjson promote "$promote" '
+                --argjson build "$build" --argjson promote "$promote" --argjson dryrun "$dryrun" '
           def expected: if .key == "publish-pr" then $pr
             elif .key == "version" then $push
             elif .key == "publish-arch" or .key == "publish-tags" then $build
             elif .key == "release-candidate" then $release
             elif .key == "promote" then $promote
+            elif .key == "release-dry-run" then $dryrun
             else true end;
           to_entries[]
           | select(.value.result != "success")

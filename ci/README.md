@@ -18,6 +18,7 @@ all of them pass.
 | **Publish Image Tags** | `publish-image-tags` | `:develop` on develop, `:X.Y.Z-rc.N` on `release/X.Y` | the manifest cannot be created |
 | **Publish Release Candidate** | `release-candidate` | `release/X.Y` only: tag `vX.Y.Z-rc.N` and a GitHub prerelease, after the image is published | the release cannot be created |
 | **Promote Release** | `promote-release` | merge of `release/X.Y` into main: the last RC image gets `:X.Y.Z` and `:latest` without a rebuild, then tag `vX.Y.Z` and the final GitHub release | the RC image cannot be retagged or the release cannot be created |
+| **Release Dry Run** | `release-dry-run` | pull requests into main: rehearses the promotion the merge would run (version, source RC, identical images) and writes it in the run summary, publishing nothing | the merge would not publish a final version: the branch is not `release/X.Y`, main would differ from the last RC, or the final tag exists |
 | **Pipeline Status** | `pipeline-status` | **the only required check** | any check above is not green |
 
 Jobs run on `ubuntu-24.04`: `ubuntu-latest` is 26.04, where `setup-ruby` has no Ruby 3.4.4.
@@ -43,7 +44,8 @@ The flow, with version 1.2.0 as the example:
 4. **Fixes** reach `release/1.2` by pull request (only fixes, nothing new), and
    the same fix goes to `develop`. Each merge is a new candidate.
 5. **Release:** a pull request `release/1.2 -> main`, approved and merged by an
-   admin. **main is the only trigger of a final version:** the merge promotes the
+   admin. Before the merge, **Release Dry Run** shows on the pull request what
+   the merge will publish and fails if it would not publish a final version. **main is the only trigger of a final version:** the merge promotes the
    image of the last candidate, without a rebuild, to `1.2.0` and `:latest`, and
    creates the `v1.2.0` tag and the final GitHub release. If main differs from
    that candidate, or `v1.2.0` already exists, nothing is published.
