@@ -1,11 +1,14 @@
 name: Publish Image Tags
 description: >-
   Joins the per-architecture digests into one manifest and tags it for the ref:
-  v* tag -> :X.Y.Z and :latest; main -> :latest and :main-<short>;
-  develop -> :develop and :develop-<short>.
+  release/X.Y -> only :X.Y.Z-rc.N (:latest does not move); v* tag -> :X.Y.Z and
+  :latest; main -> :latest and :main-<short>; develop -> :develop and :develop-<short>.
 
 inputs:
   image:
+    required: true
+  version:
+    description: Output of Resolve Version.
     required: true
   registry-username:
     required: true
@@ -33,6 +36,7 @@ runs:
       working-directory: /tmp/digests
       env:
         IMAGE: ${{ inputs.image }}
+        VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
         short="${GITHUB_SHA:0:7}"
@@ -40,6 +44,7 @@ runs:
           refs/tags/v*)        tags=("$IMAGE:${GITHUB_REF_NAME#v}" "$IMAGE:latest") ;;
           refs/heads/main)     tags=("$IMAGE:latest" "$IMAGE:main-$short") ;;
           refs/heads/develop)  tags=("$IMAGE:develop" "$IMAGE:develop-$short") ;;
+          refs/heads/release/*) tags=("$IMAGE:$VERSION") ;;
           *) echo "::error::unexpected ref $GITHUB_REF"; exit 1 ;;
         esac
         args=()

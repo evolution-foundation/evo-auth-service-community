@@ -14,10 +14,27 @@ all of them pass.
 | **Migration Version Check** | `migration-version-check` | auth and CRM share `schema_migrations`; auth owns odd versions | a new migration has an even version |
 | **Community Boundary Check** | `community-boundary-check` | the community code has no enterprise identifiers | one of the identifiers listed in the action appears |
 | **Publish Image** | `publish-image` | pull requests: `pr-<n>`, `sha-<short>` (amd64); pushes: one image per architecture | the build or the push fails |
-| **Publish Image Tags** | `publish-image-tags` | `:develop` on develop, `:latest` on main and on `v*` tags (plus `:X.Y.Z`) | the manifest cannot be created |
+| **Resolve Version** | `resolve-version` | pushes: the version of this run (see Releases) | a release branch is not named `release/X.Y` |
+| **Publish Image Tags** | `publish-image-tags` | `:develop` on develop, `:X.Y.Z-rc.N` on `release/X.Y`, `:latest` on main and on `v*` tags (plus `:X.Y.Z`) | the manifest cannot be created |
+| **Publish Release Candidate** | `release-candidate` | `release/X.Y` only: tag `vX.Y.Z-rc.N` and a GitHub prerelease, after the image is published | the release cannot be created |
 | **Pipeline Status** | `pipeline-status` | **the only required check** | any check above is not green |
 
 Jobs run on `ubuntu-24.04`: `ubuntu-latest` is 26.04, where `setup-ruby` has no Ruby 3.4.4.
+
+## Releases
+
+Versions follow semver, adapted to the release flow:
+
+- **X** changes when an upgrade needs action from whoever installs (manual
+  migration, incompatible API, a new required variable).
+- **Y** changes on every regular cut from `develop`.
+- **Z** changes only for an urgent fix on a released line.
+
+Cutting is the only manual step: create `release/X.Y` from a green `develop`.
+Every push on that branch runs every check and publishes the next candidate:
+`X.Y.0-rc.1`, `rc.2`, ... (`X.Y.Z+1-rc.N` once `vX.Y.Z` exists). `:latest` does
+not move. Fixes reach the branch by pull request, and the same fix goes to
+`develop`. A re-run on a commit that already has an RC reuses it.
 
 ## Known debt
 

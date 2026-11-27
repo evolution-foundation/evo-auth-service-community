@@ -1,0 +1,52 @@
+name: Resolve Version
+description: >-
+  The version of this run. release/X.Y is the only human choice (X: a change
+  that needs action from whoever installs; Y: every regular cut). Z and rc.N are
+  computed: a new line starts at X.Y.0, an urgent fix on a released line is the
+  last final + 1, and every push on the branch is the next rc.N. A re-run on a
+  commit that already has an RC tag reuses it. Needs a checkout with full history.
+
+outputs:
+  version:
+    description: X.Y.Z-rc.N on release branches, X.Y.Z on v* tags, <ref>-<short> otherwise.
+    value: ${{ steps.resolve.outputs.version }}
+  release-tag:
+    description: vX.Y.Z-rc.N on release branches, empty otherwise.
+    value: ${{ steps.resolve.outputs.release_tag }}
+  notes-start:
+    description: Last final tag, where the release notes start.
+    value: ${{ steps.resolve.outputs.notes_start }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve
+      id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+        git fetch --force --tags --quiet
+        short=${GITHUB_SHA:0:7}
+        release_tag=
+        case "$GITHUB_REF" in
+          refs/heads/release/*)
+            line=${GITHUB_REF_NAME#release/}
+            [[ "$line" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::release branches are named release/X.Y, got $GITHUB_REF_NAME"; exit 1; }
+            release_tag=$(git tag --points-at HEAD --list "v$line.*-rc.*" | sort -V | tail -1)
+            if [ -z "$release_tag" ]; then
+              last_final=$(git tag --list "v$line.*" | grep -v -- '-rc' | sort -V | tail -1 || true)
+              if [ -n "$last_final" ]; then base="$line.$(( ${last_final##*.} + 1 ))"; else base="$line.0"; fi
+              last_rc=$(git tag --list "v$base-rc.*" | sed 's/.*-rc\.//' | sort -n | tail -1)
+              release_tag="v$base-rc.$(( ${last_rc:-0} + 1 ))"
+            fi
+            version=${release_tag#v} ;;
+          refs/tags/v*) version=${GITHUB_REF_NAME#v} ;;
+          *) version="$GITHUB_REF_NAME-$short" ;;
+        esac
+        notes_start=$(git tag --list 'v*' | grep -v -- '-rc' | sort -V | tail -1 || true)
+        {
+          echo "version=$version"
+          echo "release_tag=$release_tag"
+          echo "notes_start=$notes_start"
+        } >> "$GITHUB_OUTPUT"
+        echo "version=$version release_tag=$release_tag"
