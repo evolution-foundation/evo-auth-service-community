@@ -1,0 +1,91 @@
+name: Publish Image
+description: >-
+  Builds and pushes the image to Docker Hub. "pull-request" pushes pr-<n> and
+  sha-<short> for amd64; "digest" pushes one architecture by digest and uploads
+  the digest for Publish Image Tags.
+
+inputs:
+  mode:
+    description: pull-request or digest
+    required: true
+  image:
+    required: true
+  arch:
+    description: amd64 or arm64
+    default: amd64
+  version:
+    description: Value of the OCI version label.
+    required: true
+  revision:
+    description: Commit of the image.
+    required: true
+  build-args:
+    required: true
+  no-cache:
+    default: "false"
+  registry-username:
+    required: true
+  registry-password:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+    - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      with:
+        username: ${{ inputs.registry-username }}
+        password: ${{ inputs.registry-password }}
+
+    - name: Resolve tags
+      id: tags
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        IMAGE: ${{ inputs.image }}
+        VERSION: ${{ inputs.version }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        case "$MODE" in
+          pull-request) echo "tags=$IMAGE:$VERSION,$IMAGE:sha-${REVISION:0:7}" >> "$GITHUB_OUTPUT" ;;
+          digest) echo "tags=" >> "$GITHUB_OUTPUT" ;;
+          *) echo "::error::unknown mode $MODE"; exit 1 ;;
+        esac
+
+    - name: Build and push (${{ inputs.arch }})
+      id: build
+      uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/${{ inputs.arch }}
+        push: true
+        tags: ${{ steps.tags.outputs.tags }}
+        provenance: ${{ inputs.mode == 'digest' && 'mode=max' || '' }}
+        sbom: ${{ inputs.mode == 'digest' }}
+        labels: |
+          org.opencontainers.image.version=${{ inputs.version }}
+          org.opencontainers.image.revision=${{ inputs.revision }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        build-args: ${{ inputs.build-args }}
+        outputs: ${{ inputs.mode == 'digest' && format('type=image,name={0},push-by-digest=true,name-canonical=true', inputs.image) || '' }}
+        no-cache: ${{ inputs.no-cache == 'true' }}
+        cache-from: type=gha,scope=linux/${{ inputs.arch }}
+        cache-to: type=gha,scope=linux/${{ inputs.arch }},mode=max
+
+    - name: Export digest
+      if: inputs.mode == 'digest'
+      shell: bash
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        mkdir -p /tmp/digests
+        touch "/tmp/digests/${DIGEST#sha256:}"
+
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      if: inputs.mode == 'digest'
+      with:
+        name: digest-${{ inputs.arch }}
+        path: /tmp/digests/*
+        retention-days: 1

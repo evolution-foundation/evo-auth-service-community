@@ -1,8 +1,9 @@
 name: Pipeline
 
-# The only workflow of this repository. Every check runs here, the image is
-# published only after all of them, and "Pipeline Status" is the single required
-# check on protected branches. Stages and debt files: ci/README.md.
+# The only workflow of this repository: triggers, order and services. What each
+# check does lives in .github/actions/<check>/action.yml. The image is published
+# only after every check, and "Pipeline Status" is the single required check on
+# protected branches. Checks and debt files: ci/README.md.
 on:
   pull_request:
   push:
@@ -25,21 +26,14 @@ env:
   # shipped an image without fixes that were in the tagged source.
   NO_CACHE: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
 
+# ubuntu-latest is 26.04, where setup-ruby has no Ruby 3.4.4.
 jobs:
   syntax:
     name: Check Syntax
-    # ubuntu-latest is 26.04, where setup-ruby has no Ruby 3.4.4.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      # Known debt is frozen in .rubocop_todo.yml; any offense outside it fails.
-      - name: RuboCop
-        run: bundle exec rubocop --format github --format progress
+      - uses: ./.github/actions/check-syntax
 
   tests:
     name: Application Tests
@@ -82,129 +76,32 @@ jobs:
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Prepare database
-        run: bundle exec rails db:create db:schema:load
-
-      # Whole suite minus ci/test-exceptions.txt; a skipped example fails the job.
-      - name: RSpec
-        run: ci/rspec
+      - uses: ./.github/actions/application-tests
 
   build:
     name: Build Application
     runs-on: ubuntu-24.04
-    env:
-      SMOKE_IMAGE: evo-auth-smoke:ci
-      # Boot in the same environment as the published image.
-      SMOKE_RAILS_ENV: production
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      # Same Dockerfile and build args as the publish jobs, so the migrations and
-      # the boot of this commit are what gets tested, not an image already published.
-      - name: Build the image of this commit
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+      - uses: ./.github/actions/build-application
         with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: ${{ env.SMOKE_IMAGE }}
           build-args: ${{ env.IMAGE_BUILD_ARGS }}
-          no-cache: ${{ env.NO_CACHE == 'true' }}
-          cache-from: type=gha,scope=linux/amd64
-          cache-to: type=gha,scope=linux/amd64,mode=max
-
-      - name: Boot on a clean database
-        run: |
-          docker compose -f docker-compose.smoke-fresh.yml up -d
-          for i in $(seq 1 36); do
-            cid=$(docker compose -f docker-compose.smoke-fresh.yml ps -aq evo-auth)
-            state=$(docker inspect --format='{{.State.Status}}' "$cid" 2>/dev/null || echo "starting")
-            status=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "starting")
-            echo "[$i/36] evo-auth state=$state health=$status"
-            if [ "$status" = "healthy" ]; then exit 0; fi
-            if [ "$state" = "exited" ] || [ "$state" = "dead" ] || [ "$state" = "restarting" ]; then
-              echo "::error::container crashed (state=$state)"
-              docker compose -f docker-compose.smoke-fresh.yml logs evo-auth 2>&1 | tail -50
-              exit 1
-            fi
-            sleep 5
-          done
-          echo "::error::evo-auth did not become healthy in 180s"
-          exit 1
-
-      - name: Check /health and /ready
-        run: |
-          # `{ ...; exit 1; }`, not a subshell: a subshell exit does not stop the step.
-          curl -fsS http://localhost:13001/health || { echo "::error::/health failed: the app did not boot"; exit 1; }
-          # A 200 with status:not_ready must not pass.
-          body=$(curl -fsS http://localhost:13001/ready) || { echo "::error::/ready failed: migrations or database not OK"; exit 1; }
-          echo "$body" | grep -q '"status":"ready"' || { echo "::error::/ready does not report status:ready (body=$body)"; exit 1; }
-
-      - name: Collect logs
-        if: always()
-        run: |
-          mkdir -p /tmp/logs
-          echo "commit=${{ github.sha }} image=$(docker image inspect --format='{{.Id}}' "$SMOKE_IMAGE" 2>/dev/null)" > /tmp/logs/image.txt
-          docker compose -f docker-compose.smoke-fresh.yml logs evo-auth > /tmp/logs/evo-auth.log
-          docker compose -f docker-compose.smoke-fresh.yml logs postgres > /tmp/logs/postgres.log
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: build-application-logs
-          path: /tmp/logs/
-          retention-days: 7
-
-      - name: Teardown
-        if: always()
-        run: docker compose -f docker-compose.smoke-fresh.yml down -v
+          rails-env: production
+          no-cache: ${{ env.NO_CACHE }}
 
   migrations:
     name: Migration Version Check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      # auth and evo-ai-crm-community share one schema_migrations table, so a
-      # reused version makes Rails skip the second app's migration. Each app owns
-      # half of the version space: auth = ODD, CRM = EVEN. Older migrations
-      # (before the cutoff) are grandfathered.
-      - name: Auth migrations use odd versions
-        run: |
-          set -euo pipefail
-          cutoff=20260713000000
-          bad="$(ls db/migrate 2>/dev/null | grep -oE '^[0-9]{14}' \
-                 | awk -v c="$cutoff" '$1>=c { if (substr($0,14,1)%2==0) print $0 }' || true)"
-          if [ -n "$bad" ]; then
-            echo "::error::auth owns ODD migration versions (CRM owns EVEN). EVEN versions >= $cutoff:"
-            echo "$bad" | sed 's/^/  /'
-            echo "Fix: bump the migration timestamp by 1 second so its version is odd."
-            exit 1
-          fi
-          echo "OK: no EVEN migration >= $cutoff."
+      - uses: ./.github/actions/migration-version-check
 
   boundary:
     name: Community Boundary Check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      # These identifiers were removed from the community code and must not come back.
-      - name: No enterprise identifiers
-        run: |
-          if git grep -nE 'evo_enterprise|enterprise/v1' -- . ':!.github/workflows/ci.yml' ; then
-            echo "::error::Forbidden identifiers (evo_enterprise / enterprise/v1) found."
-            exit 1
-          fi
-          echo "OK: no forbidden identifiers."
+      - uses: ./.github/actions/community-boundary-check
 
   publish-pr:
     name: Publish Image
@@ -217,36 +114,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: ./.github/actions/publish-image
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Resolve pr-<n> and sha-<short>
-        id: tags
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: echo "tags=$IMAGE_NAME:pr-$PR_NUMBER,$IMAGE_NAME:sha-${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push (amd64)
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          labels: |
-            org.opencontainers.image.version=pr-${{ github.event.pull_request.number }}
-            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          mode: pull-request
+          image: ${{ env.IMAGE_NAME }}
+          version: pr-${{ github.event.pull_request.number }}
+          revision: ${{ github.event.pull_request.head.sha }}
           build-args: ${{ env.IMAGE_BUILD_ARGS }}
-          cache-from: type=gha,scope=linux/amd64
-          cache-to: type=gha,scope=linux/amd64,mode=max
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   publish-arch:
     name: Publish Image
@@ -259,84 +135,29 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: ./.github/actions/publish-image
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/${{ matrix.arch }}
-          push: true
-          provenance: mode=max
-          sbom: true
-          labels: |
-            org.opencontainers.image.version=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('{0}-{1}', github.ref_name, github.sha) }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          mode: digest
+          image: ${{ env.IMAGE_NAME }}
+          arch: ${{ matrix.arch }}
+          version: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('{0}-{1}', github.ref_name, github.sha) }}
+          revision: ${{ github.sha }}
           build-args: ${{ env.IMAGE_BUILD_ARGS }}
-          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true
-          no-cache: ${{ env.NO_CACHE == 'true' }}
-          cache-from: type=gha,scope=linux/${{ matrix.arch }}
-          cache-to: type=gha,scope=linux/${{ matrix.arch }},mode=max
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: digest-${{ matrix.arch }}
-          path: /tmp/digests/*
-          retention-days: 1
+          no-cache: ${{ env.NO_CACHE }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   publish-tags:
     name: Publish Image Tags
     needs: publish-arch
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/publish-image-tags
         with:
-          pattern: digest-*
-          path: /tmp/digests
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # v* tag -> :X.Y.Z and :latest; main -> :latest and :main-<short>;
-      # develop -> :develop and :develop-<short>.
-      - name: Create and push the multi-arch manifest
-        working-directory: /tmp/digests
-        env:
-          GH_REF: ${{ github.ref }}
-          GH_REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          short="${GITHUB_SHA:0:7}"
-          case "$GH_REF" in
-            refs/tags/v*)        tags=("$IMAGE_NAME:${GH_REF_NAME#v}" "$IMAGE_NAME:latest") ;;
-            refs/heads/main)     tags=("$IMAGE_NAME:latest" "$IMAGE_NAME:main-$short") ;;
-            refs/heads/develop)  tags=("$IMAGE_NAME:develop" "$IMAGE_NAME:develop-$short") ;;
-            *) echo "::error::unexpected ref $GH_REF"; exit 1 ;;
-          esac
-          args=()
-          for t in "${tags[@]}"; do args+=(-t "$t"); done
-          docker buildx imagetools create "${args[@]}" $(printf "$IMAGE_NAME@sha256:%s " *)
-          echo "Published: ${tags[*]}"
+          image: ${{ env.IMAGE_NAME }}
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   status:
     name: Pipeline Status
@@ -344,30 +165,7 @@ jobs:
     needs: [syntax, tests, build, migrations, boundary, publish-pr, publish-arch, publish-tags]
     runs-on: ubuntu-24.04
     steps:
-      - name: Every check passed
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-          EVENT: ${{ github.event_name }}
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          BASE: ${{ github.base_ref }}
-        run: |
-          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          # A publish job may be skipped only on the event it does not handle:
-          # publish-pr runs on internal pull requests to develop/main, the
-          # per-architecture jobs on pushes. Everything else must be a success.
-          pr=false
-          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
-             && { [ "$BASE" = develop ] || [ "$BASE" = main ]; }; then pr=true; fi
-          push=false; [ "$EVENT" = push ] && push=true
-          bad=$(echo "$RESULTS" | jq -r --argjson pr "$pr" --argjson push "$push" '
-            def expected: if .key == "publish-pr" then $pr
-              elif .key == "publish-arch" or .key == "publish-tags" then $push
-              else true end;
-            to_entries[]
-            | select(.value.result != "success")
-            | select((.value.result == "skipped" and (expected | not)) | not)
-            | .key')
-          if [ -n "$bad" ]; then
-            echo "::error::not green: $(echo $bad)"
-            exit 1
-          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/pipeline-status
+        with:
+          results: ${{ toJSON(needs) }}

@@ -1,0 +1,24 @@
+name: Migration Version Check
+description: >-
+  auth and evo-ai-crm-community share one schema_migrations table, so a reused
+  version makes Rails skip the second app's migration. Each app owns half of the
+  version space: auth = ODD, CRM = EVEN. Migrations before the cutoff are
+  grandfathered.
+
+runs:
+  using: composite
+  steps:
+    - name: Auth migrations use odd versions
+      shell: bash
+      run: |
+        set -euo pipefail
+        cutoff=20260713000000
+        bad="$(ls db/migrate 2>/dev/null | grep -oE '^[0-9]{14}' \
+               | awk -v c="$cutoff" '$1>=c { if (substr($0,14,1)%2==0) print $0 }' || true)"
+        if [ -n "$bad" ]; then
+          echo "::error::auth owns ODD migration versions (CRM owns EVEN). EVEN versions >= $cutoff:"
+          echo "$bad" | sed 's/^/  /'
+          echo "Fix: bump the migration timestamp by 1 second so its version is odd."
+          exit 1
+        fi
+        echo "OK: no EVEN migration >= $cutoff."

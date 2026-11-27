@@ -1,0 +1,14 @@
+name: Community Boundary Check
+description: Identifiers removed from the community code must not come back.
+
+runs:
+  using: composite
+  steps:
+    - name: No enterprise identifiers
+      shell: bash
+      run: |
+        if git grep -nE 'evo_enterprise|enterprise/v1' -- . ':!.github/actions/community-boundary-check/action.yml' ; then
+          echo "::error::Forbidden identifiers (evo_enterprise / enterprise/v1) found."
+          exit 1
+        fi
+        echo "OK: no forbidden identifiers."
