@@ -7,7 +7,7 @@ in it, and the image is published only after all of them pass.
 |---|---|---|
 | **Check Syntax** | RuboCop | an offense outside `.rubocop_todo.yml` |
 | **Application Tests** | RSpec through `ci/rspec`, with Postgres and Redis | a spec fails, or an example is skipped, outside `ci/test-exceptions.txt` |
-| **Build Application** | builds this commit's image (same Dockerfile and `RAILS_ENV=production` as the publish jobs) and boots it on a clean database | migrations fail, or `/health` and `/ready` do not answer ready |
+| **Build Application** | builds this commit's image (same Dockerfile and `RAILS_ENV=production` as the publish jobs) and boots it with `RAILS_ENV=production` on a clean database | migrations fail, or `/health` and `/ready` do not answer ready |
 | **Migration Version Check** | auth and CRM share `schema_migrations`; auth owns odd versions | a new migration has an even version |
 | **Community Boundary Check** | the community code has no enterprise identifiers | one of the identifiers listed in the job appears |
 | **Publish Image** | pull requests: `pr-<n>`, `sha-<short>` (amd64); pushes: one image per architecture | the build or the push fails |
@@ -32,5 +32,5 @@ Jobs run on `ubuntu-24.04`: `ubuntu-latest` is 26.04, where `setup-ruby` has no 
 bundle exec rubocop
 RAILS_ENV=test bundle exec rails db:create db:schema:load && ci/rspec   # needs Postgres and Redis
 docker build --build-arg RAILS_ENV=production -t evo-auth-smoke:ci . && \
-  SMOKE_IMAGE=evo-auth-smoke:ci docker compose -f docker-compose.smoke-fresh.yml up
+  SMOKE_IMAGE=evo-auth-smoke:ci SMOKE_RAILS_ENV=production docker compose -f docker-compose.smoke-fresh.yml up
 ```

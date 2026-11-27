@@ -5,9 +5,8 @@
 # end-to-end.
 # Healthcheck verde + /ready 200 = AC2 satisfeito.
 #
-# RAILS_ENV=development por design: o Dockerfile publicado roda em development
-# (sem assets:precompile, bundle com todos os groups). Forcar production aqui
-# quebraria por motivos nao relacionados ao AC.
+# RAILS_ENV vem de SMOKE_RAILS_ENV (padrao development, para a execucao manual).
+# O CI usa production, o mesmo ambiente da imagem publicada.
 
 services:
   postgres:
@@ -42,9 +41,6 @@ services:
     env_file:
       - .env.example
     environment:
-      # TODO(EVO-1404 review L3): hoje o Dockerfile publicado e dev-only. Se um PR
-      # futuro mudar pra multi-stage prod, este RAILS_ENV vai mascarar regressao.
-      # Parametrizar via SMOKE_RAILS_ENV quando esse refactor chegar.
       RAILS_ENV: ${SMOKE_RAILS_ENV:-development}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
