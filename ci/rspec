@@ -35,6 +35,9 @@ done <"$list"
 [ "$invalid" -eq 0 ] || exit 1
 
 mapfile -t specs < <(find spec -name '*_spec.rb' | sort | grep -vxF -f "$excluded" || true)
+# With no file to pass, RSpec would fall back to its default pattern and run the
+# excluded files too.
+[ "${#specs[@]}" -gt 0 ] || { echo "::error::no spec file left to run"; exit 1; }
 echo "Running ${#specs[@]} spec files; $(grep -c . "$excluded" || true) excluded by $list."
 
 mkdir -p "$(dirname "$report")"

@@ -183,7 +183,7 @@ jobs:
   release-candidate:
     name: Publish Release Candidate
     needs: [publish-tags, version]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && needs.version.outputs.mode == 'build'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -229,6 +229,9 @@ jobs:
       - uses: ./.github/actions/release-dry-run
         with:
           image: ${{ env.IMAGE_NAME }}
+          # Empty on fork pull requests; the dry run then reads anonymously.
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   status:
     name: Pipeline Status

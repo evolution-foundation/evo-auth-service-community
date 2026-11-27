@@ -15,7 +15,9 @@ inputs:
 
 outputs:
   mode:
-    description: build (develop, release/X.Y) or promote (main).
+    description: >-
+      build (develop, or a new candidate on release/X.Y), reuse (a release commit
+      that already has its candidate: nothing is rebuilt) or promote (main).
     value: ${{ steps.resolve.outputs.mode }}
   version:
     description: X.Y.Z-rc.N on release branches, X.Y.Z on main, <ref>-<short> on develop.
@@ -58,7 +60,11 @@ runs:
             [[ "$line" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::release branches are named release/X.Y (no leading zeros), got $GITHUB_REF_NAME"; exit 1; }
             esc=${line//./\\.}
             release_tag=$(git tag --points-at HEAD | grep -E "^v$esc\.$n-rc\.$n\$" | sort -V | tail -1 || true)
-            if [ -z "$release_tag" ]; then
+            if [ -n "$release_tag" ]; then
+              # Its image is already published; rebuilding would change the image
+              # behind the same candidate number.
+              mode=reuse
+            else
               # A re-run of an older push must not publish stale code under a new number.
               tip=$(git rev-parse -q --verify "refs/remotes/origin/$GITHUB_REF_NAME" || true)
               [ "$tip" = "$GITHUB_SHA" ] || { echo "::error::$short is not the tip of $GITHUB_REF_NAME; only the tip gets a new candidate"; exit 1; }
@@ -80,6 +86,12 @@ runs:
             done
             [ -n "$source_tag" ] || { echo "::error::main is not identical to any tested release candidate; main only receives release/X.Y branches"; exit 1; }
             release_tag=${source_tag%-rc.*}
+            # Only the newest line is released: an older one would move :latest back.
+            newest=$(finals | tail -1)
+            if [ -n "$newest" ] && [ "$newest" != "$release_tag" ] && \
+               [ "$(printf '%s\n%s\n' "$newest" "$release_tag" | sort -V | tail -1)" = "$newest" ]; then
+              echo "::error::$newest is already released; $release_tag would be older. Only the newest line is released through main"; exit 1
+            fi
             # Only the last candidate of a version is the one approved for release.
             last_rc=$(rcs | grep -E "^${release_tag//./\\.}-rc\." | tail -1)
             [ "$last_rc" = "$source_tag" ] || { echo "::error::main matches $source_tag, but the last candidate of $release_tag is $last_rc; only the last candidate is promoted"; exit 1; }

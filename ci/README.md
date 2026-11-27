@@ -11,7 +11,7 @@ all of them pass.
 | **Check Syntax** | `check-syntax` | RuboCop | an offense outside `.rubocop_todo.yml` |
 | **Application Tests** | `application-tests` | RSpec through `ci/rspec`, with Postgres and Redis | a spec fails, or an example is skipped, outside `ci/test-exceptions.txt` |
 | **Build Application** | `build-application` | builds this commit's image (same Dockerfile and `RAILS_ENV=production` as the publish jobs) and boots it with `RAILS_ENV=production` on a clean database | migrations fail, or `/health` and `/ready` do not answer ready |
-| **Migration Version Check** | `migration-version-check` | auth and CRM share `schema_migrations`; auth owns odd versions | a new migration has an even version |
+| **Migration Version Check** | `migration-version-check` | auth and CRM share `schema_migrations`; auth owns odd versions | a migration from the cutoff on (`20260713000000`) has an even version; older ones are grandfathered |
 | **Community Boundary Check** | `community-boundary-check` | the community code has no enterprise identifiers | one of the identifiers listed in the action appears |
 | **Publish Image** | `publish-image` | pull requests: `pr-<n>`, `sha-<short>` (amd64); pushes: one image per architecture | the build or the push fails |
 | **Resolve Version** | `resolve-version` | pushes: the version of this run and what to publish (see Releases) | a release branch is not named `release/X.Y`, or a new candidate is asked for a commit that is not the branch tip; on main, main is not identical to any tested RC, or the final tag exists on another commit |
@@ -62,10 +62,12 @@ workflow, and a tag pushed by hand publishes nothing. Anything on main that is
 not identical to a tested candidate (`develop`, a feature branch, a direct
 push) fails Resolve Version and publishes nothing.
 
-Only the tip of a release branch gets a new candidate; re-running an older push
-reuses its candidate or fails. Release notes start at the highest final version
-below the one published, so an urgent `1.2.1` is compared with `1.2.0` even
-after `1.3.0`. The final image keeps the candidate's version label inside
+Only the tip of a release branch gets a new candidate. Re-running a push that
+already has a candidate rebuilds and publishes nothing, so the image behind a
+candidate number never changes; re-running an older push without one fails.
+Only the newest line reaches main: once `1.3.0` exists, `1.2.x` candidates can
+still be built but not released. Release notes start at the highest final
+version below the one published. The final image keeps the candidate's version label inside
 (`1.2.0-rc.3`): changing it would make a different image. The final version is
 in the image tags, the index annotation and the git tag.
 
