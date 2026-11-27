@@ -1,0 +1,58 @@
+name: Pipeline
+
+# The only workflow with triggers. Every check runs here, and publishing waits for
+# all of them. `gate` is the single required check on protected branches.
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    uses: ./.github/workflows/smoke-fresh.yml
+
+  migration-parity:
+    uses: ./.github/workflows/migration-version-parity.yml
+
+  no-enterprise:
+    uses: ./.github/workflows/no-enterprise-guard.yml
+
+  publish:
+    needs: [lint, test, build, migration-parity, no-enterprise]
+    uses: ./.github/workflows/docker-publish.yml
+    secrets: inherit
+
+  gate:
+    name: gate
+    if: always()
+    needs: [lint, test, build, migration-parity, no-enterprise, publish]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every stage passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # `skipped` is fine only for publish (fork PRs get no registry credentials).
+          bad=$(echo "$RESULTS" | jq -r 'to_entries[]
+            | select(.value.result != "success")
+            | select(.key != "publish" or .value.result != "skipped")
+            | .key')
+          if [ -n "$bad" ]; then
+            echo "::error::not green: $(echo $bad)"
+            exit 1
+          fi

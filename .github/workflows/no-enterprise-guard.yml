@@ -1,13 +1,11 @@
 name: no-enterprise-guard
 on:
-  pull_request:
-  push:
-    branches: [develop]
+  workflow_call:
 permissions:
   contents: read
 jobs:
   guard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Reject forbidden identifiers

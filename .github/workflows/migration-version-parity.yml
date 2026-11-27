@@ -13,17 +13,14 @@ name: Migration version parity
 # monorepo guard (evolution-foundation/evo-crm-community).
 
 on:
-  pull_request:
-    branches: [main, develop]
-  push:
-    branches: [main, develop]
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
   parity:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
